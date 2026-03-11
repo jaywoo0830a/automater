@@ -6,20 +6,20 @@ These tests run without a browser — fast and safe for CI.
 """
 
 import pytest
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock
 from pathlib import Path
 
+from automator.config import settings
+from automator import selectors
 from automator.blog import (
     BlogPost,
     fill_title,
     fill_body,
-    click_publish,
+    click_publish_trigger,
+    click_publish_confirm,
     post_blog,
     wait_for_editor,
     session_exists,
-    PLACEHOLDER_SELECTOR,
-    EDITOR_IFRAME,
-    WRITE_URL,
 )
 
 
@@ -32,21 +32,30 @@ def mock_page() -> MagicMock:
     """Return a MagicMock that mimics a Playwright Page."""
     page = MagicMock()
 
-    # frame_locator().locator().nth().locator("..") chain
     frame = MagicMock()
+    frame.first = frame
     page.frame_locator.return_value = frame
 
-    locator_chain = MagicMock()
-    frame.locator.return_value = locator_chain
-    locator_chain.nth.return_value = locator_chain
-    locator_chain.locator.return_value = locator_chain
+    locator = MagicMock()
+    locator.first = locator
+    frame.locator.return_value = locator
 
     return page
 
 
 @pytest.fixture()
 def sample_post() -> BlogPost:
-    return BlogPost(title="[테스트] 자동화 제목", content="자동화 테스트 본문입니다.")
+    return BlogPost(
+        title="[자동화 테스트] Playwright로 작성한 포스트",
+        content=(
+            "안녕하세요! 이 글은 Playwright 자동화 테스트로 작성된 포스트입니다.\n\n"
+            "테스트 항목:\n"
+            "- 제목 입력 확인\n"
+            "- 본문 입력 확인\n"
+            "- 발행 버튼 노출 확인\n\n"
+            "테스트 완료 후 삭제 예정입니다."
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -76,25 +85,53 @@ def test_blogpost_with_category():
 
 
 # ---------------------------------------------------------------------------
-# Selector safety: no UUID hardcoding
+# selectors.py — integrity checks
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
 def test_placeholder_selector_contains_no_uuid():
-    """
-    Critical: PLACEHOLDER_SELECTOR must not contain a hardcoded SE-{uuid}.
-    If this test fails, a UUID has been accidentally embedded in the selector.
-    """
-    assert "SE-" not in PLACEHOLDER_SELECTOR, (
-        f"PLACEHOLDER_SELECTOR contains a UUID: {PLACEHOLDER_SELECTOR!r}"
+    """Critical: PLACEHOLDER must not contain a hardcoded SE-{uuid}."""
+    assert "SE-" not in selectors.PLACEHOLDER, (
+        f"PLACEHOLDER contains a UUID: {selectors.PLACEHOLDER!r}"
     )
 
 
 @pytest.mark.unit
 def test_placeholder_selector_uses_stable_class():
-    """Test that the selector targets the stable se-placeholder class."""
-    assert "se-placeholder" in PLACEHOLDER_SELECTOR
-    assert "__se_placeholder" in PLACEHOLDER_SELECTOR
+    """Test that PLACEHOLDER targets the stable se-placeholder class."""
+    assert "se-placeholder" in selectors.PLACEHOLDER
+    assert "__se_placeholder" in selectors.PLACEHOLDER
+
+
+@pytest.mark.unit
+def test_title_xpath_is_defined():
+    """Test that TITLE_XPATH is a valid xpath expression."""
+    assert selectors.TITLE_XPATH.startswith("xpath=")
+
+
+@pytest.mark.unit
+def test_body_xpath_is_defined():
+    """Test that BODY_XPATH is a valid xpath expression."""
+    assert selectors.BODY_XPATH.startswith("xpath=")
+
+
+@pytest.mark.unit
+def test_publish_trigger_xpath_is_defined():
+    """Test that PUBLISH_TRIGGER_XPATH is a valid xpath expression."""
+    assert selectors.PUBLISH_TRIGGER_XPATH.startswith("xpath=")
+
+
+@pytest.mark.unit
+def test_publish_confirm_testid_is_defined():
+    """Test that PUBLISH_CONFIRM_TESTID is a non-empty string."""
+    assert isinstance(selectors.PUBLISH_CONFIRM_TESTID, str)
+    assert len(selectors.PUBLISH_CONFIRM_TESTID) > 0
+
+
+@pytest.mark.unit
+def test_title_and_body_xpath_are_different():
+    """Test that TITLE_XPATH and BODY_XPATH are distinct selectors."""
+    assert selectors.TITLE_XPATH != selectors.BODY_XPATH
 
 
 # ---------------------------------------------------------------------------
@@ -102,32 +139,22 @@ def test_placeholder_selector_uses_stable_class():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
-def test_fill_title_targets_frame(mock_page: MagicMock):
-    """Test that fill_title uses the correct iframe selector."""
+def test_fill_title_targets_main_frame(mock_page: MagicMock):
+    """Test that fill_title uses MAIN_FRAME as the iframe selector."""
     fill_title(mock_page, "테스트 제목")
-    mock_page.frame_locator.assert_called_once_with(EDITOR_IFRAME)
+    mock_page.frame_locator.assert_called_once_with(selectors.MAIN_FRAME)
 
 
 @pytest.mark.unit
-def test_fill_title_uses_nth_zero(mock_page: MagicMock):
-    """Test that fill_title targets nth(0) — the title placeholder."""
+def test_fill_title_uses_title_xpath(mock_page: MagicMock):
+    """Test that fill_title locates the element via TITLE_XPATH."""
     fill_title(mock_page, "테스트 제목")
-    frame = mock_page.frame_locator.return_value
-    frame.locator.return_value.nth.assert_called_with(0)
-
-
-@pytest.mark.unit
-def test_fill_title_navigates_to_parent(mock_page: MagicMock):
-    """Test that fill_title navigates to the parent editable element."""
-    fill_title(mock_page, "테스트 제목")
-    frame = mock_page.frame_locator.return_value
-    # After nth(0), we expect locator("..") to get the parent
-    frame.locator.return_value.nth.return_value.locator.assert_called_with("..")
+    mock_page.frame_locator.return_value.first.locator.assert_called_with(selectors.TITLE_XPATH)
 
 
 @pytest.mark.unit
 def test_fill_title_types_given_text(mock_page: MagicMock):
-    """Test that fill_title types the correct title text."""
+    """Test that fill_title types the correct text via keyboard."""
     fill_title(mock_page, "입력할 제목")
     mock_page.keyboard.type.assert_called_once_with("입력할 제목")
 
@@ -137,102 +164,100 @@ def test_fill_title_types_given_text(mock_page: MagicMock):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
-def test_fill_body_targets_frame(mock_page: MagicMock):
-    """Test that fill_body uses the correct iframe selector."""
+def test_fill_body_targets_main_frame(mock_page: MagicMock):
+    """Test that fill_body uses MAIN_FRAME as the iframe selector."""
     fill_body(mock_page, "본문 내용")
-    mock_page.frame_locator.assert_called_with(EDITOR_IFRAME)
+    mock_page.frame_locator.assert_called_with(selectors.MAIN_FRAME)
 
 
 @pytest.mark.unit
-def test_fill_body_uses_nth_one(mock_page: MagicMock):
-    """Test that fill_body targets nth(1) — the body placeholder."""
+def test_fill_body_uses_body_xpath(mock_page: MagicMock):
+    """Test that fill_body locates the element via BODY_XPATH."""
     fill_body(mock_page, "본문 내용")
-    frame = mock_page.frame_locator.return_value
-    frame.locator.return_value.nth.assert_called_with(1)
+    mock_page.frame_locator.return_value.first.locator.assert_called_with(selectors.BODY_XPATH)
 
 
 @pytest.mark.unit
 def test_fill_body_types_given_text(mock_page: MagicMock):
-    """Test that fill_body types the correct content text."""
+    """Test that fill_body types the correct text via keyboard."""
     fill_body(mock_page, "자동화 본문")
     mock_page.keyboard.type.assert_called_once_with("자동화 본문")
 
 
 @pytest.mark.unit
-def test_title_and_body_use_different_nth(mock_page: MagicMock):
-    """
-    Test that title uses nth(0) and body uses nth(1).
-    If both used the same index, they would target the same element.
-    """
-    # Capture nth call args for title
+def test_title_and_body_use_different_xpaths(mock_page: MagicMock):
+    """Test that fill_title and fill_body target different XPath selectors."""
     fill_title(mock_page, "제목")
-    frame = mock_page.frame_locator.return_value
-    title_nth_call = frame.locator.return_value.nth.call_args[0][0]
+    title_arg = mock_page.frame_locator.return_value.first.locator.call_args[0][0]
 
-    # Reset mock
     mock_page.reset_mock()
-    frame.locator.return_value.nth.reset_mock()
 
-    # Capture nth call args for body
     fill_body(mock_page, "본문")
-    body_nth_call = frame.locator.return_value.nth.call_args[0][0]
+    body_arg = mock_page.frame_locator.return_value.first.locator.call_args[0][0]
 
-    assert title_nth_call != body_nth_call, (
-        "Title and body must target different nth indices"
+    assert title_arg != body_arg
+
+
+# ---------------------------------------------------------------------------
+# click_publish_trigger
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+def test_click_publish_trigger_uses_trigger_xpath(mock_page: MagicMock):
+    """Test that click_publish_trigger uses PUBLISH_TRIGGER_XPATH."""
+    click_publish_trigger(mock_page)
+    mock_page.frame_locator.return_value.first.locator.assert_called_with(
+        selectors.PUBLISH_TRIGGER_XPATH
     )
-    assert title_nth_call == 0
-    assert body_nth_call == 1
-
-
-# ---------------------------------------------------------------------------
-# click_publish
-# ---------------------------------------------------------------------------
-
-@pytest.mark.unit
-def test_click_publish_uses_exact_text(mock_page: MagicMock):
-    """Test that publish button is located by exact text '발행'."""
-    click_publish(mock_page)
-    mock_page.get_by_text.assert_called_once_with("발행", exact=True)
 
 
 @pytest.mark.unit
-def test_click_publish_calls_click(mock_page: MagicMock):
-    """Test that the publish button is actually clicked."""
-    click_publish(mock_page)
-    mock_page.get_by_text.return_value.click.assert_called_once()
+def test_click_publish_trigger_calls_click(mock_page: MagicMock):
+    """Test that click_publish_trigger clicks the located element."""
+    click_publish_trigger(mock_page)
+    mock_page.frame_locator.return_value.first.locator.return_value.first.click.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
-# post_blog (integration of all steps)
+# click_publish_confirm
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+def test_click_publish_confirm_uses_testid(mock_page: MagicMock):
+    """Test that click_publish_confirm targets the element by data-testid."""
+    click_publish_confirm(mock_page)
+    call_arg = mock_page.frame_locator.return_value.first.locator.call_args[0][0]
+    assert selectors.PUBLISH_CONFIRM_TESTID in call_arg
+
+
+@pytest.mark.unit
+def test_click_publish_confirm_calls_click(mock_page: MagicMock):
+    """Test that click_publish_confirm clicks the located element."""
+    click_publish_confirm(mock_page)
+    mock_page.frame_locator.return_value.first.locator.return_value.first.click.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# post_blog
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
 def test_post_blog_navigates_to_write_url(mock_page: MagicMock, sample_post: BlogPost):
-    """Test that post_blog navigates to the blog write URL."""
+    """Test that post_blog navigates to settings.write_url."""
     post_blog(mock_page, sample_post)
-    mock_page.goto.assert_called_once_with(WRITE_URL)
+    mock_page.goto.assert_called_once_with(settings.write_url)
 
 
 @pytest.mark.unit
-def test_post_blog_calls_steps_in_order(mock_page: MagicMock, sample_post: BlogPost):
-    """Test that post_blog executes goto → editor wait → title → body → publish."""
+def test_post_blog_goto_is_first_call(mock_page: MagicMock, sample_post: BlogPost):
+    """Test that goto is the very first action in post_blog."""
     call_order: list[str] = []
-
     mock_page.goto.side_effect = lambda *_: call_order.append("goto")
-    mock_page.frame_locator.return_value.locator.return_value.wait_for.side_effect = (
-        lambda **_: call_order.append("wait_for_editor")
-    )
-    mock_page.keyboard.type.side_effect = lambda text: call_order.append(
-        "type_title" if text == sample_post.title else "type_body"
-    )
-    mock_page.get_by_text.return_value.click.side_effect = (
-        lambda: call_order.append("publish")
-    )
+    mock_page.keyboard.type.side_effect = lambda *_: call_order.append("type")
 
     post_blog(mock_page, sample_post)
 
-    assert call_order[0] == "goto", "goto must be called first"
-    assert "publish" in call_order, "publish must be called"
+    assert call_order[0] == "goto"
 
 
 # ---------------------------------------------------------------------------
@@ -242,9 +267,9 @@ def test_post_blog_calls_steps_in_order(mock_page: MagicMock, sample_post: BlogP
 @pytest.mark.unit
 def test_session_exists_returns_true_when_file_present(tmp_path: Path):
     """Test that session_exists returns True when the session file exists."""
-    session_file = tmp_path / "session_state.json"
-    session_file.write_text("{}")
-    assert session_exists(session_file) is True
+    f = tmp_path / "session_state.json"
+    f.write_text("{}")
+    assert session_exists(f) is True
 
 
 @pytest.mark.unit

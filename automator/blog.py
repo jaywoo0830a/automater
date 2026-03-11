@@ -2,7 +2,8 @@
 automator/blog.py
 -----------------
 Core Naver Blog automation logic using Playwright.
-All selector strategies avoid hardcoded UUIDs (SE-{uuid} pattern).
+All selector strings are imported from automator.selectors — update
+selectors there when the Naver editor DOM changes.
 """
 
 from __future__ import annotations
@@ -10,8 +11,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from playwright.sync_api import Page, Browser, BrowserContext, expect
+from playwright.sync_api import Page, Browser, BrowserContext
+
 from automator.config import settings
+from automator import selectors
 
 
 # ---------------------------------------------------------------------------
@@ -26,27 +29,10 @@ class BlogPost:
 
 
 # ---------------------------------------------------------------------------
-# Stable selector constants
+# Constants
 # ---------------------------------------------------------------------------
 
-# iframe that wraps the Smart Editor
-EDITOR_IFRAME = "iframe#mainFrame"
-
-# Placeholder spans appear in DOM order: 0 = title, 1 = body
-# Using class-based selector avoids UUID dependency entirely.
-PLACEHOLDER_SELECTOR = "span.se-placeholder.__se_placeholder"
-
-# Parent editable blocks: id starts with "SE-" (UUID portion is ignored)
-EDITABLE_BLOCK_SELECTOR = "[id^='SE-']"
-
-# Publish button in the top toolbar
-PUBLISH_BUTTON_TEXT = "발행"
-
-# Naver login URL
 LOGIN_URL = "https://nid.naver.com/nidlogin.login"
-
-# Blog write URL
-WRITE_URL = "https://blog.naver.com/PostWriteForm.naver"
 
 
 # ---------------------------------------------------------------------------
@@ -61,26 +47,17 @@ def session_exists(session_path: str | Path = "session_state.json") -> bool:
 def localized_context(browser: Browser, session_path: str | Path | None = None) -> BrowserContext:
     """
     Create a BrowserContext with localization settings loaded from .env.
-
-    Applies locale, timezone, language (Accept-Language header),
-    geolocation, and optional user-agent override — all from settings.
-
-    Args:
-        browser:      A Playwright Browser instance.
-        session_path: Path to session_state.json. Uses settings default if None.
-
-    Returns:
-        A fully configured BrowserContext ready for automation.
+    Applies locale, timezone, Accept-Language header, geolocation,
+    and optional user-agent override.
     """
     path = Path(session_path) if session_path else settings.session_path
-
-    # Build extra HTTP headers for regional appearance
-    extra_headers = {"Accept-Language": f"{settings.language},{settings.locale[:2]};q=0.9"}
 
     context_kwargs: dict = {
         "locale": settings.locale,
         "timezone_id": settings.timezone,
-        "extra_http_headers": extra_headers,
+        "extra_http_headers": {
+            "Accept-Language": f"{settings.language},{settings.locale[:2]};q=0.9"
+        },
         "geolocation": {
             "latitude": settings.geolocation.latitude,
             "longitude": settings.geolocation.longitude,
@@ -88,11 +65,9 @@ def localized_context(browser: Browser, session_path: str | Path | None = None) 
         "permissions": ["geolocation"],
     }
 
-    # Apply user-agent override only when explicitly set
     if settings.user_agent:
         context_kwargs["user_agent"] = settings.user_agent
 
-    # Apply saved session when available
     if path.exists():
         context_kwargs["storage_state"] = str(path)
 
@@ -105,59 +80,71 @@ def localized_context(browser: Browser, session_path: str | Path | None = None) 
 
 def wait_for_editor(page: Page, timeout: int = 15_000) -> None:
     """Block until the Smart Editor iframe and its content are visible."""
-    frame = page.frame_locator(EDITOR_IFRAME)
-    frame.locator(".se-content").wait_for(state="visible", timeout=timeout)
+    page.frame_locator(selectors.MAIN_FRAME) \
+        .locator(selectors.EDITOR_CONTENT) \
+        .wait_for(state="visible", timeout=timeout)
 
 
 def fill_title(page: Page, title: str, timeout: int = 5_000) -> None:
     """
-    Click the title placeholder block and type the given title.
-    Targets nth(0) of the placeholder selector — stable across renders.
+    Click the title area and type the given title.
+    Update selectors.TITLE_XPATH when the editor DOM changes.
     """
-    frame = page.frame_locator(EDITOR_IFRAME)
-    title_block = (
-        frame.locator(PLACEHOLDER_SELECTOR)
-        .nth(0)
-        .locator("..")          # navigate to the parent editable element
-    )
-    title_block.wait_for(state="visible", timeout=timeout)
-    title_block.click()
+    el = page.frame_locator(selectors.MAIN_FRAME).first \
+             .locator(selectors.TITLE_XPATH).first
+    el.wait_for(state="visible", timeout=timeout)
+    el.click()
     page.keyboard.type(title)
 
 
 def fill_body(page: Page, content: str, timeout: int = 5_000) -> None:
     """
-    Click the body placeholder block and type the given content.
-    Targets nth(1) of the placeholder selector — stable across renders.
+    Click the body area and type the given content.
+    Update selectors.BODY_XPATH when the editor DOM changes.
     """
-    frame = page.frame_locator(EDITOR_IFRAME)
-    body_block = (
-        frame.locator(PLACEHOLDER_SELECTOR)
-        .nth(1)
-        .locator("..")
-    )
-    body_block.wait_for(state="visible", timeout=timeout)
-    body_block.click()
+    el = page.frame_locator(selectors.MAIN_FRAME).first \
+             .locator(selectors.BODY_XPATH).first
+    el.wait_for(state="visible", timeout=timeout)
+    el.click()
     page.keyboard.type(content)
 
 
-def click_publish(page: Page, timeout: int = 5_000) -> None:
-    """Click the publish button in the top toolbar."""
-    btn = page.get_by_text(PUBLISH_BUTTON_TEXT, exact=True)
-    btn.wait_for(state="visible", timeout=timeout)
-    btn.click()
+def click_publish_trigger(page: Page, timeout: int = 5_000) -> None:
+    """
+    Click the publish trigger button to open the publish popover.
+    Update selectors.PUBLISH_TRIGGER_XPATH when the editor DOM changes.
+    """
+    el = page.frame_locator(selectors.MAIN_FRAME).first \
+             .locator(selectors.PUBLISH_TRIGGER_XPATH).first
+    el.wait_for(state="visible", timeout=timeout)
+    el.click()
+
+
+def click_publish_confirm(page: Page, timeout: int = 5_000) -> None:
+    """
+    Click the publish confirm button inside the popover.
+    Targets data-testid — most stable selector available.
+    Update selectors.PUBLISH_CONFIRM_TESTID if the attribute changes.
+    """
+    el = page.frame_locator(selectors.MAIN_FRAME).first \
+             .locator(f"[data-testid='{selectors.PUBLISH_CONFIRM_TESTID}']").first
+    el.wait_for(state="visible", timeout=timeout)
+    el.click()
 
 
 def post_blog(page: Page, post: BlogPost) -> None:
     """
-    Full workflow: navigate → wait for editor → fill title → fill body → publish.
+    Full publish workflow:
+      navigate → wait for editor → fill title → fill body
+      → open publish popover → confirm publish
 
     Args:
-        page:  An already-authenticated Playwright Page instance.
-        post:  BlogPost dataclass with title and content.
+        page: An already-authenticated Playwright Page instance.
+        post: BlogPost dataclass with title and content.
     """
-    page.goto(WRITE_URL)
+    page.goto(settings.write_url)
     wait_for_editor(page)
     fill_title(page, post.title)
     fill_body(page, post.content)
-    click_publish(page)
+    click_publish_trigger(page)
+    click_publish_confirm(page)

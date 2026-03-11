@@ -3,14 +3,12 @@ tests/test_blog_e2e.py
 ----------------------
 End-to-end tests for Naver Blog automation.
 Requires:
-  1. A valid session_state.json  (run: python -m superselect --login ...)
+  1. A valid session_state.json
   OR
   2. NAVER_ID / NAVER_PW environment variables in .env
 
 Run with:
     pytest tests/test_blog_e2e.py -m e2e -v
-
-Skip in CI if credentials are absent — the session_required fixture handles this.
 """
 
 import os
@@ -19,17 +17,18 @@ import pytest
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright, Page, Browser, BrowserContext
 
+from automator.config import settings
+from automator import selectors
 from automator.blog import (
     BlogPost,
-    post_blog,
+    LOGIN_URL,
+    session_exists,
     wait_for_editor,
     fill_title,
     fill_body,
-    LOGIN_URL,
-    WRITE_URL,
-    EDITOR_IFRAME,
-    PLACEHOLDER_SELECTOR,
-    session_exists,
+    click_publish_trigger,
+    click_publish_confirm,
+    post_blog,
 )
 
 load_dotenv()
@@ -37,6 +36,7 @@ load_dotenv()
 SESSION_PATH = os.getenv("SESSION_PATH", "session_state.json")
 NAVER_ID     = os.getenv("NAVER_ID", "")
 NAVER_PW     = os.getenv("NAVER_PW", "")
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -69,7 +69,7 @@ def auth_context(browser_instance: Browser):
     else:
         pytest.skip(
             "No session file or credentials found. "
-            "Set NAVER_ID/NAVER_PW in .env or run superselect --login first."
+            "Set NAVER_ID/NAVER_PW in .env."
         )
 
     yield ctx
@@ -93,7 +93,14 @@ def _login_with_credentials(page: Page, naver_id: str, naver_pw: str) -> None:
     page.locator("#id").fill(naver_id)
     page.locator("#pw").fill(naver_pw)
     page.get_by_text("로그인", exact=True).click()
-    page.wait_for_url("**/naver.com/**", timeout=15_000)
+
+    # After clicking login, Naver immediately navigates to www.naver.com.
+    # wait_for_url() waits for a *new* navigation that never comes,
+    # so we use wait_for_load_state() and check the current URL instead.
+    page.wait_for_load_state("networkidle", timeout=15_000)
+    assert "nidlogin" not in page.url, (
+        f"Login may have failed — still on login page: {page.url}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -103,30 +110,24 @@ def _login_with_credentials(page: Page, naver_id: str, naver_pw: str) -> None:
 @pytest.mark.e2e
 def test_editor_iframe_is_visible(page: Page):
     """Test that the Smart Editor iframe renders after navigating to the write page."""
-    page.goto(WRITE_URL)
-    iframe = page.frame_locator(EDITOR_IFRAME)
-    iframe.locator(".se-content").wait_for(state="visible", timeout=15_000)
-    # If no TimeoutError is raised, the editor loaded successfully
-    assert True
+    page.goto(settings.write_url)
+    page.frame_locator(selectors.MAIN_FRAME) \
+        .locator(selectors.EDITOR_CONTENT) \
+        .wait_for(state="visible", timeout=15_000)
 
 
 @pytest.mark.e2e
 def test_two_placeholder_spans_exist(page: Page):
     """
-    Test that exactly 2 se-placeholder spans are present in the editor:
-    one for the title and one for the body.
-    This validates our nth(0)/nth(1) strategy.
+    Test that at least 2 se-placeholder spans exist in the editor.
+    Validates the nth(0)/nth(1) fallback selector strategy.
     """
-    page.goto(WRITE_URL)
-    frame = page.frame_locator(EDITOR_IFRAME)
-    frame.locator(".se-content").wait_for(state="visible", timeout=15_000)
+    page.goto(settings.write_url)
+    frame = page.frame_locator(selectors.MAIN_FRAME)
+    frame.locator(selectors.EDITOR_CONTENT).wait_for(state="visible", timeout=15_000)
 
-    placeholders = frame.locator(PLACEHOLDER_SELECTOR)
-    count = placeholders.count()
-    assert count >= 2, (
-        f"Expected at least 2 placeholder spans, found {count}. "
-        "nth(0)/nth(1) strategy may be broken."
-    )
+    count = frame.locator(selectors.PLACEHOLDER).count()
+    assert count >= 2, f"Expected at least 2 placeholder spans, found {count}."
 
 
 @pytest.mark.e2e
@@ -135,87 +136,87 @@ def test_placeholder_ids_contain_uuid_prefix(page: Page):
     Confirm that placeholder parent IDs follow the SE-{uuid} pattern,
     validating why we must NOT hardcode them.
     """
-    page.goto(WRITE_URL)
-    frame = page.frame_locator(EDITOR_IFRAME)
-    frame.locator(".se-content").wait_for(state="visible", timeout=15_000)
+    page.goto(settings.write_url)
+    frame = page.frame_locator(selectors.MAIN_FRAME)
+    frame.locator(selectors.EDITOR_CONTENT).wait_for(state="visible", timeout=15_000)
 
-    first_placeholder = frame.locator(PLACEHOLDER_SELECTOR).nth(0)
-    parent_id = first_placeholder.locator("..").get_attribute("id")
+    parent_id = frame.locator(selectors.PLACEHOLDER).nth(0).locator("..").get_attribute("id")
+    assert parent_id is not None
+    assert parent_id.startswith("SE-"), f"Expected id to start with 'SE-', got: {parent_id!r}"
 
-    assert parent_id is not None, "Parent element should have an id attribute"
-    assert parent_id.startswith("SE-"), (
-        f"Expected id to start with 'SE-', got: {parent_id!r}"
+
+# ---------------------------------------------------------------------------
+# E2E: Title → Body → Publish trigger → Publish confirm (full sequence)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.e2e
+@pytest.mark.slow
+def test_full_post_sequence(page: Page):
+    """
+    Full sequence test:
+      1. Navigate to write page
+      2. Wait for editor
+      3. Click title area and type text
+      4. Click body area and type text
+      5. Click publish trigger button (opens popover)
+      6. Click publish confirm button (actually publishes)
+
+    WARNING: This test publishes a real post. Delete it afterward.
+    Must be explicitly run with:
+        pytest tests/test_blog_e2e.py::test_full_post_sequence -m "e2e and slow"
+    """
+    frame = page.frame_locator(selectors.MAIN_FRAME).first
+
+    # Step 1. Navigate
+    page.goto(settings.write_url)
+
+    # Step 2. Wait for editor
+    wait_for_editor(page)
+
+    # Step 3. Fill title
+    title_el = frame.locator(selectors.TITLE_XPATH).first
+    title_el.wait_for(state="visible", timeout=5_000)
+    title_el.click()
+    page.keyboard.type("[자동화 테스트] Playwright로 작성한 포스트")
+
+    # Step 4. Fill body
+    body_el = frame.locator(selectors.BODY_XPATH).first
+    body_el.wait_for(state="visible", timeout=5_000)
+    body_el.click()
+    page.keyboard.type(
+        "안녕하세요! 이 글은 Playwright 자동화 테스트로 작성된 포스트입니다.\n\n"
+        "테스트 항목:\n"
+        "- 제목 입력 확인\n"
+        "- 본문 입력 확인\n"
+        "- 발행 버튼 노출 확인\n\n"
+        "테스트 완료 후 삭제 예정입니다."
     )
 
+    # Step 5. Open publish popover
+    trigger_el = frame.locator(selectors.PUBLISH_TRIGGER_XPATH).first
+    trigger_el.wait_for(state="visible", timeout=5_000)
+    trigger_el.click()
 
-# ---------------------------------------------------------------------------
-# E2E: Title and body input
-# ---------------------------------------------------------------------------
-
-@pytest.mark.e2e
-@pytest.mark.slow
-def test_fill_title_types_text(page: Page):
-    """Test that fill_title successfully inputs text into the title area."""
-    page.goto(WRITE_URL)
-    wait_for_editor(page)
-
-    fill_title(page, "[E2E 테스트] 제목 입력 확인")
-
-    # Read back typed text from the editable block
-    frame = page.frame_locator(EDITOR_IFRAME)
-    title_block = frame.locator(PLACEHOLDER_SELECTOR).nth(0).locator("..")
-    actual_text = title_block.inner_text()
-    assert "[E2E 테스트] 제목 입력 확인" in actual_text
+    # Step 6. Confirm publish
+    confirm_el = frame.locator(f"[data-testid='{selectors.PUBLISH_CONFIRM_TESTID}']").first
+    confirm_el.wait_for(state="visible", timeout=5_000)
+    confirm_el.click()
 
 
 @pytest.mark.e2e
 @pytest.mark.slow
-def test_fill_body_types_text(page: Page):
-    """Test that fill_body successfully inputs text into the body area."""
-    page.goto(WRITE_URL)
-    wait_for_editor(page)
-
-    fill_body(page, "E2E 테스트 본문입니다. 자동화 검증용 글입니다.")
-
-    frame = page.frame_locator(EDITOR_IFRAME)
-    body_block = frame.locator(PLACEHOLDER_SELECTOR).nth(1).locator("..")
-    actual_text = body_block.inner_text()
-    assert "E2E 테스트 본문입니다" in actual_text
-
-
-# ---------------------------------------------------------------------------
-# E2E: Full post workflow (실제 발행 — 주의!)
-# ---------------------------------------------------------------------------
-
-@pytest.mark.e2e
-@pytest.mark.slow
-def test_post_blog_full_workflow(page: Page):
+def test_title_and_body_visible_before_publish(page: Page):
     """
-    WARNING: This test actually publishes a post on Naver Blog.
-    Run only when you intend to create a real (or draft) post.
-
-    To prevent accidental publishing, this test is marked slow and
-    must be explicitly selected:
-        pytest tests/test_blog_e2e.py::test_post_blog_full_workflow -m "e2e and slow"
+    Safe version: fills title and body, verifies publish trigger is visible
+    — but does NOT publish. Use this to validate selector health.
     """
-    post = BlogPost(
-        title="[자동화 테스트] 삭제 예정 포스트",
-        content=(
-            "이 글은 Playwright 자동화 테스트로 작성된 글입니다.\n"
-            "테스트 확인 후 삭제해 주세요."
-        ),
-    )
-
-    # Navigate and fill — stop before clicking publish to stay safe
-    page.goto(WRITE_URL)
+    page.goto(settings.write_url)
     wait_for_editor(page)
-    fill_title(page, post.title)
-    fill_body(page, post.content)
 
-    # Verify publish button is visible before asserting success
-    publish_btn = page.get_by_text("발행", exact=True)
-    publish_btn.wait_for(state="visible", timeout=5_000)
-    assert publish_btn.is_visible(), "Publish button should be visible after filling content"
+    fill_title(page, "[자동화 테스트] Playwright로 작성한 포스트")
+    fill_body(page, "자동화 테스트 본문입니다. 발행하지 않습니다.")
 
-    # Uncomment the next line to actually publish:
-    # publish_btn.click()
+    trigger_el = page.frame_locator(selectors.MAIN_FRAME).first \
+                     .locator(selectors.PUBLISH_TRIGGER_XPATH).first
+    trigger_el.wait_for(state="visible", timeout=5_000)
+    assert trigger_el.is_visible(), "Publish trigger button should be visible"

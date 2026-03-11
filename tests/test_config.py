@@ -167,3 +167,48 @@ def test_settings_is_immutable(monkeypatch: pytest.MonkeyPatch):
     s = _load_settings()
     with pytest.raises((FrozenInstanceError, TypeError)):
         s.locale = "zh_CN"  # type: ignore
+
+
+# ---------------------------------------------------------------------------
+# naver_blog_id and write_url
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+def test_settings_loads_naver_blog_id(monkeypatch: pytest.MonkeyPatch):
+    """Test that NAVER_BLOG_ID env var is reflected in settings.naver_blog_id."""
+    for k, v in MOCK_ENV.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setenv("NAVER_BLOG_ID", "rlawjddn00az")
+    s = _load_settings()
+    assert s.naver_blog_id == "rlawjddn00az"
+
+
+@pytest.mark.unit
+def test_write_url_uses_naver_blog_id(monkeypatch: pytest.MonkeyPatch):
+    """Test that write_url is constructed from naver_blog_id, not hardcoded."""
+    for k, v in MOCK_ENV.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setenv("NAVER_BLOG_ID", "rlawjddn00az")
+    s = _load_settings()
+    assert s.write_url == "https://blog.naver.com/rlawjddn00az?Redirect=Write&"
+
+
+@pytest.mark.unit
+def test_write_url_changes_with_different_blog_id(monkeypatch: pytest.MonkeyPatch):
+    """Test that changing NAVER_BLOG_ID produces a different write_url."""
+    for k, v in MOCK_ENV.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setenv("NAVER_BLOG_ID", "another_user")
+    s = _load_settings()
+    assert "another_user" in s.write_url
+    assert "rlawjddn00az" not in s.write_url
+
+
+@pytest.mark.unit
+def test_write_url_contains_redirect_param(monkeypatch: pytest.MonkeyPatch):
+    """Test that write_url always includes the Redirect=Write query param."""
+    for k, v in MOCK_ENV.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setenv("NAVER_BLOG_ID", "rlawjddn00az")
+    s = _load_settings()
+    assert "Redirect=Write" in s.write_url

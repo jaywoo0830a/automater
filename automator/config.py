@@ -4,14 +4,15 @@ automator/config.py
 Loads and validates all environment variables including localization settings.
 Usage:
     from automator.config import settings
-    print(settings.locale)       # "ko_KR"
-    print(settings.timezone)     # "Asia/Seoul"
+    print(settings.naver_blog_id)  # "rlawjddn00az"
+    print(settings.locale)         # "ko_KR"
+    print(settings.timezone)       # "Asia/Seoul"
 """
 
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -47,28 +48,34 @@ class Geolocation:
 @dataclass(frozen=True)
 class Settings:
     # Credentials
-    naver_id:     str
-    naver_pw:     str
-    session_path: Path
+    naver_id:      str
+    naver_pw:      str
+    naver_blog_id: str   # Blog ID used to construct WRITE_URL
+    session_path:  Path
 
     # Localization
-    locale:               str         # e.g. "ko_KR", "en_US", "ja_JP"
-    timezone:             str         # e.g. "Asia/Seoul", "America/New_York"
-    language:             str         # e.g. "ko", "en", "ja"
-    geolocation:          Geolocation
-    timezone_offset_hours: int        # UTC offset for timestamp composition
-    user_agent:           str | None  # None = use Playwright default
+    locale:                str         # e.g. "ko_KR", "en_US", "ja_JP"
+    timezone:              str         # e.g. "Asia/Seoul", "America/New_York"
+    language:              str         # e.g. "ko", "en", "ja"
+    geolocation:           Geolocation
+    timezone_offset_hours: int         # UTC offset for timestamp composition
+    user_agent:            str | None  # None = use Playwright default
+
+    @property
+    def write_url(self) -> str:
+        """Construct the blog write URL from naver_blog_id."""
+        return f"https://blog.naver.com/{self.naver_blog_id}?Redirect=Write&"
 
 
 def _load_settings() -> Settings:
     """Read all variables from environment / .env and return a Settings instance."""
-    geo_raw = os.getenv("GEOLOCATION", "37.5665,126.9780")
-
+    geo_raw        = os.getenv("GEOLOCATION", "37.5665,126.9780")
     user_agent_raw = os.getenv("USER_AGENT", "").strip()
 
     return Settings(
         naver_id=os.getenv("NAVER_ID", ""),
         naver_pw=os.getenv("NAVER_PW", ""),
+        naver_blog_id=os.getenv("NAVER_BLOG_ID", ""),
         session_path=Path(os.getenv("SESSION_PATH", "session_state.json")),
 
         locale=os.getenv("LOCALE", "ko_KR"),
