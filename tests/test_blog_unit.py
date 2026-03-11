@@ -22,6 +22,7 @@ from automator.blog import (
     wait_for_editor,
     session_exists,
     login,
+    upload_image,
 )
 
 
@@ -134,6 +135,19 @@ def test_publish_confirm_testid_is_defined():
 def test_title_and_body_xpath_are_different():
     """Test that TITLE_XPATH and BODY_XPATH are distinct selectors."""
     assert selectors.TITLE_XPATH != selectors.BODY_XPATH
+
+
+@pytest.mark.unit
+def test_image_upload_trigger_xpath_is_defined():
+    """Test that IMAGE_UPLOAD_TRIGGER_XPATH is a valid xpath expression."""
+    assert selectors.IMAGE_UPLOAD_TRIGGER_XPATH.startswith("xpath=")
+
+
+@pytest.mark.unit
+def test_uploaded_image_selector_is_defined():
+    """Test that UPLOADED_IMAGE is a non-empty CSS selector."""
+    assert isinstance(selectors.UPLOADED_IMAGE, str)
+    assert len(selectors.UPLOADED_IMAGE) > 0
 
 
 # ---------------------------------------------------------------------------
@@ -313,10 +327,25 @@ def test_login_clicks_login_button(mock_page: MagicMock):
 
 @pytest.mark.unit
 def test_login_waits_for_navigation_away_from_login_page(mock_page: MagicMock):
-    """Test that login waits for load state after clicking login."""
-    mock_page.url = "https://www.naver.com"
+    """Test that login uses wait_for_url to confirm leaving the login page."""
     login(mock_page, "test_id", "test_pw")
-    mock_page.wait_for_load_state.assert_called()
+    mock_page.wait_for_url.assert_called_once()
+    # Verify the predicate rejects nidlogin URLs
+    predicate = mock_page.wait_for_url.call_args[0][0]
+    assert predicate("https://www.naver.com") is True
+    assert predicate("https://nid.naver.com/nidlogin.login") is False
+
+
+@pytest.mark.unit
+def test_login_uses_domcontentloaded_not_networkidle(mock_page: MagicMock):
+    """Test that login waits for domcontentloaded, not networkidle."""
+    login(mock_page, "test_id", "test_pw")
+    load_state_calls = [
+        call[0][0] for call in mock_page.wait_for_load_state.call_args_list
+    ]
+    assert all(s == "domcontentloaded" for s in load_state_calls), (
+        f"Expected only 'domcontentloaded', got: {load_state_calls}"
+    )
 
 
 @pytest.mark.unit
@@ -330,3 +359,43 @@ def test_login_navigates_to_write_url_after_login(mock_page: MagicMock):
         f"Expected goto({settings.write_url!r}) after login, "
         f"got calls: {goto_calls}"
     )
+
+
+# ---------------------------------------------------------------------------
+# upload_image
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+def test_upload_image_targets_main_frame(mock_page: MagicMock, tmp_path: Path):
+    """Test that upload_image uses MAIN_FRAME as the iframe selector."""
+    img = tmp_path / "test.jpg"
+    img.write_bytes(b"\xff\xd8\xff\xe0")
+    upload_image(mock_page, str(img))
+    mock_page.frame_locator.assert_called_with(selectors.MAIN_FRAME)
+
+
+@pytest.mark.unit
+def test_upload_image_uses_trigger_xpath(mock_page: MagicMock, tmp_path: Path):
+    """Test that upload_image locates the trigger via IMAGE_UPLOAD_TRIGGER_XPATH."""
+    img = tmp_path / "test.jpg"
+    img.write_bytes(b"\xff\xd8\xff\xe0")
+    upload_image(mock_page, str(img))
+    mock_page.frame_locator.return_value.first.locator.assert_any_call(
+        selectors.IMAGE_UPLOAD_TRIGGER_XPATH
+    )
+
+
+@pytest.mark.unit
+def test_upload_image_uses_expect_file_chooser(mock_page: MagicMock, tmp_path: Path):
+    """Test that upload_image intercepts the file chooser dialog."""
+    img = tmp_path / "test.jpg"
+    img.write_bytes(b"\xff\xd8\xff\xe0")
+    upload_image(mock_page, str(img))
+    mock_page.expect_file_chooser.assert_called_once()
+
+
+@pytest.mark.unit
+def test_upload_image_raises_for_missing_file(mock_page: MagicMock):
+    """Test that upload_image raises FileNotFoundError for a non-existent path."""
+    with pytest.raises(FileNotFoundError):
+        upload_image(mock_page, "/nonexistent/image.jpg")

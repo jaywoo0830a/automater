@@ -27,6 +27,7 @@ from automator.blog import (
     wait_for_editor,
     fill_title,
     fill_body,
+    upload_image,
     click_publish_trigger,
     click_publish_confirm,
     post_blog,
@@ -126,6 +127,32 @@ def test_placeholder_ids_contain_uuid_prefix(page: Page):
     parent_id = frame.locator(selectors.PLACEHOLDER).nth(0).locator("..").get_attribute("id")
     assert parent_id is not None
     assert parent_id.startswith("SE-"), f"Expected id to start with 'SE-', got: {parent_id!r}"
+
+
+# ---------------------------------------------------------------------------
+# E2E: Image upload
+# ---------------------------------------------------------------------------
+
+IMAGE_PATH = os.getenv("TEST_IMAGE_PATH", "smile.jpg")
+
+
+@pytest.mark.e2e
+def test_image_upload_inserts_image_in_editor(page: Page):
+    """
+    Test that clicking the image trigger and selecting a file
+    inserts a visible image element into the editor.
+    Does NOT publish — safe to run repeatedly.
+    """
+    if not os.path.exists(IMAGE_PATH):
+        pytest.skip(f"Test image not found: {IMAGE_PATH!r}")
+
+    page.goto(settings.write_url)
+    wait_for_editor(page)
+    upload_image(page, IMAGE_PATH)
+
+    frame = page.frame_locator(selectors.MAIN_FRAME).first
+    img = frame.locator(selectors.UPLOADED_IMAGE).first
+    assert img.is_visible(), "Uploaded image should be visible in the editor"
 
 
 # ---------------------------------------------------------------------------

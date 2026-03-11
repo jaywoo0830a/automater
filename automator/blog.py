@@ -94,15 +94,52 @@ def login(page: Page, naver_id: str, naver_pw: str, timeout: int = 15_000) -> No
     page.locator("#pw").fill(naver_pw)
     page.get_by_text("로그인", exact=True).click()
 
-    # Wait for Naver to finish redirecting after login
-    page.wait_for_load_state("networkidle", timeout=timeout)
-    assert "nidlogin" not in page.url, (
-        f"Login may have failed — still on login page: {page.url}"
-    )
+    # Wait until the browser leaves the login page.
+    # "networkidle" is unusable here — www.naver.com streams ads,
+    # websockets, and real-time widgets that never go idle.
+    page.wait_for_url(lambda url: "nidlogin" not in url, timeout=timeout)
+    page.wait_for_load_state("domcontentloaded", timeout=timeout)
 
     # Navigate to blog write page so session is fully established
     page.goto(settings.write_url)
-    page.wait_for_load_state("networkidle", timeout=timeout)
+    page.wait_for_load_state("domcontentloaded", timeout=timeout)
+
+
+def upload_image(page: Page, image_path: str, timeout: int = 10_000) -> None:
+    """
+    Upload an image to the blog editor via the toolbar button.
+
+    Clicks the image upload trigger in the editor toolbar, intercepts
+    the OS file chooser dialog using Playwright's expect_file_chooser,
+    and sets the given file. After upload, waits for the image element
+    to appear inside the editor content area.
+
+    Args:
+        page:       An already-authenticated Page with the editor loaded.
+        image_path: Absolute or relative path to the image file.
+        timeout:    Max wait time in ms for the image to appear.
+
+    Raises:
+        FileNotFoundError: If image_path does not exist.
+    """
+    path = Path(image_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Image file not found: {image_path!r}")
+
+    frame = page.frame_locator(selectors.MAIN_FRAME).first
+    trigger = frame.locator(selectors.IMAGE_UPLOAD_TRIGGER_XPATH).first
+    trigger.wait_for(state="visible", timeout=timeout)
+
+    # Intercept the file chooser dialog and inject the image file
+    with page.expect_file_chooser() as fc_info:
+        trigger.click()
+    file_chooser = fc_info.value
+    file_chooser.set_files(str(path))
+
+    # Wait for the uploaded image to render in the editor
+    frame.locator(selectors.UPLOADED_IMAGE).first.wait_for(
+        state="visible", timeout=timeout
+    )
 
 def wait_for_editor(page: Page, timeout: int = 15_000) -> None:
     """Block until the Smart Editor iframe and its content are visible."""

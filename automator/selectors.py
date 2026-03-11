@@ -82,3 +82,18 @@ PUBLISH_CONFIRM_XPATH = (
     "xpath=//html[1]/body[1]/div[1]/div[1]/div[1]/div[1]"
     "/div[3]/div[2]/div[1]/div[1]/div[1]/div[8]/div[1]/button[1]"
 )
+
+
+# ---------------------------------------------------------------------------
+# Image upload
+# ---------------------------------------------------------------------------
+
+# Button that opens the OS file chooser dialog for image upload (inside the iframe)
+IMAGE_UPLOAD_TRIGGER_XPATH = (
+    "xpath=//html[1]/body[1]/div[1]/div[1]/div[3]/div[1]"
+    "/div[1]/div[1]/div[1]/header[1]/div[1]/ul[1]/li[1]/button[1]"
+)
+
+# CSS selector for an uploaded image inside the editor content area
+# Used to verify that the image was successfully inserted
+UPLOADED_IMAGE = ".se-image-resource"
