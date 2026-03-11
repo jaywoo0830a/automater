@@ -78,6 +78,32 @@ def localized_context(browser: Browser, session_path: str | Path | None = None) 
 # Page-level actions
 # ---------------------------------------------------------------------------
 
+def login(page: Page, naver_id: str, naver_pw: str, timeout: int = 15_000) -> None:
+    """
+    Perform Naver ID/PW login and navigate to the blog write page.
+
+    After the login form submits, Naver redirects to www.naver.com.
+    This function waits for that redirect to complete, verifies login
+    succeeded, then navigates to the blog write URL so subsequent
+    actions (editor, publish) can proceed without interruption.
+
+    NOTE: Naver may show a CAPTCHA or 2FA — handle manually if needed.
+    """
+    page.goto(LOGIN_URL)
+    page.locator("#id").fill(naver_id)
+    page.locator("#pw").fill(naver_pw)
+    page.get_by_text("로그인", exact=True).click()
+
+    # Wait for Naver to finish redirecting after login
+    page.wait_for_load_state("networkidle", timeout=timeout)
+    assert "nidlogin" not in page.url, (
+        f"Login may have failed — still on login page: {page.url}"
+    )
+
+    # Navigate to blog write page so session is fully established
+    page.goto(settings.write_url)
+    page.wait_for_load_state("networkidle", timeout=timeout)
+
 def wait_for_editor(page: Page, timeout: int = 15_000) -> None:
     """Block until the Smart Editor iframe and its content are visible."""
     page.frame_locator(selectors.MAIN_FRAME) \

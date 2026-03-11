@@ -13,6 +13,7 @@ from automator.config import settings
 from automator import selectors
 from automator.blog import (
     BlogPost,
+    LOGIN_URL,
     fill_title,
     fill_body,
     click_publish_trigger,
@@ -20,6 +21,7 @@ from automator.blog import (
     post_blog,
     wait_for_editor,
     session_exists,
+    login,
 )
 
 
@@ -276,3 +278,55 @@ def test_session_exists_returns_true_when_file_present(tmp_path: Path):
 def test_session_exists_returns_false_when_missing(tmp_path: Path):
     """Test that session_exists returns False when the session file is absent."""
     assert session_exists(tmp_path / "nonexistent.json") is False
+
+
+# ---------------------------------------------------------------------------
+# login
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+def test_login_navigates_to_login_url(mock_page: MagicMock):
+    """Test that login navigates to LOGIN_URL first."""
+    login(mock_page, "test_id", "test_pw")
+    mock_page.goto.assert_any_call(LOGIN_URL)
+
+
+@pytest.mark.unit
+def test_login_fills_id_and_pw(mock_page: MagicMock):
+    """Test that login fills in the ID and password fields."""
+    login(mock_page, "my_id", "my_pw")
+
+    locator_calls = mock_page.locator.call_args_list
+    id_called = any(call[0][0] == "#id" for call in locator_calls)
+    pw_called = any(call[0][0] == "#pw" for call in locator_calls)
+    assert id_called, "Expected locator('#id') to be called"
+    assert pw_called, "Expected locator('#pw') to be called"
+
+
+@pytest.mark.unit
+def test_login_clicks_login_button(mock_page: MagicMock):
+    """Test that login clicks the login button."""
+    login(mock_page, "test_id", "test_pw")
+    mock_page.get_by_text.assert_called_once_with("로그인", exact=True)
+    mock_page.get_by_text.return_value.click.assert_called_once()
+
+
+@pytest.mark.unit
+def test_login_waits_for_navigation_away_from_login_page(mock_page: MagicMock):
+    """Test that login waits for load state after clicking login."""
+    mock_page.url = "https://www.naver.com"
+    login(mock_page, "test_id", "test_pw")
+    mock_page.wait_for_load_state.assert_called()
+
+
+@pytest.mark.unit
+def test_login_navigates_to_write_url_after_login(mock_page: MagicMock):
+    """Test that login navigates to write_url after successful login."""
+    mock_page.url = "https://www.naver.com"
+    login(mock_page, "test_id", "test_pw")
+
+    goto_calls = [call[0][0] for call in mock_page.goto.call_args_list]
+    assert settings.write_url in goto_calls, (
+        f"Expected goto({settings.write_url!r}) after login, "
+        f"got calls: {goto_calls}"
+    )

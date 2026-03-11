@@ -23,6 +23,7 @@ from automator.blog import (
     BlogPost,
     LOGIN_URL,
     session_exists,
+    login,
     wait_for_editor,
     fill_title,
     fill_body,
@@ -63,7 +64,8 @@ def auth_context(browser_instance: Browser):
     elif NAVER_ID and NAVER_PW:
         ctx = browser_instance.new_context()
         page = ctx.new_page()
-        _login_with_credentials(page, NAVER_ID, NAVER_PW)
+        login(page, NAVER_ID, NAVER_PW)
+        # Save session AFTER navigating to write_url so all cookies are set
         ctx.storage_state(path=SESSION_PATH)
         page.close()
     else:
@@ -82,25 +84,6 @@ def page(auth_context: BrowserContext):
     p = auth_context.new_page()
     yield p
     p.close()
-
-
-def _login_with_credentials(page: Page, naver_id: str, naver_pw: str) -> None:
-    """
-    Perform Naver ID/PW login.
-    NOTE: Naver may show a CAPTCHA or 2FA — handle manually if needed.
-    """
-    page.goto(LOGIN_URL)
-    page.locator("#id").fill(naver_id)
-    page.locator("#pw").fill(naver_pw)
-    page.get_by_text("로그인", exact=True).click()
-
-    # After clicking login, Naver immediately navigates to www.naver.com.
-    # wait_for_url() waits for a *new* navigation that never comes,
-    # so we use wait_for_load_state() and check the current URL instead.
-    page.wait_for_load_state("networkidle", timeout=15_000)
-    assert "nidlogin" not in page.url, (
-        f"Login may have failed — still on login page: {page.url}"
-    )
 
 
 # ---------------------------------------------------------------------------
