@@ -28,6 +28,7 @@ from automator.blog import (
     fill_title,
     fill_body,
     upload_image,
+    set_representative_image,
     click_publish_trigger,
     click_publish_confirm,
     post_blog,
@@ -153,6 +154,97 @@ def test_image_upload_inserts_image_in_editor(page: Page):
     frame = page.frame_locator(selectors.MAIN_FRAME).first
     img = frame.locator(selectors.UPLOADED_IMAGE).first
     assert img.is_visible(), "Uploaded image should be visible in the editor"
+
+
+# ---------------------------------------------------------------------------
+# E2E: Representative (thumbnail) image
+# ---------------------------------------------------------------------------
+
+@pytest.mark.e2e
+def test_first_image_is_representative_by_default(page: Page):
+    """
+    Upload 2 images and verify the first one is automatically
+    set as the representative (thumbnail) image.
+
+    Fully automated — no manual intervention needed.
+    Does NOT publish.
+    """
+    if not os.path.exists(IMAGE_PATH):
+        pytest.skip(f"Test image not found: {IMAGE_PATH!r}")
+
+    page.goto(settings.write_url)
+    wait_for_editor(page)
+
+    # Upload two images
+    upload_image(page, IMAGE_PATH)
+    upload_image(page, IMAGE_PATH)
+
+    frame = page.frame_locator(selectors.MAIN_FRAME).first
+
+    # Wait for "대표" buttons to appear
+    rep_buttons = frame.locator(selectors.REP_IMAGE_BUTTON)
+    rep_buttons.first.wait_for(state="visible", timeout=10_000)
+    assert rep_buttons.count() >= 2, (
+        f"Expected 2+ rep buttons, found {rep_buttons.count()}"
+    )
+
+    # The first image should be representative by default
+    selected = frame.locator(selectors.REP_IMAGE_BUTTON_SELECTED)
+    assert selected.count() == 1, "Exactly one image should be representative"
+
+    # Verify it's the first button that has the selected state
+    first_classes = rep_buttons.nth(0).get_attribute("class") or ""
+    assert "se-is-selected" in first_classes, (
+        "First image should be representative by default"
+    )
+
+
+@pytest.mark.e2e
+def test_set_last_image_as_representative(page: Page):
+    """
+    Upload 2 images, then set the last (second) image as the
+    representative (thumbnail) image.
+
+    Fully automated — no manual intervention needed.
+    Does NOT publish.
+    """
+    if not os.path.exists(IMAGE_PATH):
+        pytest.skip(f"Test image not found: {IMAGE_PATH!r}")
+
+    page.goto(settings.write_url)
+    wait_for_editor(page)
+
+    # Upload two images
+    upload_image(page, IMAGE_PATH)
+    upload_image(page, IMAGE_PATH)
+
+    frame = page.frame_locator(selectors.MAIN_FRAME).first
+
+    # Wait for "대표" buttons to appear
+    rep_buttons = frame.locator(selectors.REP_IMAGE_BUTTON)
+    rep_buttons.first.wait_for(state="visible", timeout=10_000)
+    count = rep_buttons.count()
+    assert count >= 2, f"Expected 2+ rep buttons, found {count}"
+
+    # Set the last image as representative
+    last_index = count - 1
+    set_representative_image(page, index=last_index)
+
+    # Verify exactly one image is representative
+    selected = frame.locator(selectors.REP_IMAGE_BUTTON_SELECTED)
+    assert selected.count() == 1, "Exactly one image should be representative"
+
+    # Verify it's the last button that has the selected state
+    last_classes = rep_buttons.nth(last_index).get_attribute("class") or ""
+    assert "se-is-selected" in last_classes, (
+        f"Last image (index={last_index}) should be representative"
+    )
+
+    # Verify the first button is NOT selected
+    first_classes = rep_buttons.nth(0).get_attribute("class") or ""
+    assert "se-is-selected" not in first_classes, (
+        "First image should NOT be representative after switching"
+    )
 
 
 # ---------------------------------------------------------------------------

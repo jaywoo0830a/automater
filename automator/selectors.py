@@ -97,3 +97,15 @@ IMAGE_UPLOAD_TRIGGER_XPATH = (
 # CSS selector for an uploaded image inside the editor content area
 # Used to verify that the image was successfully inserted
 UPLOADED_IMAGE = ".se-image-resource"
+
+
+# ---------------------------------------------------------------------------
+# Representative (thumbnail) image
+# ---------------------------------------------------------------------------
+
+# All "대표" toggle buttons — one per uploaded image (inside the iframe)
+REP_IMAGE_BUTTON = "button.se-set-rep-image-button"
+
+# The currently active representative image button (green badge)
+# Presence of .se-is-selected distinguishes active vs inactive
+REP_IMAGE_BUTTON_SELECTED = "button.se-set-rep-image-button.se-is-selected"

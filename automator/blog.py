@@ -141,6 +141,37 @@ def upload_image(page: Page, image_path: str, timeout: int = 10_000) -> None:
         state="visible", timeout=timeout
     )
 
+
+def set_representative_image(page: Page, index: int = 0, timeout: int = 5_000) -> None:
+    """
+    Set the representative (thumbnail) image by clicking its "대표" button.
+
+    Each uploaded image in the editor has a toggle button with class
+    ``se-set-rep-image-button``. When active (green), it gains the
+    ``se-is-selected`` class. Clicking a non-selected button transfers
+    the representative status to that image.
+
+    Args:
+        page:    A Page with the editor loaded and images already uploaded.
+        index:   Zero-based index of the image to set as representative.
+        timeout: Max wait time in ms for the button to become visible.
+
+    Raises:
+        ValueError: If index is negative.
+    """
+    if index < 0:
+        raise ValueError(f"index must be >= 0, got {index}")
+
+    frame = page.frame_locator(selectors.MAIN_FRAME).first
+    button = frame.locator(selectors.REP_IMAGE_BUTTON).nth(index)
+    button.wait_for(state="visible", timeout=timeout)
+    button.click()
+
+    # Wait until the clicked button gains the selected state
+    frame.locator(selectors.REP_IMAGE_BUTTON_SELECTED).nth(0).wait_for(
+        state="visible", timeout=timeout
+    )
+
 def wait_for_editor(page: Page, timeout: int = 15_000) -> None:
     """Block until the Smart Editor iframe and its content are visible."""
     page.frame_locator(selectors.MAIN_FRAME) \

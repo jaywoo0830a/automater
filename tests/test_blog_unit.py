@@ -23,6 +23,7 @@ from automator.blog import (
     session_exists,
     login,
     upload_image,
+    set_representative_image,
 )
 
 
@@ -148,6 +149,19 @@ def test_uploaded_image_selector_is_defined():
     """Test that UPLOADED_IMAGE is a non-empty CSS selector."""
     assert isinstance(selectors.UPLOADED_IMAGE, str)
     assert len(selectors.UPLOADED_IMAGE) > 0
+
+
+@pytest.mark.unit
+def test_rep_image_button_selector_is_defined():
+    """Test that REP_IMAGE_BUTTON is a non-empty CSS selector."""
+    assert isinstance(selectors.REP_IMAGE_BUTTON, str)
+    assert "se-set-rep-image-button" in selectors.REP_IMAGE_BUTTON
+
+
+@pytest.mark.unit
+def test_rep_image_selected_contains_is_selected_class():
+    """Test that REP_IMAGE_BUTTON_SELECTED includes the se-is-selected class."""
+    assert "se-is-selected" in selectors.REP_IMAGE_BUTTON_SELECTED
 
 
 # ---------------------------------------------------------------------------
@@ -399,3 +413,41 @@ def test_upload_image_raises_for_missing_file(mock_page: MagicMock):
     """Test that upload_image raises FileNotFoundError for a non-existent path."""
     with pytest.raises(FileNotFoundError):
         upload_image(mock_page, "/nonexistent/image.jpg")
+
+
+# ---------------------------------------------------------------------------
+# set_representative_image
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+def test_set_representative_image_targets_main_frame(mock_page: MagicMock):
+    """Test that set_representative_image uses MAIN_FRAME."""
+    set_representative_image(mock_page, index=0)
+    mock_page.frame_locator.assert_called_with(selectors.MAIN_FRAME)
+
+
+@pytest.mark.unit
+def test_set_representative_image_locates_rep_buttons(mock_page: MagicMock):
+    """Test that set_representative_image queries REP_IMAGE_BUTTON."""
+    set_representative_image(mock_page, index=1)
+    mock_page.frame_locator.return_value.first.locator.assert_any_call(
+        selectors.REP_IMAGE_BUTTON
+    )
+
+
+@pytest.mark.unit
+def test_set_representative_image_clicks_nth_button(mock_page: MagicMock):
+    """Test that set_representative_image clicks the button at the given index."""
+    set_representative_image(mock_page, index=1)
+    nth_calls = [
+        call[0][0] for call in
+        mock_page.frame_locator.return_value.first.locator.return_value.nth.call_args_list
+    ]
+    assert 1 in nth_calls, f"Expected nth(1) in calls, got: {nth_calls}"
+
+
+@pytest.mark.unit
+def test_set_representative_image_raises_for_negative_index(mock_page: MagicMock):
+    """Test that set_representative_image raises ValueError for negative index."""
+    with pytest.raises(ValueError):
+        set_representative_image(mock_page, index=-1)
