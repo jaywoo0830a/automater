@@ -225,6 +225,17 @@ def wait_for_editor(
         except Exception:
             pass    # not visible yet — keep polling
 
+    # Dismiss the help panel if it is open.
+    # The panel (article.se-help-panel.se-is-on) lives inside the editor iframe
+    # and intercepts pointer events, blocking clicks on the publish button.
+    # It appears on first load and stays open until explicitly closed.
+    try:
+        close_btn = frame.locator("button.se-help-panel-close-button").first
+        close_btn.wait_for(state="visible", timeout=2_000)
+        close_btn.click()
+    except Exception:
+        pass    # panel already closed or never opened
+
 
 def fill_title(
     page:        Page,
@@ -353,9 +364,26 @@ def click_publish_trigger(
     editor_json: str | Path = _DEFAULT_EDITOR_JSON,
     timeout:     int = 5_000,
 ) -> None:
-    """Click the publish trigger button to open the publish popover."""
+    """
+    Click the publish trigger button to open the publish popover.
+
+    The 발행 button lives in the page-level toolbar (outside the editor
+    iframe), not inside #mainFrame. Try page directly first; fall back to
+    the iframe context if not found.
+    """
+    sel = SelectorLoader.load(editor_json)
+
+    # Try page-level first (toolbar is outside the iframe)
+    try:
+        el = sel.locator(page, "publish_trigger")
+        el.wait_for(state="visible", timeout=timeout)
+        el.click()
+        return
+    except Exception:
+        pass
+
+    # Fallback: try inside the editor frame
     frame = _editor_frame(page)
-    sel   = SelectorLoader.load(editor_json)
     el    = sel.locator(frame, "publish_trigger")
     el.wait_for(state="visible", timeout=timeout)
     el.click()
@@ -366,9 +394,25 @@ def click_publish_confirm(
     editor_json: str | Path = _DEFAULT_EDITOR_JSON,
     timeout:     int = 5_000,
 ) -> None:
-    """Click the publish confirm button inside the popover."""
+    """
+    Click the publish confirm button inside the popover.
+
+    The confirm button appears in a page-level popover (outside the iframe).
+    Try page directly first; fall back to the iframe context if not found.
+    """
+    sel = SelectorLoader.load(editor_json)
+
+    # Try page-level first
+    try:
+        el = sel.locator(page, "publish_confirm")
+        el.wait_for(state="visible", timeout=timeout)
+        el.click()
+        return
+    except Exception:
+        pass
+
+    # Fallback: try inside the editor frame
     frame = _editor_frame(page)
-    sel   = SelectorLoader.load(editor_json)
     el    = sel.locator(frame, "publish_confirm")
     el.wait_for(state="visible", timeout=timeout)
     el.click()
