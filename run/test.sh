@@ -32,6 +32,14 @@ fi
 # ── Activate virtual environment ────────────────────────────────────────────
 source "${VENV_DIR}/bin/activate"
 
+# ── Unit test files ──────────────────────────────────────────────────────────
+UNIT_TESTS=(
+    tests/test_job_unit.py
+    tests/test_editor_unit.py
+    tests/test_selector_unit.py
+    tests/test_config.py
+)
+
 # ── Parse arguments ─────────────────────────────────────────────────────────
 MODE="${1:---unit}"
 
@@ -45,7 +53,7 @@ case "${MODE}" in
   --unit)
     echo "Mode : unit tests only (no browser)"
     echo ""
-    pytest tests/test_blog_unit.py tests/test_config.py \
+    pytest "${UNIT_TESTS[@]}" \
            -m unit \
            -v
     ;;
@@ -53,9 +61,8 @@ case "${MODE}" in
   --e2e)
     echo "Mode : unit + e2e tests (browser required)"
     echo ""
-    # Run unit tests first — fail fast before launching a browser
     echo "--- [1/2] Unit tests ---"
-    pytest tests/test_blog_unit.py tests/test_config.py \
+    pytest "${UNIT_TESTS[@]}" \
            -m unit \
            -v
 
@@ -77,7 +84,7 @@ case "${MODE}" in
 
     echo ""
     echo "--- [1/3] Unit tests ---"
-    pytest tests/test_blog_unit.py tests/test_config.py \
+    pytest "${UNIT_TESTS[@]}" \
            -m unit \
            -v
 
