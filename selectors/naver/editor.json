@@ -1,0 +1,205 @@
+{
+  "editor_title": {
+    "tag": "span",
+    "primary": "page.get_by_text('제목', exact=True)",
+    "selectors": [
+      {
+        "label": "text",
+        "pw": "page.get_by_text('제목', exact=True)",
+        "score": 0.423
+      }
+    ],
+    "stability_score": 0.423,
+    "_meta": {
+      "alias": "editor_title"
+    }
+  },
+  "editor_body": {
+    "tag": "span",
+    "primary": "page.get_by_text('글감과 함께 나의 일상을 기록해보세요!', exact=True)",
+    "selectors": [
+      {
+        "label": "text",
+        "pw": "page.get_by_text('글감과 함께 나의 일상을 기록해보세요!', exact=True)",
+        "score": 0.423
+      }
+    ],
+    "stability_score": 0.423,
+    "_meta": {
+      "alias": "editor_body"
+    }
+  },
+  "image_trigger": {
+    "tag": "button",
+    "primary": "page.get_by_text('사진사진 추가', exact=True)",
+    "selectors": [
+      {
+        "label": "text",
+        "pw": "page.get_by_text('사진사진 추가', exact=True)",
+        "score": 0.423
+      }
+    ],
+    "stability_score": 0.423,
+    "_meta": {
+      "alias": "image_trigger"
+    }
+  },
+  "publish_trigger": {
+    "tag": "button",
+    "primary": "page.get_by_text('발행', exact=True)",
+    "selectors": [
+      {
+        "label": "text",
+        "pw": "page.get_by_text('발행', exact=True)",
+        "score": 0.423
+      }
+    ],
+    "stability_score": 0.423,
+    "_meta": {
+      "alias": "publish_trigger"
+    }
+  },
+  "publish_confirm": {
+    "tag": "button",
+    "primary": "page.get_by_test_id('seOnePublishBtn')",
+    "selectors": [
+      {
+        "label": "testid",
+        "pw": "page.get_by_test_id('seOnePublishBtn')",
+        "score": 0.65
+      },
+      {
+        "label": "text",
+        "pw": "page.get_by_text('발행', exact=True)",
+        "score": 0.423
+      }
+    ],
+    "stability_score": 0.65,
+    "_meta": {
+      "alias": "publish_confirm"
+    }
+  },
+  "publish_option_now": {
+    "tag": "label",
+    "primary": "page.get_by_text('현재', exact=True)",
+    "selectors": [
+      {
+        "label": "text",
+        "pw": "page.get_by_text('현재', exact=True)",
+        "score": 0.423
+      }
+    ],
+    "stability_score": 0.423,
+    "_meta": {
+      "alias": "publish_option_now"
+    }
+  },
+  "publish_option_later": {
+    "tag": "label",
+    "primary": "page.get_by_text('예약', exact=True)",
+    "selectors": [
+      {
+        "label": "text",
+        "pw": "page.get_by_text('예약', exact=True)",
+        "score": 0.423
+      }
+    ],
+    "stability_score": 0.423,
+    "_meta": {
+      "alias": "publish_option_later"
+    }
+  },
+  "recovery_no": {
+    "tag": "button",
+    "primary": "page.get_by_text('취소', exact=True)",
+    "selectors": [
+      {
+        "label": "text",
+        "pw": "page.get_by_text('취소', exact=True)",
+        "score": 0.423
+      },
+      {
+        "label": "css",
+        "pw": "page.locator('#SE-52b2aa8b-bbf8-4d01-a7cf-064acca7ff0d > div.se-wrap.se-dnd-wrap:nth-of-type(1) > div.se-dnd-wrap > div.se-popup.__se-sentry:nth-of-type(4) > div.se-popup-container.__se-pop-layer:nth-of-type(2) > div.se-popup-button-container:nth-of-type(3) > button.se-popup-button.se-popup-button-cancel:nth-of-type(1)').first",
+        "score": 0.062
+      },
+      {
+        "label": "xpath",
+        "pw": "page.locator('xpath=//html[1]/body[1]/div[1]/div[1]/div[3]/div[1]/div[1]/div[1]/div[1]/div[4]/div[2]/div[3]/button[1]').first",
+        "score": 0.023
+      }
+    ],
+    "stability_score": 0.423,
+    "_meta": {
+      "ts": 1773295903791,
+      "alias": "recovery_no"
+    }
+  },
+  "selected": {
+    "tag": "button",
+    "primary": "page.get_by_text('대표', exact=True)",
+    "selectors": [
+      {
+        "label": "text",
+        "pw": "page.get_by_text('대표', exact=True)",
+        "score": 0.423
+      },
+      {
+        "label": "css",
+        "pw": "page.locator('#SE-6fbab141-2083-4ee9-9d92-3660f94c0f83 > button.se-set-rep-image-button.se-is-selected:nth-of-type(1)').first",
+        "score": 0.18
+      },
+      {
+        "label": "xpath",
+        "pw": "page.locator('xpath=//html[1]/body[1]/div[1]/div[1]/div[3]/div[1]/div[1]/div[1]/div[1]/div[1]/div[2]/section[1]/article[1]/div[2]/div[1]/div[1]/div[1]/div[1]/button[1]').first",
+        "score": 0.023
+      }
+    ],
+    "stability_score": 0.423,
+    "_meta": {
+      "alias": "selected"
+    }
+  },
+  "non_selected": {
+    "tag": "button",
+    "primary": "page.get_by_text('대표', exact=True)",
+    "selectors": [
+      {
+        "label": "text",
+        "pw": "page.get_by_text('대표', exact=True)",
+        "score": 0.423
+      },
+      {
+        "label": "css",
+        "pw": "page.locator('#SE-52b8b8db-9c2e-41ab-9d38-9428e2435ab0 > button.se-set-rep-image-button.__ss_s:nth-of-type(1)').first",
+        "score": 0.18
+      },
+      {
+        "label": "xpath",
+        "pw": "page.locator('xpath=//html[1]/body[1]/div[1]/div[1]/div[3]/div[1]/div[1]/div[1]/div[1]/div[1]/div[2]/section[1]/article[1]/div[3]/div[1]/div[1]/div[1]/div[1]/button[1]').first",
+        "score": 0.023
+      }
+    ],
+    "stability_score": 0.423,
+    "_meta": {
+      "alias": "non_selected"
+    }
+  },
+  "library_close": {
+    "tag": "button",
+    "primary": "page.get_by_text('팝업 닫기', exact=True)",
+    "selectors": [
+      {
+        "label": "text",
+        "pw": "page.get_by_text('팝업 닫기', exact=True)",
+        "score": 0.423
+      },
+      {
+        "label": "css",
+        "pw": "page.locator('button.se-sidebar-close-button').first",
+        "score": 0.062
+      }
+    ],
+    "stability_score": 0.423
+  }
+}

@@ -2,15 +2,18 @@
 tests/test_blog_e2e.py
 ----------------------
 End-to-end tests for Naver Blog automation.
-Requires:
-  1. A valid session_state.json
-  OR
-  2. NAVER_ID / NAVER_PW environment variables in .env
+
+Requires either:
+  1. A valid session_state.json, OR
+  2. NAVER_ID / NAVER_PW in .env
+
+All selectors are loaded from:
+  - selectors/naver/login.json
+  - selectors/naver/editor.json
 
 Run with:
     pytest tests/test_blog_e2e.py -m e2e -v
 """
-
 import os
 import pytest
 
@@ -18,8 +21,13 @@ from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright, Page, Browser, BrowserContext
 
 from automator.config import settings
-from automator import selectors
 from automator.blog import (
+    MAIN_FRAME,
+    EDITOR_CONTENT,
+    UPLOADED_IMAGE,
+    IMAGE_COMPONENT,
+    REP_IMAGE_BUTTON,
+    REP_IMAGE_BUTTON_SELECTED,
     BlogPost,
     LOGIN_URL,
     session_exists,
@@ -36,9 +44,11 @@ from automator.blog import (
 
 load_dotenv()
 
-SESSION_PATH = os.getenv("SESSION_PATH", "session_state.json")
-NAVER_ID     = os.getenv("NAVER_ID", "")
-NAVER_PW     = os.getenv("NAVER_PW", "")
+SESSION_PATH     = os.getenv("SESSION_PATH", "session_state.json")
+NAVER_ID         = os.getenv("NAVER_ID", "")
+NAVER_PW         = os.getenv("NAVER_PW", "")
+LOGIN_JSON_PATH  = os.getenv("LOGIN_JSON_PATH",  "selectors/naver/login.json")
+EDITOR_JSON_PATH = os.getenv("EDITOR_JSON_PATH", "selectors/naver/editor.json")
 
 
 # ---------------------------------------------------------------------------
@@ -59,22 +69,17 @@ def auth_context(browser_instance: Browser):
     """
     Provide an authenticated BrowserContext.
     Prefers session_state.json; falls back to env-var login.
-    Skips the entire session if neither is available.
     """
     if session_exists(SESSION_PATH):
         ctx = browser_instance.new_context(storage_state=SESSION_PATH)
     elif NAVER_ID and NAVER_PW:
-        ctx = browser_instance.new_context()
+        ctx  = browser_instance.new_context()
         page = ctx.new_page()
-        login(page, NAVER_ID, NAVER_PW)
-        # Save session AFTER navigating to write_url so all cookies are set
+        login(page, NAVER_ID, NAVER_PW, LOGIN_JSON_PATH)
         ctx.storage_state(path=SESSION_PATH)
         page.close()
     else:
-        pytest.skip(
-            "No session file or credentials found. "
-            "Set NAVER_ID/NAVER_PW in .env."
-        )
+        pytest.skip("No session file or credentials. Set NAVER_ID/NAVER_PW in .env.")
 
     yield ctx
     ctx.close()
@@ -94,40 +99,38 @@ def page(auth_context: BrowserContext):
 
 @pytest.mark.e2e
 def test_editor_iframe_is_visible(page: Page):
-    """Test that the Smart Editor iframe renders after navigating to the write page."""
+    """Smart Editor iframe renders after navigating to the write page."""
     page.goto(settings.write_url)
-    page.frame_locator(selectors.MAIN_FRAME) \
-        .locator(selectors.EDITOR_CONTENT) \
+    page.frame_locator(MAIN_FRAME) \
+        .locator(EDITOR_CONTENT) \
         .wait_for(state="visible", timeout=15_000)
 
 
 @pytest.mark.e2e
 def test_two_placeholder_spans_exist(page: Page):
-    """
-    Test that at least 2 se-placeholder spans exist in the editor.
-    Validates the nth(0)/nth(1) fallback selector strategy.
-    """
+    """At least 2 se-placeholder spans exist (title + body)."""
     page.goto(settings.write_url)
-    frame = page.frame_locator(selectors.MAIN_FRAME)
-    frame.locator(selectors.EDITOR_CONTENT).wait_for(state="visible", timeout=15_000)
-
-    count = frame.locator(selectors.PLACEHOLDER).count()
-    assert count >= 2, f"Expected at least 2 placeholder spans, found {count}."
+    frame = page.frame_locator(MAIN_FRAME)
+    frame.locator(EDITOR_CONTENT).wait_for(state="visible", timeout=15_000)
+    count = frame.locator("span.se-placeholder.__se_placeholder").count()
+    assert count >= 2, f"Expected >= 2 placeholder spans, found {count}"
 
 
 @pytest.mark.e2e
 def test_placeholder_ids_contain_uuid_prefix(page: Page):
-    """
-    Confirm that placeholder parent IDs follow the SE-{uuid} pattern,
-    validating why we must NOT hardcode them.
-    """
+    """Placeholder parent IDs follow the SE-{uuid} pattern."""
     page.goto(settings.write_url)
-    frame = page.frame_locator(selectors.MAIN_FRAME)
-    frame.locator(selectors.EDITOR_CONTENT).wait_for(state="visible", timeout=15_000)
-
-    parent_id = frame.locator(selectors.PLACEHOLDER).nth(0).locator("..").get_attribute("id")
-    assert parent_id is not None
-    assert parent_id.startswith("SE-"), f"Expected id to start with 'SE-', got: {parent_id!r}"
+    frame = page.frame_locator(MAIN_FRAME)
+    frame.locator(EDITOR_CONTENT).wait_for(state="visible", timeout=15_000)
+    parent_id = (
+        frame.locator("span.se-placeholder.__se_placeholder")
+             .nth(0)
+             .locator("..")
+             .get_attribute("id")
+    )
+    assert parent_id and parent_id.startswith("SE-"), (
+        f"Expected id to start with 'SE-', got: {parent_id!r}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -139,186 +142,178 @@ IMAGE_PATH = os.getenv("TEST_IMAGE_PATH", "smile.jpg")
 
 @pytest.mark.e2e
 def test_image_upload_inserts_image_in_editor(page: Page):
-    """
-    Test that clicking the image trigger and selecting a file
-    inserts a visible image element into the editor.
-    Does NOT publish — safe to run repeatedly.
-    """
+    """Clicking image trigger and selecting a file inserts an image."""
     if not os.path.exists(IMAGE_PATH):
         pytest.skip(f"Test image not found: {IMAGE_PATH!r}")
 
     page.goto(settings.write_url)
     wait_for_editor(page)
-    upload_image(page, IMAGE_PATH)
+    upload_image(page, IMAGE_PATH, EDITOR_JSON_PATH)
 
-    frame = page.frame_locator(selectors.MAIN_FRAME).first
-    img = frame.locator(selectors.UPLOADED_IMAGE).first
-    assert img.is_visible(), "Uploaded image should be visible in the editor"
+    frame = page.frame_locator(MAIN_FRAME).first
+    assert frame.locator(UPLOADED_IMAGE).first.is_visible()
+
 
 
 # ---------------------------------------------------------------------------
 # E2E: Representative (thumbnail) image
+#
+# 업로드 간 body 클릭을 삽입하는 이유:
+#   upload_image()는 toolbar 버튼 클릭 → 파일 선택 순으로 동작한다.
+#   두 번째 업로드부터 에디터 포커스가 첫 번째 이미지 블록에 머물면
+#   같은 블록에 덮어씌워지는 경우가 있다.
+#   body 영역을 클릭해 커서를 본문 끝으로 이동시킨 뒤 업로드하면
+#   각 이미지가 독립된 블록으로 삽입된다.
+#
+# 향후 시나리오 예시:
+#   "첫 이미지 삽입 → 단락 3개 → 두 번째 이미지 → 단락 3개 → 마지막 이미지를 썸네일"
+#   → fill_body() 호출을 upload_image() 사이에 끼워 넣으면 된다.
 # ---------------------------------------------------------------------------
 
-@pytest.mark.e2e
-def test_first_image_is_representative_by_default(page: Page):
+def _move_cursor_to_end(page: Page) -> None:
     """
-    Upload 2 images and verify the first one is automatically
-    set as the representative (thumbnail) image.
+    이미지 업로드 후 커서를 본문 끝으로 이동시킨다.
 
-    Fully automated — no manual intervention needed.
-    Does NOT publish.
+    _editor_frame()과 동일한 자동 감지 로직으로 iframe/page 레벨을 모두 처리한다.
+    """
+    try:
+        frame = page.frame_locator(MAIN_FRAME).first
+        frame.locator(EDITOR_CONTENT).click()
+    except Exception:
+        page.locator(EDITOR_CONTENT).click()
+    page.keyboard.press("Control+End")
+
+
+def _upload_three_images(page: Page) -> None:
+    """
+    Upload 3 images into the editor.
+
+    각 업로드 사이에 커서를 본문 끝으로 이동시켜
+    이미지가 독립된 블록으로 삽입되도록 한다.
+    """
+    wait_for_editor(page)
+
+    upload_image(page, IMAGE_PATH, EDITOR_JSON_PATH)
+
+    _move_cursor_to_end(page)
+    upload_image(page, IMAGE_PATH, EDITOR_JSON_PATH)
+
+    _move_cursor_to_end(page)
+    upload_image(page, IMAGE_PATH, EDITOR_JSON_PATH)
+
+    # Wait until all 3 image blocks are attached (rep buttons are hidden until hover)
+    frame        = page.frame_locator(MAIN_FRAME).first
+    image_blocks = frame.locator(UPLOADED_IMAGE)
+    image_blocks.nth(2).wait_for(state="visible", timeout=15_000)
+    rep_buttons = frame.locator(REP_IMAGE_BUTTON)
+    assert rep_buttons.count() == 3, (
+        f"Expected 3 rep buttons after uploading 3 images, got {rep_buttons.count()}"
+    )
+
+
+def _assert_only_nth_is_selected(frame, rep_buttons, index: int, total: int) -> None:
+    """
+    Assert that exactly one rep button is selected, and it is the one at ``index``.
+    """
+    selected = frame.locator(REP_IMAGE_BUTTON_SELECTED)
+    assert selected.count() == 1, (
+        f"Expected exactly 1 selected rep button, got {selected.count()}"
+    )
+    for i in range(total):
+        classes = rep_buttons.nth(i).get_attribute("class") or ""
+        if i == index:
+            assert "se-is-selected" in classes, (
+                f"Expected image[{i}] to be selected (se-is-selected), classes: {classes!r}"
+            )
+        else:
+            assert "se-is-selected" not in classes, (
+                f"Expected image[{i}] NOT to be selected, classes: {classes!r}"
+            )
+
+
+@pytest.mark.e2e
+def test_set_first_image_as_representative(page: Page):
+    """
+    3장 업로드 후 첫 번째(index=0) 이미지를 썸네일로 설정하고 검증한다.
+    첫 번째 이미지는 기본값이므로 클릭 없이 이미 선택되어 있어야 한다.
     """
     if not os.path.exists(IMAGE_PATH):
         pytest.skip(f"Test image not found: {IMAGE_PATH!r}")
 
     page.goto(settings.write_url)
-    wait_for_editor(page)
+    _upload_three_images(page)
 
-    # Upload two images
-    upload_image(page, IMAGE_PATH)
-    upload_image(page, IMAGE_PATH)
+    frame       = page.frame_locator(MAIN_FRAME).first
+    rep_buttons = frame.locator(REP_IMAGE_BUTTON)
 
-    frame = page.frame_locator(selectors.MAIN_FRAME).first
-
-    # Wait for "대표" buttons to appear
-    rep_buttons = frame.locator(selectors.REP_IMAGE_BUTTON)
-    rep_buttons.first.wait_for(state="visible", timeout=10_000)
-    assert rep_buttons.count() >= 2, (
-        f"Expected 2+ rep buttons, found {rep_buttons.count()}"
-    )
-
-    # The first image should be representative by default
-    selected = frame.locator(selectors.REP_IMAGE_BUTTON_SELECTED)
-    assert selected.count() == 1, "Exactly one image should be representative"
-
-    # Verify it's the first button that has the selected state
-    first_classes = rep_buttons.nth(0).get_attribute("class") or ""
-    assert "se-is-selected" in first_classes, (
-        "First image should be representative by default"
-    )
+    # index=0 is selected by default — explicitly set it to confirm the API works
+    set_representative_image(page, index=0)
+    _assert_only_nth_is_selected(frame, rep_buttons, index=0, total=3)
 
 
 @pytest.mark.e2e
-def test_set_last_image_as_representative(page: Page):
-    """
-    Upload 2 images, then set the last (second) image as the
-    representative (thumbnail) image.
-
-    Fully automated — no manual intervention needed.
-    Does NOT publish.
-    """
+def test_set_second_image_as_representative(page: Page):
+    """3장 업로드 후 두 번째(index=1) 이미지를 썸네일로 설정하고 검증한다."""
     if not os.path.exists(IMAGE_PATH):
         pytest.skip(f"Test image not found: {IMAGE_PATH!r}")
 
     page.goto(settings.write_url)
-    wait_for_editor(page)
+    _upload_three_images(page)
 
-    # Upload two images
-    upload_image(page, IMAGE_PATH)
-    upload_image(page, IMAGE_PATH)
+    frame       = page.frame_locator(MAIN_FRAME).first
+    rep_buttons = frame.locator(REP_IMAGE_BUTTON)
 
-    frame = page.frame_locator(selectors.MAIN_FRAME).first
+    set_representative_image(page, index=1)
+    _assert_only_nth_is_selected(frame, rep_buttons, index=1, total=3)
 
-    # Wait for "대표" buttons to appear
-    rep_buttons = frame.locator(selectors.REP_IMAGE_BUTTON)
-    rep_buttons.first.wait_for(state="visible", timeout=10_000)
-    count = rep_buttons.count()
-    assert count >= 2, f"Expected 2+ rep buttons, found {count}"
 
-    # Set the last image as representative
-    last_index = count - 1
-    set_representative_image(page, index=last_index)
+@pytest.mark.e2e
+def test_set_third_image_as_representative(page: Page):
+    """3장 업로드 후 세 번째(index=2) 이미지를 썸네일로 설정하고 검증한다."""
+    if not os.path.exists(IMAGE_PATH):
+        pytest.skip(f"Test image not found: {IMAGE_PATH!r}")
 
-    # Verify exactly one image is representative
-    selected = frame.locator(selectors.REP_IMAGE_BUTTON_SELECTED)
-    assert selected.count() == 1, "Exactly one image should be representative"
+    page.goto(settings.write_url)
+    _upload_three_images(page)
 
-    # Verify it's the last button that has the selected state
-    last_classes = rep_buttons.nth(last_index).get_attribute("class") or ""
-    assert "se-is-selected" in last_classes, (
-        f"Last image (index={last_index}) should be representative"
-    )
+    frame       = page.frame_locator(MAIN_FRAME).first
+    rep_buttons = frame.locator(REP_IMAGE_BUTTON)
 
-    # Verify the first button is NOT selected
-    first_classes = rep_buttons.nth(0).get_attribute("class") or ""
-    assert "se-is-selected" not in first_classes, (
-        "First image should NOT be representative after switching"
-    )
+    set_representative_image(page, index=2)
+    _assert_only_nth_is_selected(frame, rep_buttons, index=2, total=3)
 
 
 # ---------------------------------------------------------------------------
-# E2E: Title → Body → Publish trigger → Publish confirm (full sequence)
+# E2E: Full publish sequence
 # ---------------------------------------------------------------------------
 
 @pytest.mark.e2e
 @pytest.mark.slow
 def test_full_post_sequence(page: Page):
     """
-    Full sequence test:
-      1. Navigate to write page
-      2. Wait for editor
-      3. Click title area and type text
-      4. Click body area and type text
-      5. Click publish trigger button (opens popover)
-      6. Click publish confirm button (actually publishes)
-
-    WARNING: This test publishes a real post. Delete it afterward.
-    Must be explicitly run with:
-        pytest tests/test_blog_e2e.py::test_full_post_sequence -m "e2e and slow"
+    Full sequence: navigate → fill title → fill body → publish.
+    WARNING: publishes a real post. Delete it afterward.
+    Run with: pytest tests/test_blog_e2e.py::test_full_post_sequence -m "e2e and slow"
     """
-    frame = page.frame_locator(selectors.MAIN_FRAME).first
-
-    # Step 1. Navigate
     page.goto(settings.write_url)
-
-    # Step 2. Wait for editor
     wait_for_editor(page)
-
-    # Step 3. Fill title
-    title_el = frame.locator(selectors.TITLE_XPATH).first
-    title_el.wait_for(state="visible", timeout=5_000)
-    title_el.click()
-    page.keyboard.type("[자동화 테스트] Playwright로 작성한 포스트")
-
-    # Step 4. Fill body
-    body_el = frame.locator(selectors.BODY_XPATH).first
-    body_el.wait_for(state="visible", timeout=5_000)
-    body_el.click()
-    page.keyboard.type(
+    fill_title(page, "[자동화 테스트] Playwright로 작성한 포스트", EDITOR_JSON_PATH)
+    fill_body(
+        page,
         "안녕하세요! 이 글은 Playwright 자동화 테스트로 작성된 포스트입니다.\n\n"
-        "테스트 항목:\n"
-        "- 제목 입력 확인\n"
-        "- 본문 입력 확인\n"
-        "- 발행 버튼 노출 확인\n\n"
-        "테스트 완료 후 삭제 예정입니다."
+        "테스트 완료 후 삭제 예정입니다.",
+        EDITOR_JSON_PATH,
     )
-
-    # Step 5. Open publish popover
-    trigger_el = frame.locator(selectors.PUBLISH_TRIGGER_XPATH).first
-    trigger_el.wait_for(state="visible", timeout=5_000)
-    trigger_el.click()
-
-    # Step 6. Confirm publish
-    confirm_el = frame.locator(f"[data-testid='{selectors.PUBLISH_CONFIRM_TESTID}']").first
-    confirm_el.wait_for(state="visible", timeout=5_000)
-    confirm_el.click()
+    click_publish_trigger(page, EDITOR_JSON_PATH)
+    click_publish_confirm(page, EDITOR_JSON_PATH)
 
 
 @pytest.mark.e2e
 @pytest.mark.slow
 def test_title_and_body_visible_before_publish(page: Page):
-    """
-    Safe version: fills title and body, verifies publish trigger is visible
-    — but does NOT publish. Use this to validate selector health.
-    """
+    """Fills title and body, verifies publish trigger is visible — does NOT publish."""
     page.goto(settings.write_url)
     wait_for_editor(page)
-
-    fill_title(page, "[자동화 테스트] Playwright로 작성한 포스트")
-    fill_body(page, "자동화 테스트 본문입니다. 발행하지 않습니다.")
-
-    trigger_el = page.frame_locator(selectors.MAIN_FRAME).first \
-                     .locator(selectors.PUBLISH_TRIGGER_XPATH).first
-    trigger_el.wait_for(state="visible", timeout=5_000)
-    assert trigger_el.is_visible(), "Publish trigger button should be visible"
+    fill_title(page, "[자동화 테스트] 발행 안 함", EDITOR_JSON_PATH)
+    fill_body(page, "발행하지 않는 테스트입니다.", EDITOR_JSON_PATH)
+    click_publish_trigger(page, EDITOR_JSON_PATH)

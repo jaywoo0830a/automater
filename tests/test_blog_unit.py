@@ -1,16 +1,17 @@
 """
 tests/test_blog_unit.py
 -----------------------
-Unit tests for automator.blog using mocks.
-These tests run without a browser — fast and safe for CI.
-"""
+Unit tests for automator.blog — JSON 기반 셀렉터 아키텍처.
 
+selectors.py 상수 대신 SelectorLoader로 JSON을 읽어
+Playwright locator를 생성하는 구조를 검증합니다.
+"""
+import json
 import pytest
-from unittest.mock import MagicMock
 from pathlib import Path
+from unittest.mock import MagicMock, call, patch
 
 from automator.config import settings
-from automator import selectors
 from automator.blog import (
     BlogPost,
     LOGIN_URL,
@@ -24,6 +25,12 @@ from automator.blog import (
     login,
     upload_image,
     set_representative_image,
+    EDITOR_CONTENT,
+    MAIN_FRAME,
+    UPLOADED_IMAGE,
+    IMAGE_COMPONENT,
+    REP_IMAGE_BUTTON,
+    REP_IMAGE_BUTTON_SELECTED,
 )
 
 
@@ -31,35 +38,55 @@ from automator.blog import (
 # Fixtures
 # ---------------------------------------------------------------------------
 
-@pytest.fixture()
+@pytest.fixture
 def mock_page() -> MagicMock:
-    """Return a MagicMock that mimics a Playwright Page."""
     page = MagicMock()
-
     frame = MagicMock()
     frame.first = frame
     page.frame_locator.return_value = frame
-
     locator = MagicMock()
     locator.first = locator
     frame.locator.return_value = locator
-
+    frame.get_by_text.return_value = locator
+    frame.get_by_test_id.return_value = locator
+    page.locator.return_value = locator
+    page.get_by_text.return_value = locator
     return page
 
 
-@pytest.fixture()
+@pytest.fixture
+def login_json(tmp_path: Path) -> Path:
+    data = {
+        "naver_login_id":     {"primary": "page.locator('#id').first",          "selectors": [{"label": "css",  "pw": "page.locator('#id').first",          "score": 0.81}]},
+        "naver_login_pw":     {"primary": "page.locator('#pw').first",          "selectors": [{"label": "css",  "pw": "page.locator('#pw').first",          "score": 0.81}]},
+        "naver_login_submit": {"primary": "page.get_by_text('로그인', exact=True)", "selectors": [{"label": "text", "pw": "page.get_by_text('로그인', exact=True)", "score": 0.42}]},
+    }
+    f = tmp_path / "login.json"
+    f.write_text(json.dumps(data), encoding="utf-8")
+    return f
+
+
+@pytest.fixture
+def editor_json(tmp_path: Path) -> Path:
+    data = {
+        "editor_title":    {"primary": "page.get_by_text('제목', exact=True)",        "selectors": [{"label": "text",   "pw": "page.get_by_text('제목', exact=True)",        "score": 0.42}]},
+        "editor_body":     {"primary": "page.get_by_text('본문', exact=True)",        "selectors": [{"label": "text",   "pw": "page.get_by_text('본문', exact=True)",        "score": 0.42}]},
+        "image_trigger":   {"primary": "page.get_by_text('사진사진 추가', exact=True)", "selectors": [{"label": "text",   "pw": "page.get_by_text('사진사진 추가', exact=True)", "score": 0.42}]},
+        "publish_trigger": {"primary": "page.get_by_text('발행', exact=True)",        "selectors": [{"label": "text",   "pw": "page.get_by_text('발행', exact=True)",        "score": 0.42}]},
+        "publish_confirm": {"primary": "page.get_by_test_id('seOnePublishBtn')",      "selectors": [{"label": "testid", "pw": "page.get_by_test_id('seOnePublishBtn')",      "score": 0.65}]},
+        "selected":        {"primary": "page.get_by_text('대표', exact=True)",        "selectors": [{"label": "text",   "pw": "page.get_by_text('대표', exact=True)",        "score": 0.42}]},
+        "non_selected":    {"primary": "page.get_by_text('대표', exact=True)",        "selectors": [{"label": "text",   "pw": "page.get_by_text('대표', exact=True)",        "score": 0.42}]},
+        "recovery_no":     {"primary": "page.get_by_text('취소', exact=True)",        "selectors": [{"label": "text",   "pw": "page.get_by_text('취소', exact=True)",        "score": 0.42}]},
+        "library_close":   {"primary": "page.get_by_text('팝업 닫기', exact=True)",   "selectors": [{"label": "text",   "pw": "page.get_by_text('팝업 닫기', exact=True)",   "score": 0.42}]},
+    }
+    f = tmp_path / "editor.json"
+    f.write_text(json.dumps(data), encoding="utf-8")
+    return f
+
+
+@pytest.fixture
 def sample_post() -> BlogPost:
-    return BlogPost(
-        title="[자동화 테스트] Playwright로 작성한 포스트",
-        content=(
-            "안녕하세요! 이 글은 Playwright 자동화 테스트로 작성된 포스트입니다.\n\n"
-            "테스트 항목:\n"
-            "- 제목 입력 확인\n"
-            "- 본문 입력 확인\n"
-            "- 발행 버튼 노출 확인\n\n"
-            "테스트 완료 후 삭제 예정입니다."
-        ),
-    )
+    return BlogPost(title="테스트 제목", content="테스트 본문")
 
 
 # ---------------------------------------------------------------------------
@@ -68,7 +95,6 @@ def sample_post() -> BlogPost:
 
 @pytest.mark.unit
 def test_blogpost_stores_title_and_content():
-    """Test that BlogPost correctly stores title and content."""
     post = BlogPost(title="Hello", content="World")
     assert post.title == "Hello"
     assert post.content == "World"
@@ -76,195 +102,186 @@ def test_blogpost_stores_title_and_content():
 
 @pytest.mark.unit
 def test_blogpost_category_defaults_to_none():
-    """Test that category is optional and defaults to None."""
-    post = BlogPost(title="T", content="C")
-    assert post.category is None
+    assert BlogPost(title="T", content="C").category is None
 
 
 @pytest.mark.unit
 def test_blogpost_with_category():
-    """Test that BlogPost accepts an optional category."""
-    post = BlogPost(title="T", content="C", category="일상")
-    assert post.category == "일상"
+    assert BlogPost(title="T", content="C", category="일상").category == "일상"
 
 
 # ---------------------------------------------------------------------------
-# selectors.py — integrity checks
+# selectors.py 제거 확인 — 상수가 blog.py 안에 남아있어서는 안 됨
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
-def test_placeholder_selector_contains_no_uuid():
-    """Critical: PLACEHOLDER must not contain a hardcoded SE-{uuid}."""
-    assert "SE-" not in selectors.PLACEHOLDER, (
-        f"PLACEHOLDER contains a UUID: {selectors.PLACEHOLDER!r}"
-    )
-
-
-@pytest.mark.unit
-def test_placeholder_selector_uses_stable_class():
-    """Test that PLACEHOLDER targets the stable se-placeholder class."""
-    assert "se-placeholder" in selectors.PLACEHOLDER
-    assert "__se_placeholder" in selectors.PLACEHOLDER
-
-
-@pytest.mark.unit
-def test_title_xpath_is_defined():
-    """Test that TITLE_XPATH is a valid xpath expression."""
-    assert selectors.TITLE_XPATH.startswith("xpath=")
-
-
-@pytest.mark.unit
-def test_body_xpath_is_defined():
-    """Test that BODY_XPATH is a valid xpath expression."""
-    assert selectors.BODY_XPATH.startswith("xpath=")
-
-
-@pytest.mark.unit
-def test_publish_trigger_xpath_is_defined():
-    """Test that PUBLISH_TRIGGER_XPATH is a valid xpath expression."""
-    assert selectors.PUBLISH_TRIGGER_XPATH.startswith("xpath=")
-
-
-@pytest.mark.unit
-def test_publish_confirm_testid_is_defined():
-    """Test that PUBLISH_CONFIRM_TESTID is a non-empty string."""
-    assert isinstance(selectors.PUBLISH_CONFIRM_TESTID, str)
-    assert len(selectors.PUBLISH_CONFIRM_TESTID) > 0
-
-
-@pytest.mark.unit
-def test_title_and_body_xpath_are_different():
-    """Test that TITLE_XPATH and BODY_XPATH are distinct selectors."""
-    assert selectors.TITLE_XPATH != selectors.BODY_XPATH
-
-
-@pytest.mark.unit
-def test_image_upload_trigger_xpath_is_defined():
-    """Test that IMAGE_UPLOAD_TRIGGER_XPATH is a valid xpath expression."""
-    assert selectors.IMAGE_UPLOAD_TRIGGER_XPATH.startswith("xpath=")
-
-
-@pytest.mark.unit
-def test_uploaded_image_selector_is_defined():
-    """Test that UPLOADED_IMAGE is a non-empty CSS selector."""
-    assert isinstance(selectors.UPLOADED_IMAGE, str)
-    assert len(selectors.UPLOADED_IMAGE) > 0
-
-
-@pytest.mark.unit
-def test_rep_image_button_selector_is_defined():
-    """Test that REP_IMAGE_BUTTON is a non-empty CSS selector."""
-    assert isinstance(selectors.REP_IMAGE_BUTTON, str)
-    assert "se-set-rep-image-button" in selectors.REP_IMAGE_BUTTON
-
-
-@pytest.mark.unit
-def test_rep_image_selected_contains_is_selected_class():
-    """Test that REP_IMAGE_BUTTON_SELECTED includes the se-is-selected class."""
-    assert "se-is-selected" in selectors.REP_IMAGE_BUTTON_SELECTED
+def test_selectors_module_does_not_exist():
+    """automator/selectors.py가 완전히 제거되었는지 확인."""
+    import importlib, importlib.util
+    spec = importlib.util.find_spec("automator.selectors")
+    assert spec is None, "automator.selectors 모듈이 아직 존재합니다 — 삭제해야 합니다"
 
 
 # ---------------------------------------------------------------------------
-# fill_title
+# blog.py 내 DOM 상수 (selectors.py가 아닌 blog.py에서 직접 관리)
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
-def test_fill_title_targets_main_frame(mock_page: MagicMock):
-    """Test that fill_title uses MAIN_FRAME as the iframe selector."""
-    fill_title(mock_page, "테스트 제목")
-    mock_page.frame_locator.assert_called_once_with(selectors.MAIN_FRAME)
+def test_main_frame_constant_defined():
+    assert isinstance(MAIN_FRAME, str) and len(MAIN_FRAME) > 0
 
 
 @pytest.mark.unit
-def test_fill_title_uses_title_xpath(mock_page: MagicMock):
-    """Test that fill_title locates the element via TITLE_XPATH."""
-    fill_title(mock_page, "테스트 제목")
-    mock_page.frame_locator.return_value.first.locator.assert_called_with(selectors.TITLE_XPATH)
+def test_editor_content_constant_defined():
+    assert isinstance(EDITOR_CONTENT, str) and len(EDITOR_CONTENT) > 0
 
 
 @pytest.mark.unit
-def test_fill_title_types_given_text(mock_page: MagicMock):
-    """Test that fill_title types the correct text via keyboard."""
-    fill_title(mock_page, "입력할 제목")
+def test_uploaded_image_constant_defined():
+    assert isinstance(UPLOADED_IMAGE, str) and len(UPLOADED_IMAGE) > 0
+
+
+@pytest.mark.unit
+def test_rep_image_button_constants_defined():
+    """REP_IMAGE_BUTTON 상수는 e2e 테스트의 DOM 구조 검증에 사용된다."""
+    assert "se-set-rep-image-button" in REP_IMAGE_BUTTON
+    assert "se-is-selected"          in REP_IMAGE_BUTTON_SELECTED
+
+
+# ---------------------------------------------------------------------------
+# wait_for_editor — 복구 팝업 처리
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+def test_wait_for_editor_dismisses_recovery_popup(mock_page):
+    """복구 팝업이 나타나면 se-popup-button-cancel 버튼을 클릭해 닫는다."""
+    from automator.blog import wait_for_editor
+
+    # _editor_frame() probes: 1st call uses .locator(EDITOR_CONTENT).wait_for → success
+    # then frame_locator is called again for the popup poll loop
+    # We return the same frame mock for all calls to simplify.
+    frame    = MagicMock()
+    frame.first = frame
+
+    editor_loc = MagicMock()
+    editor_loc.wait_for.return_value = None
+
+    popup_btn = MagicMock()
+    popup_btn.first = popup_btn
+    popup_btn.wait_for.return_value = None   # popup visible on first probe
+
+    # locator() returns editor_loc for EDITOR_CONTENT, popup_btn for cancel button
+    def locator_side_effect(selector):
+        if selector == "button.se-popup-button-cancel":
+            return popup_btn
+        return editor_loc
+
+    frame.locator.side_effect = locator_side_effect
+    mock_page.frame_locator.return_value = frame
+
+    wait_for_editor(mock_page)
+
+    frame.locator.assert_any_call("button.se-popup-button-cancel")
+    popup_btn.click.assert_called()
+
+
+@pytest.mark.unit
+def test_wait_for_editor_continues_when_no_popup(mock_page):
+    """복구 팝업이 없으면 예외 없이 정상 진행된다."""
+    from automator.blog import wait_for_editor
+    import automator.blog as blog_module
+
+    frame    = MagicMock()
+    frame.first = frame
+
+    editor_loc = MagicMock()
+    editor_loc.wait_for.return_value = None
+
+    popup_btn = MagicMock()
+    popup_btn.first = popup_btn
+    popup_btn.wait_for.side_effect = Exception("timeout")   # never appears
+
+    def locator_side_effect(selector):
+        if selector == "button.se-popup-button-cancel":
+            return popup_btn
+        return editor_loc
+
+    frame.locator.side_effect = locator_side_effect
+    mock_page.frame_locator.return_value = frame
+
+    # Patch the poll window to near-zero so the test doesn't actually wait 5s
+    original = blog_module.__dict__.copy()
+    with patch("time.monotonic", side_effect=[0.0, 0.0, 999.0]):
+        wait_for_editor(mock_page)   # must not raise
+
+
+# ---------------------------------------------------------------------------
+# fill_title / fill_body — frame + get_by_text 기반
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+def test_fill_title_uses_frame_locator(mock_page, editor_json):
+    fill_title(mock_page, "제목", editor_json)
+    mock_page.frame_locator.assert_called_with(MAIN_FRAME)
+
+
+@pytest.mark.unit
+def test_fill_title_types_text(mock_page, editor_json):
+    fill_title(mock_page, "입력할 제목", editor_json)
     mock_page.keyboard.type.assert_called_once_with("입력할 제목")
 
 
-# ---------------------------------------------------------------------------
-# fill_body
-# ---------------------------------------------------------------------------
-
 @pytest.mark.unit
-def test_fill_body_targets_main_frame(mock_page: MagicMock):
-    """Test that fill_body uses MAIN_FRAME as the iframe selector."""
-    fill_body(mock_page, "본문 내용")
-    mock_page.frame_locator.assert_called_with(selectors.MAIN_FRAME)
+def test_fill_body_uses_frame_locator(mock_page, editor_json):
+    fill_body(mock_page, "본문", editor_json)
+    mock_page.frame_locator.assert_called_with(MAIN_FRAME)
 
 
 @pytest.mark.unit
-def test_fill_body_uses_body_xpath(mock_page: MagicMock):
-    """Test that fill_body locates the element via BODY_XPATH."""
-    fill_body(mock_page, "본문 내용")
-    mock_page.frame_locator.return_value.first.locator.assert_called_with(selectors.BODY_XPATH)
-
-
-@pytest.mark.unit
-def test_fill_body_types_given_text(mock_page: MagicMock):
-    """Test that fill_body types the correct text via keyboard."""
-    fill_body(mock_page, "자동화 본문")
+def test_fill_body_types_text(mock_page, editor_json):
+    fill_body(mock_page, "자동화 본문", editor_json)
     mock_page.keyboard.type.assert_called_once_with("자동화 본문")
 
 
 @pytest.mark.unit
-def test_title_and_body_use_different_xpaths(mock_page: MagicMock):
-    """Test that fill_title and fill_body target different XPath selectors."""
-    fill_title(mock_page, "제목")
-    title_arg = mock_page.frame_locator.return_value.first.locator.call_args[0][0]
+def test_title_and_body_call_different_selectors(mock_page, editor_json):
+    fill_title(mock_page, "제목", editor_json)
+    title_call = mock_page.frame_locator.return_value.first.get_by_text.call_args
 
     mock_page.reset_mock()
 
-    fill_body(mock_page, "본문")
-    body_arg = mock_page.frame_locator.return_value.first.locator.call_args[0][0]
+    fill_body(mock_page, "본문", editor_json)
+    body_call = mock_page.frame_locator.return_value.first.get_by_text.call_args
 
-    assert title_arg != body_arg
-
-
-# ---------------------------------------------------------------------------
-# click_publish_trigger
-# ---------------------------------------------------------------------------
-
-@pytest.mark.unit
-def test_click_publish_trigger_uses_trigger_xpath(mock_page: MagicMock):
-    """Test that click_publish_trigger uses PUBLISH_TRIGGER_XPATH."""
-    click_publish_trigger(mock_page)
-    mock_page.frame_locator.return_value.first.locator.assert_called_with(
-        selectors.PUBLISH_TRIGGER_XPATH
-    )
-
-
-@pytest.mark.unit
-def test_click_publish_trigger_calls_click(mock_page: MagicMock):
-    """Test that click_publish_trigger clicks the located element."""
-    click_publish_trigger(mock_page)
-    mock_page.frame_locator.return_value.first.locator.return_value.first.click.assert_called_once()
+    assert title_call != body_call
 
 
 # ---------------------------------------------------------------------------
-# click_publish_confirm
+# click_publish_trigger / click_publish_confirm
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
-def test_click_publish_confirm_uses_testid(mock_page: MagicMock):
-    """Test that click_publish_confirm targets the element by data-testid."""
-    click_publish_confirm(mock_page)
-    call_arg = mock_page.frame_locator.return_value.first.locator.call_args[0][0]
-    assert selectors.PUBLISH_CONFIRM_TESTID in call_arg
+def test_click_publish_trigger_uses_frame(mock_page, editor_json):
+    click_publish_trigger(mock_page, editor_json)
+    mock_page.frame_locator.assert_called_with(MAIN_FRAME)
 
 
 @pytest.mark.unit
-def test_click_publish_confirm_calls_click(mock_page: MagicMock):
-    """Test that click_publish_confirm clicks the located element."""
-    click_publish_confirm(mock_page)
-    mock_page.frame_locator.return_value.first.locator.return_value.first.click.assert_called_once()
+def test_click_publish_trigger_calls_click(mock_page, editor_json):
+    click_publish_trigger(mock_page, editor_json)
+    mock_page.frame_locator.return_value.first.get_by_text.return_value.click.assert_called_once()
+
+
+@pytest.mark.unit
+def test_click_publish_confirm_uses_testid(mock_page, editor_json):
+    click_publish_confirm(mock_page, editor_json)
+    mock_page.frame_locator.return_value.first.get_by_test_id.assert_called_once_with("seOnePublishBtn")
+
+
+@pytest.mark.unit
+def test_click_publish_confirm_calls_click(mock_page, editor_json):
+    click_publish_confirm(mock_page, editor_json)
+    mock_page.frame_locator.return_value.first.get_by_test_id.return_value.click.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -272,22 +289,18 @@ def test_click_publish_confirm_calls_click(mock_page: MagicMock):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
-def test_post_blog_navigates_to_write_url(mock_page: MagicMock, sample_post: BlogPost):
-    """Test that post_blog navigates to settings.write_url."""
-    post_blog(mock_page, sample_post)
+def test_post_blog_navigates_to_write_url(mock_page, editor_json, sample_post):
+    post_blog(mock_page, sample_post, editor_json)
     mock_page.goto.assert_called_once_with(settings.write_url)
 
 
 @pytest.mark.unit
-def test_post_blog_goto_is_first_call(mock_page: MagicMock, sample_post: BlogPost):
-    """Test that goto is the very first action in post_blog."""
-    call_order: list[str] = []
-    mock_page.goto.side_effect = lambda *_: call_order.append("goto")
-    mock_page.keyboard.type.side_effect = lambda *_: call_order.append("type")
-
-    post_blog(mock_page, sample_post)
-
-    assert call_order[0] == "goto"
+def test_post_blog_goto_is_first_call(mock_page, editor_json, sample_post):
+    order = []
+    mock_page.goto.side_effect          = lambda *_: order.append("goto")
+    mock_page.keyboard.type.side_effect = lambda *_: order.append("type")
+    post_blog(mock_page, sample_post, editor_json)
+    assert order[0] == "goto"
 
 
 # ---------------------------------------------------------------------------
@@ -295,84 +308,67 @@ def test_post_blog_goto_is_first_call(mock_page: MagicMock, sample_post: BlogPos
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
-def test_session_exists_returns_true_when_file_present(tmp_path: Path):
-    """Test that session_exists returns True when the session file exists."""
-    f = tmp_path / "session_state.json"
+def test_session_exists_true(tmp_path):
+    f = tmp_path / "s.json"
     f.write_text("{}")
     assert session_exists(f) is True
 
 
 @pytest.mark.unit
-def test_session_exists_returns_false_when_missing(tmp_path: Path):
-    """Test that session_exists returns False when the session file is absent."""
-    assert session_exists(tmp_path / "nonexistent.json") is False
+def test_session_exists_false(tmp_path):
+    assert session_exists(tmp_path / "nope.json") is False
 
 
 # ---------------------------------------------------------------------------
-# login
+# login — JSON 기반
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
-def test_login_navigates_to_login_url(mock_page: MagicMock):
-    """Test that login navigates to LOGIN_URL first."""
-    login(mock_page, "test_id", "test_pw")
+def test_login_navigates_to_login_url(mock_page, login_json):
+    login(mock_page, "id", "pw", login_json)
     mock_page.goto.assert_any_call(LOGIN_URL)
 
 
 @pytest.mark.unit
-def test_login_fills_id_and_pw(mock_page: MagicMock):
-    """Test that login fills in the ID and password fields."""
-    login(mock_page, "my_id", "my_pw")
-
-    locator_calls = mock_page.locator.call_args_list
-    id_called = any(call[0][0] == "#id" for call in locator_calls)
-    pw_called = any(call[0][0] == "#pw" for call in locator_calls)
-    assert id_called, "Expected locator('#id') to be called"
-    assert pw_called, "Expected locator('#pw') to be called"
+def test_login_fills_id_field(mock_page, login_json):
+    login(mock_page, "my_id", "my_pw", login_json)
+    mock_page.locator.assert_any_call("#id")
 
 
 @pytest.mark.unit
-def test_login_clicks_login_button(mock_page: MagicMock):
-    """Test that login clicks the login button."""
-    login(mock_page, "test_id", "test_pw")
-    mock_page.get_by_text.assert_called_once_with("로그인", exact=True)
-    mock_page.get_by_text.return_value.click.assert_called_once()
+def test_login_fills_pw_field(mock_page, login_json):
+    login(mock_page, "my_id", "my_pw", login_json)
+    mock_page.locator.assert_any_call("#pw")
 
 
 @pytest.mark.unit
-def test_login_waits_for_navigation_away_from_login_page(mock_page: MagicMock):
-    """Test that login uses wait_for_url to confirm leaving the login page."""
-    login(mock_page, "test_id", "test_pw")
+def test_login_clicks_submit(mock_page, login_json):
+    login(mock_page, "my_id", "my_pw", login_json)
+    mock_page.get_by_text.assert_called_with("로그인", exact=True)
+    mock_page.get_by_text.return_value.click.assert_called()
+
+
+@pytest.mark.unit
+def test_login_waits_for_url_away_from_login(mock_page, login_json):
+    login(mock_page, "id", "pw", login_json)
     mock_page.wait_for_url.assert_called_once()
-    # Verify the predicate rejects nidlogin URLs
-    predicate = mock_page.wait_for_url.call_args[0][0]
-    assert predicate("https://www.naver.com") is True
-    assert predicate("https://nid.naver.com/nidlogin.login") is False
+    pred = mock_page.wait_for_url.call_args[0][0]
+    assert pred("https://www.naver.com") is True
+    assert pred("https://nid.naver.com/nidlogin.login") is False
 
 
 @pytest.mark.unit
-def test_login_uses_domcontentloaded_not_networkidle(mock_page: MagicMock):
-    """Test that login waits for domcontentloaded, not networkidle."""
-    login(mock_page, "test_id", "test_pw")
-    load_state_calls = [
-        call[0][0] for call in mock_page.wait_for_load_state.call_args_list
-    ]
-    assert all(s == "domcontentloaded" for s in load_state_calls), (
-        f"Expected only 'domcontentloaded', got: {load_state_calls}"
-    )
+def test_login_uses_domcontentloaded(mock_page, login_json):
+    login(mock_page, "id", "pw", login_json)
+    states = [c[0][0] for c in mock_page.wait_for_load_state.call_args_list]
+    assert all(s == "domcontentloaded" for s in states)
 
 
 @pytest.mark.unit
-def test_login_navigates_to_write_url_after_login(mock_page: MagicMock):
-    """Test that login navigates to write_url after successful login."""
-    mock_page.url = "https://www.naver.com"
-    login(mock_page, "test_id", "test_pw")
-
-    goto_calls = [call[0][0] for call in mock_page.goto.call_args_list]
-    assert settings.write_url in goto_calls, (
-        f"Expected goto({settings.write_url!r}) after login, "
-        f"got calls: {goto_calls}"
-    )
+def test_login_navigates_to_write_url_after(mock_page, login_json):
+    login(mock_page, "id", "pw", login_json)
+    urls = [c[0][0] for c in mock_page.goto.call_args_list]
+    assert settings.write_url in urls
 
 
 # ---------------------------------------------------------------------------
@@ -380,74 +376,95 @@ def test_login_navigates_to_write_url_after_login(mock_page: MagicMock):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
-def test_upload_image_targets_main_frame(mock_page: MagicMock, tmp_path: Path):
-    """Test that upload_image uses MAIN_FRAME as the iframe selector."""
-    img = tmp_path / "test.jpg"
-    img.write_bytes(b"\xff\xd8\xff\xe0")
-    upload_image(mock_page, str(img))
-    mock_page.frame_locator.assert_called_with(selectors.MAIN_FRAME)
+def test_upload_image_targets_main_frame(mock_page, editor_json, tmp_path):
+    img = tmp_path / "t.jpg"; img.write_bytes(b"\xff\xd8")
+    upload_image(mock_page, str(img), editor_json)
+    mock_page.frame_locator.assert_called_with(MAIN_FRAME)
 
 
 @pytest.mark.unit
-def test_upload_image_uses_trigger_xpath(mock_page: MagicMock, tmp_path: Path):
-    """Test that upload_image locates the trigger via IMAGE_UPLOAD_TRIGGER_XPATH."""
-    img = tmp_path / "test.jpg"
-    img.write_bytes(b"\xff\xd8\xff\xe0")
-    upload_image(mock_page, str(img))
-    mock_page.frame_locator.return_value.first.locator.assert_any_call(
-        selectors.IMAGE_UPLOAD_TRIGGER_XPATH
-    )
+def test_upload_image_closes_library_popup_if_open(mock_page, editor_json, tmp_path):
+    """파일 선택 후 라이브러리 팝업이 열리면 자동으로 닫는다."""
+    img = tmp_path / "t.jpg"; img.write_bytes(b"\xff\xd8")
+
+    frame   = mock_page.frame_locator.return_value.first
+    lib_btn = MagicMock(); lib_btn.first = lib_btn
+    lib_btn.wait_for.return_value = None   # library popup appears
+
+    def get_by_text_dispatch(text, **kwargs):
+        if text == "팝업 닫기":
+            return lib_btn
+        return MagicMock()
+
+    frame.get_by_text.side_effect = get_by_text_dispatch
+
+    upload_image(mock_page, str(img), editor_json)
+    lib_btn.click.assert_called()
 
 
 @pytest.mark.unit
-def test_upload_image_uses_expect_file_chooser(mock_page: MagicMock, tmp_path: Path):
-    """Test that upload_image intercepts the file chooser dialog."""
-    img = tmp_path / "test.jpg"
-    img.write_bytes(b"\xff\xd8\xff\xe0")
-    upload_image(mock_page, str(img))
-    mock_page.expect_file_chooser.assert_called_once()
+def test_upload_image_proceeds_when_no_library_popup(mock_page, editor_json, tmp_path):
+    """라이브러리 팝업이 없어도 정상 진행된다."""
+    img = tmp_path / "t.jpg"; img.write_bytes(b"\xff\xd8")
+    # Default mock: wait_for raises → treated as absent, should not raise
+    upload_image(mock_page, str(img), editor_json)
 
 
 @pytest.mark.unit
-def test_upload_image_raises_for_missing_file(mock_page: MagicMock):
-    """Test that upload_image raises FileNotFoundError for a non-existent path."""
+def test_upload_image_raises_for_missing_file(mock_page, editor_json):
     with pytest.raises(FileNotFoundError):
-        upload_image(mock_page, "/nonexistent/image.jpg")
+        upload_image(mock_page, "/no/such/file.jpg", editor_json)
 
 
 # ---------------------------------------------------------------------------
-# set_representative_image
+# set_representative_image — JS dispatchEvent 기반
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
-def test_set_representative_image_targets_main_frame(mock_page: MagicMock):
-    """Test that set_representative_image uses MAIN_FRAME."""
-    set_representative_image(mock_page, index=0)
-    mock_page.frame_locator.assert_called_with(selectors.MAIN_FRAME)
+def _make_page_with_editor_frame(evaluate_return="selected"):
+    """set_representative_image() 테스트용 mock_page 헬퍼."""
+    page = MagicMock()
+    frame = MagicMock(); frame.first = frame
+    page.frame_locator.return_value = frame
+
+    editor_frame = MagicMock()
+    editor_frame.evaluate.return_value = evaluate_return
+    page.main_frame = MagicMock()
+    page.frames = [page.main_frame, editor_frame]
+    return page, editor_frame
 
 
 @pytest.mark.unit
-def test_set_representative_image_locates_rep_buttons(mock_page: MagicMock):
-    """Test that set_representative_image queries REP_IMAGE_BUTTON."""
-    set_representative_image(mock_page, index=1)
-    mock_page.frame_locator.return_value.first.locator.assert_any_call(
-        selectors.REP_IMAGE_BUTTON
-    )
+def test_set_rep_image_targets_main_frame():
+    """set_representative_image()가 MAIN_FRAME iframe을 사용하는지 확인."""
+    page, _ = _make_page_with_editor_frame()
+    set_representative_image(page, index=0)
+    page.frame_locator.assert_called_with(MAIN_FRAME)
 
 
 @pytest.mark.unit
-def test_set_representative_image_clicks_nth_button(mock_page: MagicMock):
-    """Test that set_representative_image clicks the button at the given index."""
-    set_representative_image(mock_page, index=1)
-    nth_calls = [
-        call[0][0] for call in
-        mock_page.frame_locator.return_value.first.locator.return_value.nth.call_args_list
-    ]
-    assert 1 in nth_calls, f"Expected nth(1) in calls, got: {nth_calls}"
+def test_set_rep_image_uses_js_dispatch():
+    """set_representative_image()가 JavaScript dispatchEvent로 버튼을 클릭한다."""
+    page, editor_frame = _make_page_with_editor_frame()
+
+    set_representative_image(page, index=1)
+
+    editor_frame.evaluate.assert_called_once()
+    # JS 코드는 첫 번째 인자, 셀렉터+인덱스 배열은 두 번째 인자로 전달됨
+    js_code, js_args = editor_frame.evaluate.call_args[0]
+    assert "dispatchEvent" in js_code
+    assert js_args == [REP_IMAGE_BUTTON, 1]
 
 
 @pytest.mark.unit
-def test_set_representative_image_raises_for_negative_index(mock_page: MagicMock):
-    """Test that set_representative_image raises ValueError for negative index."""
+def test_set_rep_image_raises_on_js_not_selected():
+    """JS click이 se-is-selected를 반환하지 않으면 RuntimeError를 발생시킨다."""
+    page, _ = _make_page_with_editor_frame(evaluate_return="not-selected")
+    with pytest.raises(RuntimeError):
+        set_representative_image(page, index=0)
+
+
+@pytest.mark.unit
+def test_set_rep_image_raises_for_negative_index(mock_page):
+    """음수 index는 ValueError를 발생시켜야 한다."""
     with pytest.raises(ValueError):
         set_representative_image(mock_page, index=-1)

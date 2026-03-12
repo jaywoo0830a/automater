@@ -1,0 +1,37 @@
+{
+  "naver_login_id": {
+    "tag": "input",
+    "primary": "page.locator('#id').first",
+    "selectors": [
+      {"label": "css",  "pw": "page.locator('#id').first",              "score": 0.81},
+      {"label": "aria", "pw": "page.get_by_label('아이디 또는 전화번호')", "score": 0.553},
+      {"label": "text", "pw": "page.get_by_text('아이디 또는 전화번호', exact=True)", "score": 0.423},
+      {"label": "xpath","pw": "page.locator('xpath=//*[@id=\"id\"]').first", "score": 0.315}
+    ],
+    "stability_score": 0.81,
+    "_meta": {"ts": 1773292862156, "css": "#id", "xpath": "//*[@id=\"id\"]", "alias": "NAVER_LOGIN_ID"}
+  },
+  "naver_login_pw": {
+    "tag": "input",
+    "primary": "page.locator('#pw').first",
+    "selectors": [
+      {"label": "css",  "pw": "page.locator('#pw').first",  "score": 0.81},
+      {"label": "aria", "pw": "page.get_by_label('비밀번호')", "score": 0.553},
+      {"label": "text", "pw": "page.get_by_text('비밀번호', exact=True)", "score": 0.423},
+      {"label": "xpath","pw": "page.locator('xpath=//*[@id=\"pw\"]').first", "score": 0.315}
+    ],
+    "stability_score": 0.81,
+    "_meta": {"ts": 1773292885953, "css": "#pw", "xpath": "//*[@id=\"pw\"]", "alias": "NAVER_LOGIN_PW"}
+  },
+  "naver_login_submit": {
+    "tag": "button",
+    "primary": "page.locator('#log\\.login').first",
+    "selectors": [
+      {"label": "css",  "pw": "page.locator('#log\\.login').first",      "score": 0.81},
+      {"label": "text", "pw": "page.get_by_text('로그인', exact=True)", "score": 0.423},
+      {"label": "xpath","pw": "page.locator('xpath=//*[@id=\"log.login\"]').first", "score": 0.315}
+    ],
+    "stability_score": 0.81,
+    "_meta": {"ts": 1773292908204, "css": "#log\\.login", "alias": "NAVER_LOGIN_SUBMIT"}
+  }
+}
