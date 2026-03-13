@@ -43,6 +43,7 @@ IMAGE_PATH    = os.getenv("TEST_IMAGE_PATH", "smile.jpg")
 #      TEST_THUMBNAIL_1=images/thumb_base.jpg
 TEST_PREVIEW_1    = os.getenv("TEST_PREVIEW_1", "")
 TEST_PREVIEW_2    = os.getenv("TEST_PREVIEW_2", "")
+TEST_PREVIEW_3    = os.getenv("TEST_PREVIEW_3", "")
 TEST_THUMBNAIL_1  = os.getenv("TEST_THUMBNAIL_1", "")
 
 
@@ -274,15 +275,17 @@ def post_images():
     Resolve real image paths from environment variables.
 
     Set in .env:
-        TEST_PREVIEW_1=images/math_1.jpg
-        TEST_PREVIEW_2=images/math_2.jpg
-        TEST_THUMBNAIL_1=images/thumb_base.jpg
+        TEST_PREVIEW_1=images/preview_1.png
+        TEST_PREVIEW_2=images/preview_2.png
+        TEST_PREVIEW_3=images/preview_3.png
+        TEST_THUMBNAIL_1=images/thumbnail_base_1.png
 
     Skips the test if any path is missing or the file does not exist.
     """
     paths = {
         "TEST_PREVIEW_1":   TEST_PREVIEW_1,
         "TEST_PREVIEW_2":   TEST_PREVIEW_2,
+        "TEST_PREVIEW_3":   TEST_PREVIEW_3,
         "TEST_THUMBNAIL_1": TEST_THUMBNAIL_1,
     }
     for env_key, val in paths.items():
@@ -290,7 +293,7 @@ def post_images():
             pytest.skip(f"Set {env_key} in .env to run the publish test")
         if not os.path.exists(val):
             pytest.skip(f"{env_key}={val!r} — file not found")
-    return TEST_PREVIEW_1, TEST_PREVIEW_2, TEST_THUMBNAIL_1
+    return TEST_PREVIEW_1, TEST_PREVIEW_2, TEST_PREVIEW_3, TEST_THUMBNAIL_1
 
 
 @pytest.mark.e2e
@@ -305,18 +308,18 @@ def test_full_post_sequence(
 
     Scenario — "대치동 수학 과외" 타겟 포스팅:
       - 제목: 프리셋 기반 랜덤 생성 (지역+과목+학습형태+솔트)
-      - 레이아웃: Image 1 → Image 2 → Paragraph 1
+      - 레이아웃: Image 1 → Image 2 → Image 3 → Paragraph 1
                   → Thumbnail 1 → Paragraph 2 → Paragraph 3
-      - 이미지: .env의 TEST_PREVIEW_1, TEST_PREVIEW_2, TEST_THUMBNAIL_1
+      - 이미지: .env의 TEST_PREVIEW_1~3, TEST_THUMBNAIL_1
 
     publish()는 dry_run=True로 인해 실제 발행하지 않습니다.
     글쓰기 팝업은 수동으로 닫거나 그냥 두면 됩니다.
 
     Prerequisites:
         1. session_state.json (또는 NAVER_ID/PW) 유효
-        2. .env에 TEST_PREVIEW_1, TEST_PREVIEW_2, TEST_THUMBNAIL_1 설정
+        2. .env에 TEST_PREVIEW_1, TEST_PREVIEW_2, TEST_PREVIEW_3, TEST_THUMBNAIL_1 설정
     """
-    preview_1, preview_2, thumbnail_1 = post_images
+    preview_1, preview_2, preview_3, thumbnail_1 = post_images
 
     job = (
         NaverBlogJob
@@ -327,11 +330,12 @@ def test_full_post_sequence(
             include_suffix=True,
         ))
         .with_content(ContentOption(
-            preview_images=[preview_1, preview_2],
+            preview_images=[preview_1, preview_2, preview_3],
             thumbnail_images=[thumbnail_1],
             layout=[
                 "Image 1",
                 "Image 2",
+                "Image 3",
                 "Paragraph 1",
                 "Thumbnail 1",
                 "Paragraph 2",
