@@ -1,41 +1,24 @@
 """
 tests/test_job_unit.py
 ----------------------
-Unit tests for NaverBlogJob.
-
-Uses MockEditor (a BlogEditor implementation that records calls) so every
-test runs without a browser. No Playwright, no DOM, no network.
-
-Tests verify:
-  - validation rejects bad content before the editor is touched
-  - the publish sequence calls editor methods in the correct order
-  - image upload and representative image selection are wired correctly
-  - run() returns True on success and False on editor failure
+Unit tests for NaverBlogJob (builder pattern + options).
+No browser, no Playwright — MockEditor only.
 """
 
 import pytest
+from dataclasses import replace
+
 from automator.editor import BlogEditor, PostContent
 from automator.job import NaverBlogJob
+from automator.options import AccountOption, TitleOption, ContentOption, MetaOption, RunSetting
 
 
 # ===========================================================================
-# MockEditor — records every call made by NaverBlogJob
+# MockEditor
 # ===========================================================================
 
 class MockEditor(BlogEditor):
-    """
-    BlogEditor implementation that records method calls.
-
-    Tests inspect ``actions`` to verify ordering and arguments without
-    needing a browser.
-    """
-
     def __init__(self, fail_on: str | None = None) -> None:
-        """
-        Args:
-            fail_on: If set, the named method raises RuntimeError when called.
-                     Used to test NaverBlogJob's error handling.
-        """
         self.actions: list[tuple] = []
         self._fail_on = fail_on
 
@@ -58,213 +41,294 @@ class MockEditor(BlogEditor):
 # ===========================================================================
 
 @pytest.fixture
+def account() -> AccountOption:
+    return AccountOption(naver_id="test_id", naver_pw="test_pw", blog_id="test_blog")
+
+
+@pytest.fixture
+def base_job(account) -> NaverBlogJob:
+    return NaverBlogJob.for_account(account)
+
+
+@pytest.fixture
 def editor() -> MockEditor:
     return MockEditor()
 
 
 @pytest.fixture
-def job(editor: MockEditor) -> NaverBlogJob:
-    return NaverBlogJob(editor)
+def full_job(account) -> NaverBlogJob:
+    return (
+        NaverBlogJob
+        .for_account(account)
+        .with_title(TitleOption(extra_prompt="테스트 제목"))
+        .with_content(ContentOption(extra_prompt="테스트 본문"))
+        .with_meta(MetaOption())
+        .with_setting(RunSetting())
+    )
 
 
 @pytest.fixture
-def minimal_content() -> PostContent:
-    return PostContent(title="제목", body="본문")
-
-
-@pytest.fixture
-def content_with_images() -> PostContent:
-    return PostContent(
-        title="제목",
-        body="본문",
-        images=["a.jpg", "b.jpg", "c.jpg"],
-        representative_image=1,
+def job_with_images(account) -> NaverBlogJob:
+    return (
+        NaverBlogJob
+        .for_account(account)
+        .with_title(TitleOption(extra_prompt="제목"))
+        .with_content(ContentOption(
+            preview_images=["a.jpg", "b.jpg"],
+            thumbnail_image="thumb.jpg",
+            extra_prompt="본문",
+        ))
     )
 
 
 # ===========================================================================
-# PostContent — value object
+# 1. Builder
 # ===========================================================================
 
 @pytest.mark.unit
-def test_post_content_stores_title_and_body():
-    c = PostContent(title="T", body="B")
-    assert c.title == "T" and c.body == "B"
+def test_for_account_returns_job(account):
+    assert isinstance(NaverBlogJob.for_account(account), NaverBlogJob)
 
 
 @pytest.mark.unit
-def test_post_content_images_default_empty():
-    assert PostContent(title="T", body="B").images == []
+def test_builder_is_immutable(base_job):
+    new_job = base_job.with_title(TitleOption())
+    assert new_job is not base_job
 
 
 @pytest.mark.unit
-def test_post_content_representative_image_default_none():
-    assert PostContent(title="T", body="B").representative_image is None
+def test_builder_chaining_preserves_account(account):
+    job = NaverBlogJob.for_account(account).with_title(TitleOption()).with_content(ContentOption())
+    assert job._account is account
 
 
 @pytest.mark.unit
-def test_post_content_tags_default_empty():
-    assert PostContent(title="T", body="B").tags == []
+def test_branch_does_not_pollute_base(base_job):
+    branch = base_job.with_setting(RunSetting(post_interval=999))
+    assert base_job._setting is None
+    assert branch._setting.post_interval == 999
+
+
+@pytest.mark.unit
+def test_two_branches_are_independent(account):
+    base  = NaverBlogJob.for_account(account)
+    job_a = base.with_title(TitleOption(extra_prompt="A"))
+    job_b = base.with_title(TitleOption(extra_prompt="B"))
+    assert job_a._title.extra_prompt == "A"
+    assert job_b._title.extra_prompt == "B"
+
+
+@pytest.mark.unit
+def test_account_write_url(account):
+    assert account.write_url == "https://blog.naver.com/test_blog?Redirect=Write&"
+
+
+@pytest.mark.unit
+def test_account_resolved_session_path(account):
+    assert account.resolved_session_path == "test_id_session.json"
+
+
+@pytest.mark.unit
+def test_account_custom_session_path():
+    acc = AccountOption(naver_id="id", naver_pw="pw", blog_id="blog", session_path="custom.json")
+    assert acc.resolved_session_path == "custom.json"
 
 
 # ===========================================================================
-# Validation — errors raised before the editor is ever touched
+# 2. Validation
 # ===========================================================================
 
 @pytest.mark.unit
-def test_validate_raises_on_empty_title(job):
-    with pytest.raises(ValueError, match="title"):
-        job.validate(PostContent(title="", body="본문"))
+def test_validate_raises_without_account():
+    with pytest.raises(ValueError, match="AccountOption"):
+        NaverBlogJob().validate()
 
 
 @pytest.mark.unit
-def test_validate_raises_on_whitespace_title(job):
-    with pytest.raises(ValueError, match="title"):
-        job.validate(PostContent(title="   ", body="본문"))
+def test_validate_raises_on_empty_naver_id(account):
+    with pytest.raises(ValueError, match="naver_id"):
+        NaverBlogJob.for_account(replace(account, naver_id="")).validate()
 
 
 @pytest.mark.unit
-def test_validate_raises_on_empty_body(job):
-    with pytest.raises(ValueError, match="body"):
-        job.validate(PostContent(title="제목", body=""))
+def test_validate_raises_on_empty_naver_pw(account):
+    with pytest.raises(ValueError, match="naver_pw"):
+        NaverBlogJob.for_account(replace(account, naver_pw="")).validate()
 
 
 @pytest.mark.unit
-def test_validate_raises_on_rep_image_without_images(job):
-    with pytest.raises(ValueError, match="no images"):
-        job.validate(PostContent(title="제목", body="본문", representative_image=0))
+def test_validate_raises_on_empty_blog_id(account):
+    with pytest.raises(ValueError, match="blog_id"):
+        NaverBlogJob.for_account(replace(account, blog_id="")).validate()
 
 
 @pytest.mark.unit
-def test_validate_raises_on_rep_image_out_of_range(job):
-    with pytest.raises(ValueError, match="out of range"):
-        job.validate(PostContent(title="제목", body="본문", images=["a.jpg"], representative_image=1))
+def test_validate_raises_on_zero_post_count(account):
+    with pytest.raises(ValueError, match="post_count"):
+        NaverBlogJob.for_account(replace(account, post_count=0)).validate()
 
 
 @pytest.mark.unit
-def test_validate_does_not_call_editor_on_failure(editor, job):
-    """Validation must fire before the editor is opened."""
+def test_validate_raises_on_title_length_inversion(account):
+    with pytest.raises(ValueError, match="min_length"):
+        NaverBlogJob.for_account(account).with_title(
+            TitleOption(min_length=20, max_length=10)
+        ).validate()
+
+
+@pytest.mark.unit
+def test_validate_raises_on_zero_paragraph_count(account):
+    with pytest.raises(ValueError, match="paragraph_count"):
+        NaverBlogJob.for_account(account).with_content(
+            ContentOption(paragraph_count=0)
+        ).validate()
+
+
+@pytest.mark.unit
+def test_validate_raises_on_paragraph_length_inversion(account):
+    with pytest.raises(ValueError, match="min_paragraph_length"):
+        NaverBlogJob.for_account(account).with_content(
+            ContentOption(min_paragraph_length=10, max_paragraph_length=5)
+        ).validate()
+
+
+@pytest.mark.unit
+def test_validate_raises_on_tag_count_inversion(account):
+    with pytest.raises(ValueError, match="min_tags"):
+        NaverBlogJob.for_account(account).with_meta(
+            MetaOption(min_tags=20, max_tags=5)
+        ).validate()
+
+
+@pytest.mark.unit
+def test_validate_raises_on_backlink_ratio_over_100(account):
+    with pytest.raises(ValueError, match="backlink_ratio"):
+        NaverBlogJob.for_account(account).with_meta(
+            MetaOption(backlink_ratio=101)
+        ).validate()
+
+
+@pytest.mark.unit
+def test_validate_raises_on_negative_post_interval(account):
+    with pytest.raises(ValueError, match="post_interval"):
+        NaverBlogJob.for_account(account).with_setting(
+            RunSetting(post_interval=-1)
+        ).validate()
+
+
+@pytest.mark.unit
+def test_validate_does_not_call_editor_on_failure(editor):
     try:
-        job.run(PostContent(title="", body="본문"))
+        NaverBlogJob().run(editor)
     except ValueError:
         pass
-    assert editor.actions == [], "editor must not be called when validation fails"
+    assert editor.actions == []
 
 
 # ===========================================================================
-# Publish sequence — ordering
+# 3. Publish sequence
 # ===========================================================================
 
 @pytest.mark.unit
-def test_run_returns_true_on_success(job, minimal_content):
-    assert job.run(minimal_content) is True
+def test_run_returns_true_on_success(full_job, editor):
+    assert full_job.run(editor) is True
 
 
 @pytest.mark.unit
-def test_run_opens_editor_first(editor, job, minimal_content):
-    job.run(minimal_content)
+def test_run_opens_editor_first(full_job, editor):
+    full_job.run(editor)
     assert editor.actions[0] == ("open",)
 
 
 @pytest.mark.unit
-def test_run_writes_title_before_body(editor, job, minimal_content):
-    job.run(minimal_content)
+def test_run_writes_title_before_body(full_job, editor):
+    full_job.run(editor)
     names = [a[0] for a in editor.actions]
     assert names.index("write_title") < names.index("write_body")
 
 
 @pytest.mark.unit
-def test_run_writes_correct_title(editor, job, minimal_content):
-    job.run(minimal_content)
-    assert ("write_title", "제목") in editor.actions
-
-
-@pytest.mark.unit
-def test_run_writes_correct_body(editor, job, minimal_content):
-    job.run(minimal_content)
-    assert ("write_body", "본문") in editor.actions
-
-
-@pytest.mark.unit
-def test_run_publishes_last(editor, job, minimal_content):
-    job.run(minimal_content)
+def test_run_publishes_last(full_job, editor):
+    full_job.run(editor)
     assert editor.actions[-1] == ("publish",)
 
 
 @pytest.mark.unit
-def test_run_returns_false_when_editor_raises(editor):
-    failing_job = NaverBlogJob(MockEditor(fail_on="open"))
-    assert failing_job.run(PostContent(title="제목", body="본문")) is False
+def test_run_title_from_extra_prompt(account, editor):
+    job = NaverBlogJob.for_account(account).with_title(TitleOption(extra_prompt="생성된 제목"))
+    job.run(editor)
+    assert ("write_title", "생성된 제목") in editor.actions
+
+
+@pytest.mark.unit
+def test_run_body_from_extra_prompt(account, editor):
+    job = NaverBlogJob.for_account(account).with_content(ContentOption(extra_prompt="생성된 본문"))
+    job.run(editor)
+    assert ("write_body", "생성된 본문") in editor.actions
+
+
+@pytest.mark.unit
+def test_run_returns_false_when_editor_raises(account):
+    assert NaverBlogJob.for_account(account).run(MockEditor(fail_on="open")) is False
 
 
 # ===========================================================================
-# Image upload sequence
+# 4. Image upload
 # ===========================================================================
 
 @pytest.mark.unit
-def test_single_image_is_uploaded(editor, job):
-    job.run(PostContent(title="제목", body="본문", images=["x.jpg"]))
-    assert ("upload_image", "x.jpg") in editor.actions
-
-
-@pytest.mark.unit
-def test_no_move_cursor_before_first_image(editor, job):
-    """move_cursor_to_end must NOT be called before the first upload."""
-    job.run(PostContent(title="제목", body="본문", images=["a.jpg"]))
-    names = [a[0] for a in editor.actions]
-    upload_idx = names.index("upload_image")
-    cursor_indices = [i for i, n in enumerate(names) if n == "move_cursor_to_end"]
-    assert all(c > upload_idx for c in cursor_indices), (
-        "move_cursor_to_end must not appear before the first upload"
-    )
-
-
-@pytest.mark.unit
-def test_cursor_moved_between_images(editor, job, content_with_images):
-    """move_cursor_to_end must appear between consecutive uploads."""
-    job.run(content_with_images)
-    names = [a[0] for a in editor.actions]
-    upload_positions = [i for i, n in enumerate(names) if n == "upload_image"]
-    cursor_positions = [i for i, n in enumerate(names) if n == "move_cursor_to_end"]
-
-    # 3 images → 2 cursor moves, each between consecutive uploads
-    assert len(cursor_positions) == 2
-    assert upload_positions[0] < cursor_positions[0] < upload_positions[1]
-    assert upload_positions[1] < cursor_positions[1] < upload_positions[2]
-
-
-@pytest.mark.unit
-def test_all_images_uploaded_in_order(editor, job, content_with_images):
-    job.run(content_with_images)
+def test_preview_images_uploaded_in_order(job_with_images, editor):
+    job_with_images.run(editor)
     uploaded = [a[1] for a in editor.actions if a[0] == "upload_image"]
-    assert uploaded == ["a.jpg", "b.jpg", "c.jpg"]
+    assert uploaded[:2] == ["a.jpg", "b.jpg"]
 
 
 @pytest.mark.unit
-def test_representative_image_set_after_all_uploads(editor, job, content_with_images):
-    job.run(content_with_images)
-    names = [a[0] for a in editor.actions]
-    last_upload = max(i for i, n in enumerate(names) if n == "upload_image")
-    rep_idx = names.index("set_representative_image")
-    assert rep_idx > last_upload
+def test_thumbnail_uploaded_last(job_with_images, editor):
+    job_with_images.run(editor)
+    uploaded = [a[1] for a in editor.actions if a[0] == "upload_image"]
+    assert uploaded[-1] == "thumb.jpg"
 
 
 @pytest.mark.unit
-def test_representative_image_correct_index(editor, job, content_with_images):
-    job.run(content_with_images)
-    rep_calls = [a for a in editor.actions if a[0] == "set_representative_image"]
-    assert rep_calls == [("set_representative_image", 1)]
+def test_thumbnail_is_representative(job_with_images, editor):
+    job_with_images.run(editor)
+    rep = [a for a in editor.actions if a[0] == "set_representative_image"]
+    assert rep == [("set_representative_image", 2)]
 
 
 @pytest.mark.unit
-def test_no_representative_image_when_not_requested(editor, job):
-    job.run(PostContent(title="제목", body="본문", images=["a.jpg"]))
-    rep_calls = [a for a in editor.actions if a[0] == "set_representative_image"]
-    assert rep_calls == []
+def test_cursor_moved_between_images(job_with_images, editor):
+    job_with_images.run(editor)
+    names   = [a[0] for a in editor.actions]
+    ups     = [i for i, n in enumerate(names) if n == "upload_image"]
+    cursors = [i for i, n in enumerate(names) if n == "move_cursor_to_end"]
+    assert len(cursors) == 2
+    assert ups[0] < cursors[0] < ups[1]
+    assert ups[1] < cursors[1] < ups[2]
 
 
 @pytest.mark.unit
-def test_no_images_no_upload_calls(editor, job, minimal_content):
-    job.run(minimal_content)
-    upload_calls = [a for a in editor.actions if a[0] == "upload_image"]
-    assert upload_calls == []
+def test_no_cursor_before_first_image(job_with_images, editor):
+    job_with_images.run(editor)
+    names    = [a[0] for a in editor.actions]
+    first_up = names.index("upload_image")
+    assert all(i > first_up for i, n in enumerate(names) if n == "move_cursor_to_end")
+
+
+@pytest.mark.unit
+def test_no_images_no_upload_calls(base_job, editor):
+    base_job.run(editor)
+    assert not any(a[0] == "upload_image" for a in editor.actions)
+
+
+@pytest.mark.unit
+def test_no_rep_image_without_thumbnail(account, editor):
+    job = (
+        NaverBlogJob
+        .for_account(account)
+        .with_title(TitleOption(extra_prompt="제목"))
+        .with_content(ContentOption(preview_images=["a.jpg"], extra_prompt="본문"))
+    )
+    job.run(editor)
+    assert not any(a[0] == "set_representative_image" for a in editor.actions)

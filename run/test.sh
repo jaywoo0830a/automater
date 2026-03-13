@@ -6,33 +6,23 @@
 # Usage:
 #   bash ./run/test.sh              # unit tests only (default, fast)
 #   bash ./run/test.sh --e2e        # unit + e2e tests
-#   bash ./run/test.sh --all        # unit + e2e + slow tests (includes publish)
-#
-# Options:
-#   --unit   Run unit tests only (default)
-#   --e2e    Run unit + e2e tests
-#   --all    Run all tests including slow/publish tests
+#   bash ./run/test.sh --all        # all tests including slow/publish
 
 set -euo pipefail
 
-# ── Resolve project root ────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 VENV_DIR="${PROJECT_ROOT}/.venv"
 
 cd "${PROJECT_ROOT}"
 
-# ── Guard: venv must exist ──────────────────────────────────────────────────
 if [ ! -d "${VENV_DIR}" ]; then
-    echo "ERROR: .venv not found. Run setup first:"
-    echo "  bash ./run/init.sh"
+    echo "ERROR: .venv not found. Run: bash ./run/init.sh"
     exit 1
 fi
 
-# ── Activate virtual environment ────────────────────────────────────────────
 source "${VENV_DIR}/bin/activate"
 
-# ── Unit test files ──────────────────────────────────────────────────────────
 UNIT_TESTS=(
     tests/test_job_unit.py
     tests/test_editor_unit.py
@@ -40,7 +30,6 @@ UNIT_TESTS=(
     tests/test_config.py
 )
 
-# ── Parse arguments ─────────────────────────────────────────────────────────
 MODE="${1:---unit}"
 
 echo "========================================"
@@ -53,24 +42,18 @@ case "${MODE}" in
   --unit)
     echo "Mode : unit tests only (no browser)"
     echo ""
-    pytest "${UNIT_TESTS[@]}" \
-           -m unit \
-           -v
+    pytest "${UNIT_TESTS[@]}" -m unit -v
     ;;
 
   --e2e)
     echo "Mode : unit + e2e tests (browser required)"
     echo ""
     echo "--- [1/2] Unit tests ---"
-    pytest "${UNIT_TESTS[@]}" \
-           -m unit \
-           -v
+    pytest "${UNIT_TESTS[@]}" -m unit -v
 
     echo ""
     echo "--- [2/2] E2E tests ---"
-    pytest tests/test_blog_e2e.py \
-           -m "e2e and not slow" \
-           -v
+    pytest tests/test_blog_e2e.py -m "e2e and not slow" -v
     ;;
 
   --all)
@@ -84,30 +67,23 @@ case "${MODE}" in
 
     echo ""
     echo "--- [1/3] Unit tests ---"
-    pytest "${UNIT_TESTS[@]}" \
-           -m unit \
-           -v
+    pytest "${UNIT_TESTS[@]}" -m unit -v
 
     echo ""
     echo "--- [2/3] E2E tests ---"
-    pytest tests/test_blog_e2e.py \
-           -m "e2e and not slow" \
-           -v
+    pytest tests/test_blog_e2e.py -m "e2e and not slow" -v
 
     echo ""
     echo "--- [3/3] Slow/publish tests ---"
-    pytest tests/test_blog_e2e.py \
-           -m "e2e and slow" \
-           -v
+    pytest tests/test_blog_e2e.py -m "e2e and slow" -v
     ;;
 
   *)
     echo "Unknown option: ${MODE}"
-    echo ""
     echo "Usage:"
-    echo "  bash ./run/test.sh           # unit tests only (default)"
-    echo "  bash ./run/test.sh --e2e     # unit + e2e tests"
-    echo "  bash ./run/test.sh --all     # all tests including publish"
+    echo "  bash ./run/test.sh           # unit tests only"
+    echo "  bash ./run/test.sh --e2e     # unit + e2e"
+    echo "  bash ./run/test.sh --all     # all including publish"
     exit 1
     ;;
 

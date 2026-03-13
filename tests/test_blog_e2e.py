@@ -3,15 +3,13 @@ tests/test_blog_e2e.py
 ----------------------
 End-to-end tests for Naver Blog automation.
 
-Tests run against a real browser. Requires either:
-  1. A valid session_state.json (preferred — skips login), OR
-  2. NAVER_ID / NAVER_PW in .env
+Requires either:
+  1. session_state.json (preferred), or
+  2. NAVER_ID / NAVER_PW / NAVER_BLOG_ID in .env
 
-Run all e2e tests:
+Run:
     pytest tests/test_blog_e2e.py -m e2e -v
-
-Run only the publish test (writes a real post):
-    pytest tests/test_blog_e2e.py::test_full_post_sequence -m "e2e and slow" -v
+    pytest tests/test_blog_e2e.py -m "e2e and slow" -v   # publish test only
 """
 
 import os
@@ -20,27 +18,23 @@ import pytest
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright, Browser, BrowserContext, Page
 
-from automator.config import settings
+from automator.config import browser_settings
+from automator.options import AccountOption, TitleOption, ContentOption, MetaOption, RunSetting
 from automator.browser import (
-    MAIN_FRAME,
-    EDITOR_CONTENT,
-    UPLOADED_IMAGE,
-    REP_IMAGE_BUTTON,
-    REP_IMAGE_BUTTON_SELECTED,
+    MAIN_FRAME, EDITOR_CONTENT, UPLOADED_IMAGE,
+    REP_IMAGE_BUTTON, REP_IMAGE_BUTTON_SELECTED,
+    NaverLoginLocators,
 )
-from automator.editor import PostContent
 from automator.smart_editor import SmartEditorOne
 from automator.job import NaverBlogJob
-from automator.selector_loader import SelectorLoader
 
 load_dotenv()
 
-SESSION_PATH     = os.getenv("SESSION_PATH", "session_state.json")
-NAVER_ID         = os.getenv("NAVER_ID", "")
-NAVER_PW         = os.getenv("NAVER_PW", "")
-LOGIN_JSON_PATH  = os.getenv("LOGIN_JSON_PATH",  "selectors/naver/login.json")
-EDITOR_JSON_PATH = os.getenv("EDITOR_JSON_PATH", "selectors/naver/editor.json")
-IMAGE_PATH       = os.getenv("TEST_IMAGE_PATH", "smile.jpg")
+NAVER_ID      = os.getenv("NAVER_ID", "")
+NAVER_PW      = os.getenv("NAVER_PW", "")
+NAVER_BLOG_ID = os.getenv("NAVER_BLOG_ID", "")
+SESSION_PATH  = os.getenv("SESSION_PATH", "session_state.json")
+IMAGE_PATH    = os.getenv("TEST_IMAGE_PATH", "smile.jpg")
 
 
 # ---------------------------------------------------------------------------
@@ -48,8 +42,20 @@ IMAGE_PATH       = os.getenv("TEST_IMAGE_PATH", "smile.jpg")
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(scope="session")
+def account() -> AccountOption:
+    if not NAVER_BLOG_ID:
+        if not os.path.exists(SESSION_PATH):
+            pytest.skip("Set NAVER_ID / NAVER_PW / NAVER_BLOG_ID in .env")
+    return AccountOption(
+        naver_id=NAVER_ID,
+        naver_pw=NAVER_PW,
+        blog_id=NAVER_BLOG_ID,
+        session_path=SESSION_PATH,
+    )
+
+
+@pytest.fixture(scope="session")
 def browser_instance():
-    """Single Chromium browser for the whole test session."""
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False, slow_mo=300)
         yield browser
@@ -57,26 +63,19 @@ def browser_instance():
 
 
 @pytest.fixture(scope="session")
-def auth_context(browser_instance: Browser):
-    """
-    Authenticated BrowserContext.
-    Prefers session_state.json; falls back to env-var login.
-    """
-    if os.path.exists(SESSION_PATH):
-        ctx = browser_instance.new_context(storage_state=SESSION_PATH)
-    elif NAVER_ID and NAVER_PW:
+def auth_context(browser_instance: Browser, account: AccountOption):
+    if os.path.exists(account.resolved_session_path):
+        ctx = browser_instance.new_context(storage_state=account.resolved_session_path)
+    else:
         ctx  = browser_instance.new_context()
         page = ctx.new_page()
-        sel  = SelectorLoader.load(LOGIN_JSON_PATH)
         page.goto("https://nid.naver.com/nidlogin.login")
-        sel.locator(page, "naver_login_id").fill(NAVER_ID)
-        sel.locator(page, "naver_login_pw").fill(NAVER_PW)
-        sel.locator(page, "naver_login_submit").click()
+        NaverLoginLocators.id_field(page).fill(account.naver_id)
+        NaverLoginLocators.pw_field(page).fill(account.naver_pw)
+        NaverLoginLocators.submit_button(page).click()
         page.wait_for_url(lambda url: "nidlogin" not in url, timeout=15_000)
-        ctx.storage_state(path=SESSION_PATH)
+        ctx.storage_state(path=account.resolved_session_path)
         page.close()
-    else:
-        pytest.skip("No session file or credentials. Set NAVER_ID/NAVER_PW in .env.")
 
     yield ctx
     ctx.close()
@@ -84,56 +83,46 @@ def auth_context(browser_instance: Browser):
 
 @pytest.fixture
 def page(auth_context: BrowserContext):
-    """Fresh page per test."""
     p = auth_context.new_page()
     yield p
     p.close()
 
 
 @pytest.fixture
-def editor(page: Page) -> SmartEditorOne:
-    """SmartEditorOne bound to the authenticated page."""
-    return SmartEditorOne(page, settings.write_url, EDITOR_JSON_PATH)
+def editor(page: Page, account: AccountOption) -> SmartEditorOne:
+    return SmartEditorOne(page, account.write_url)
 
 
 # ---------------------------------------------------------------------------
-# E2E: Editor loads correctly
+# E2E: Editor loads
 # ---------------------------------------------------------------------------
 
 @pytest.mark.e2e
-def test_editor_iframe_is_visible(page: Page):
-    """Smart Editor iframe renders after navigating to the write page."""
-    page.goto(settings.write_url)
+def test_editor_iframe_is_visible(page: Page, account: AccountOption):
+    page.goto(account.write_url)
     page.frame_locator(MAIN_FRAME) \
         .locator(EDITOR_CONTENT) \
         .wait_for(state="visible", timeout=15_000)
 
 
 @pytest.mark.e2e
-def test_two_placeholder_spans_exist(page: Page):
-    """At least 2 se-placeholder spans exist (title + body)."""
-    page.goto(settings.write_url)
+def test_two_placeholder_spans_exist(page: Page, account: AccountOption):
+    page.goto(account.write_url)
     frame = page.frame_locator(MAIN_FRAME)
     frame.locator(EDITOR_CONTENT).wait_for(state="visible", timeout=15_000)
-    count = frame.locator("span.se-placeholder.__se_placeholder").count()
-    assert count >= 2, f"Expected >= 2 placeholder spans, found {count}"
+    assert frame.locator("span.se-placeholder.__se_placeholder").count() >= 2
 
 
 @pytest.mark.e2e
-def test_placeholder_ids_contain_uuid_prefix(page: Page):
-    """Placeholder parent IDs follow the SE-{uuid} pattern."""
-    page.goto(settings.write_url)
+def test_placeholder_ids_contain_uuid_prefix(page: Page, account: AccountOption):
+    page.goto(account.write_url)
     frame = page.frame_locator(MAIN_FRAME)
     frame.locator(EDITOR_CONTENT).wait_for(state="visible", timeout=15_000)
     parent_id = (
         frame.locator("span.se-placeholder.__se_placeholder")
-             .nth(0)
-             .locator("..")
-             .get_attribute("id")
+             .nth(0).locator("..").get_attribute("id")
     )
-    assert parent_id and parent_id.startswith("SE-"), (
-        f"Expected id to start with 'SE-', got: {parent_id!r}"
-    )
+    assert parent_id and parent_id.startswith("SE-")
 
 
 # ---------------------------------------------------------------------------
@@ -142,111 +131,80 @@ def test_placeholder_ids_contain_uuid_prefix(page: Page):
 
 @pytest.mark.e2e
 def test_image_upload_inserts_image_in_editor(editor: SmartEditorOne, page: Page):
-    """Uploading an image results in a visible image block in the editor."""
     if not os.path.exists(IMAGE_PATH):
         pytest.skip(f"Test image not found: {IMAGE_PATH!r}")
-
     editor.open()
     editor.upload_image(IMAGE_PATH)
-
-    frame = page.frame_locator(MAIN_FRAME).first
-    assert frame.locator(UPLOADED_IMAGE).first.is_visible()
+    assert page.frame_locator(MAIN_FRAME).first.locator(UPLOADED_IMAGE).first.is_visible()
 
 
 # ---------------------------------------------------------------------------
 # E2E: Representative image
 # ---------------------------------------------------------------------------
 
-def _upload_three_images(editor: SmartEditorOne, page: Page) -> None:
-    """Upload 3 copies of IMAGE_PATH, moving cursor between each."""
+def _upload_three(editor, page):
     editor.open()
-    editor.upload_image(IMAGE_PATH)
-    editor.move_cursor_to_end()
-    editor.upload_image(IMAGE_PATH)
-    editor.move_cursor_to_end()
-    editor.upload_image(IMAGE_PATH)
-
-    frame = page.frame_locator(MAIN_FRAME).first
-    frame.locator(UPLOADED_IMAGE).nth(2).wait_for(state="visible", timeout=15_000)
-    count = frame.locator(REP_IMAGE_BUTTON).count()
-    assert count == 3, f"Expected 3 rep buttons after 3 uploads, got {count}"
+    for i in range(3):
+        if i > 0: editor.move_cursor_to_end()
+        editor.upload_image(IMAGE_PATH)
+    page.frame_locator(MAIN_FRAME).first \
+        .locator(UPLOADED_IMAGE).nth(2) \
+        .wait_for(state="visible", timeout=15_000)
+    assert page.frame_locator(MAIN_FRAME).first.locator(REP_IMAGE_BUTTON).count() == 3
 
 
-def _assert_only_nth_selected(page: Page, index: int, total: int) -> None:
-    frame    = page.frame_locator(MAIN_FRAME).first
-    selected = frame.locator(REP_IMAGE_BUTTON_SELECTED)
-    buttons  = frame.locator(REP_IMAGE_BUTTON)
-
-    assert selected.count() == 1
+def _assert_selected(page, index, total):
+    frame   = page.frame_locator(MAIN_FRAME).first
+    buttons = frame.locator(REP_IMAGE_BUTTON)
+    assert frame.locator(REP_IMAGE_BUTTON_SELECTED).count() == 1
     for i in range(total):
         classes = buttons.nth(i).get_attribute("class") or ""
-        if i == index:
-            assert "se-is-selected" in classes
-        else:
-            assert "se-is-selected" not in classes
+        if i == index: assert "se-is-selected" in classes
+        else:          assert "se-is-selected" not in classes
 
 
 @pytest.mark.e2e
-def test_set_first_image_as_representative(editor: SmartEditorOne, page: Page):
-    if not os.path.exists(IMAGE_PATH):
-        pytest.skip(f"Test image not found: {IMAGE_PATH!r}")
-    _upload_three_images(editor, page)
+def test_set_first_image_as_representative(editor, page):
+    if not os.path.exists(IMAGE_PATH): pytest.skip()
+    _upload_three(editor, page)
     editor.set_representative_image(0)
-    _assert_only_nth_selected(page, 0, 3)
+    _assert_selected(page, 0, 3)
 
 
 @pytest.mark.e2e
-def test_set_second_image_as_representative(editor: SmartEditorOne, page: Page):
-    if not os.path.exists(IMAGE_PATH):
-        pytest.skip(f"Test image not found: {IMAGE_PATH!r}")
-    _upload_three_images(editor, page)
+def test_set_second_image_as_representative(editor, page):
+    if not os.path.exists(IMAGE_PATH): pytest.skip()
+    _upload_three(editor, page)
     editor.set_representative_image(1)
-    _assert_only_nth_selected(page, 1, 3)
+    _assert_selected(page, 1, 3)
 
 
 @pytest.mark.e2e
-def test_set_third_image_as_representative(editor: SmartEditorOne, page: Page):
-    if not os.path.exists(IMAGE_PATH):
-        pytest.skip(f"Test image not found: {IMAGE_PATH!r}")
-    _upload_three_images(editor, page)
+def test_set_third_image_as_representative(editor, page):
+    if not os.path.exists(IMAGE_PATH): pytest.skip()
+    _upload_three(editor, page)
     editor.set_representative_image(2)
-    _assert_only_nth_selected(page, 2, 3)
+    _assert_selected(page, 2, 3)
 
 
 # ---------------------------------------------------------------------------
-# E2E: Full job run via NaverBlogJob
+# E2E: Full job (publishes a live post — delete afterward)
 # ---------------------------------------------------------------------------
 
 @pytest.mark.e2e
 @pytest.mark.slow
-def test_full_post_sequence(editor: SmartEditorOne):
-    """
-    NaverBlogJob.run() publishes a real post end-to-end.
-    WARNING: This writes a live post. Delete it afterward.
-
-    Run with:
-        pytest tests/test_blog_e2e.py::test_full_post_sequence -m "e2e and slow"
-    """
-    content = PostContent(
-        title="[자동화 테스트] Playwright로 작성한 포스트",
-        body=(
-            "안녕하세요! 이 글은 Playwright 자동화 테스트로 작성된 포스트입니다.\n\n"
-            "테스트 완료 후 삭제 예정입니다."
-        ),
+def test_full_post_sequence(editor: SmartEditorOne, account: AccountOption):
+    job = (
+        NaverBlogJob
+        .for_account(account)
+        .with_title(TitleOption(extra_prompt="[자동화 테스트] Playwright로 작성한 포스트"))
+        .with_content(ContentOption(
+            extra_prompt=(
+                "안녕하세요! 이 글은 Playwright 자동화 테스트로 작성된 포스트입니다.\n\n"
+                "테스트 완료 후 삭제 예정입니다."
+            )
+        ))
+        .with_meta(MetaOption())
+        .with_setting(RunSetting())
     )
-    job = NaverBlogJob(editor)
-    assert job.run(content) is True
-
-
-@pytest.mark.e2e
-@pytest.mark.slow
-def test_title_and_body_visible_before_publish(editor: SmartEditorOne, page: Page):
-    """Fills title and body, verifies publish trigger is visible — does NOT confirm."""
-    editor.open()
-    editor.write_title("[자동화 테스트] 발행 안 함")
-    editor.write_body("발행하지 않는 테스트입니다.")
-
-    sel = SelectorLoader.load(EDITOR_JSON_PATH)
-    el  = sel.locator(page, "publish_trigger")
-    el.wait_for(state="visible", timeout=5_000)
-    assert el.is_visible()
+    assert job.run(editor) is True

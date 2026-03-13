@@ -1,91 +1,118 @@
 """
 automator/job.py
 ----------------
-NaverBlogJob — orchestrates a single blog post publishing run.
+NaverBlogJob — immutable builder + orchestrator for a blog post publishing run.
 
 This module has zero knowledge of DOM, CSS, or Playwright. It expresses
-the business flow purely in terms of the BlogEditor interface. If the
-editor implementation changes, this file stays the same.
+the business flow purely in terms of the BlogEditor interface and the
+option value objects.
 
-Usage:
-    from playwright.sync_api import sync_playwright
-    from automator.job import NaverBlogJob
-    from automator.editor import PostContent
-    from automator.smart_editor import SmartEditorOne
-    from automator.config import settings
+Builder pattern
+---------------
+    base = NaverBlogJob.for_account(account).with_setting(setting)
 
-    content = PostContent(
-        title  = "제목",
-        body   = "본문",
-        images = ["photo.jpg"],
-        representative_image = 0,
-    )
+    job_a = base.with_title(title_a).with_content(content_a).with_meta(meta_a)
+    job_b = base.with_title(title_b).with_content(content_b).with_meta(meta_b)
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        ctx     = browser.new_context()
-        page    = ctx.new_page()
-        editor  = SmartEditorOne(page, settings.write_url)
-        job     = NaverBlogJob(editor)
-        success = job.run(content)
+    job_a.run(editor)
+    job_b.run(editor)
+
+Each .with_*() returns a NEW instance so the base is never mutated.
+The editor is injected at run() time because it requires a live Playwright Page.
 """
 
 from __future__ import annotations
 
 import sys
+from dataclasses import dataclass, field, replace
+from pathlib import Path
 
 from automator.editor import BlogEditor, PostContent
+from automator.options import (
+    AccountOption,
+    TitleOption,
+    ContentOption,
+    MetaOption,
+    RunSetting,
+)
 
 
+@dataclass
 class NaverBlogJob:
     """
-    Orchestrates a complete blog post publishing run.
+    Immutable builder and orchestrator for a single Naver Blog post.
 
-    Responsibilities:
-      - Validate content before starting the browser
-      - Drive the editor through the publish sequence
-      - Return a boolean result so callers can act on success/failure
-        without catching exceptions
+    Entry point:
 
-    This class never imports Playwright or any browser module directly.
-    All browser interaction is delegated to the injected BlogEditor.
+        job = (
+            NaverBlogJob
+            .for_account(AccountOption(naver_id="id", naver_pw="pw", blog_id="blog"))
+            .with_title(TitleOption(subjects=["국어", "수학"]))
+            .with_content(ContentOption(paragraph_count=5))
+            .with_meta(MetaOption(min_tags=10, max_tags=15))
+            .with_setting(RunSetting(post_interval=30))
+        )
 
-    Args:
-        editor: A ready-to-use BlogEditor implementation.
+        success = job.run(editor)   # editor = SmartEditorOne(page, account.write_url)
     """
 
-    def __init__(self, editor: BlogEditor) -> None:
-        self._editor = editor
+    _account: AccountOption | None = field(default=None, repr=False)
+    _title:   TitleOption   | None = field(default=None, repr=False)
+    _content: ContentOption | None = field(default=None, repr=False)
+    _meta:    MetaOption    | None = field(default=None, repr=False)
+    _setting: RunSetting    | None = field(default=None, repr=False)
 
     # ------------------------------------------------------------------
-    # Public API
+    # Builder
     # ------------------------------------------------------------------
 
-    def run(self, content: PostContent) -> bool:
+    @classmethod
+    def for_account(cls, account: AccountOption) -> "NaverBlogJob":
+        """Start building a job for the given account."""
+        return cls(_account=account)
+
+    def with_title(self, title: TitleOption) -> "NaverBlogJob":
+        """Return a new job with the given title option."""
+        return replace(self, _title=title)
+
+    def with_content(self, content: ContentOption) -> "NaverBlogJob":
+        """Return a new job with the given content option."""
+        return replace(self, _content=content)
+
+    def with_meta(self, meta: MetaOption) -> "NaverBlogJob":
+        """Return a new job with the given meta option."""
+        return replace(self, _meta=meta)
+
+    def with_setting(self, setting: RunSetting) -> "NaverBlogJob":
+        """Return a new job with the given run setting."""
+        return replace(self, _setting=setting)
+
+    # ------------------------------------------------------------------
+    # Execution
+    # ------------------------------------------------------------------
+
+    def run(self, editor: BlogEditor) -> bool:
         """
-        Execute the full publish sequence for ``content``.
+        Generate content from options and publish via the editor.
 
-        Sequence:
-          1. Validate content (raises ValueError before touching the browser)
-          2. Open the editor
-          3. Write title
-          4. Write body
-          5. Upload images (move cursor to end between each)
-          6. Set representative image (if requested)
-          7. Publish
+        Raises:
+            ValueError: If required options are missing or invalid.
+                        Raised before the editor is touched.
 
         Returns:
-            True  — post was published successfully.
-            False — an error occurred; details printed to stderr.
+            True  — published successfully.
+            False — a browser/editor error occurred; details on stderr.
         """
-        self.validate(content)  # programming error — let it propagate
+        self.validate()  # programming errors — let them propagate
+
+        title   = self._title   or TitleOption()
+        content = self._content or ContentOption()
+        meta    = self._meta    or MetaOption()
+
+        post = self._generate_content(title, content, meta)
 
         try:
-            self._editor.open()
-            self._editor.write_title(content.title)
-            self._editor.write_body(content.body)
-            self._upload_images(content)
-            self._editor.publish()
+            self._execute(editor, post)
             return True
         except Exception as exc:
             print(f"[NaverBlogJob] FAILED: {exc}", file=sys.stderr)
@@ -94,43 +121,108 @@ class NaverBlogJob:
             return False
 
     # ------------------------------------------------------------------
-    # Private helpers
+    # Validation
     # ------------------------------------------------------------------
 
-    def validate(self, content: PostContent) -> None:
+    def validate(self) -> None:
         """
-        Raise ValueError for obviously invalid content.
+        Raise ValueError for missing or invalid configuration.
 
-        Checked before the browser is opened so the user gets immediate
-        feedback without waiting for a page load.
+        Called by run() before the browser is touched.
+        Can also be called directly to pre-check a job.
         """
-        if not content.title or not content.title.strip():
-            raise ValueError("PostContent.title must not be empty")
-        if not content.body or not content.body.strip():
-            raise ValueError("PostContent.body must not be empty")
-        if content.representative_image is not None:
-            if not content.images:
+        if self._account is None:
+            raise ValueError(
+                "NaverBlogJob requires an AccountOption. "
+                "Use NaverBlogJob.for_account(account)."
+            )
+        if not self._account.naver_id.strip():
+            raise ValueError("AccountOption.naver_id must not be empty")
+        if not self._account.naver_pw.strip():
+            raise ValueError("AccountOption.naver_pw must not be empty")
+        if not self._account.blog_id.strip():
+            raise ValueError("AccountOption.blog_id must not be empty")
+        if self._account.post_count < 1:
+            raise ValueError("AccountOption.post_count must be >= 1")
+
+        if self._title is not None:
+            if self._title.min_length > self._title.max_length:
+                raise ValueError("TitleOption.min_length must be <= max_length")
+
+        if self._content is not None:
+            if self._content.paragraph_count < 1:
+                raise ValueError("ContentOption.paragraph_count must be >= 1")
+            if self._content.min_paragraph_length > self._content.max_paragraph_length:
                 raise ValueError(
-                    "PostContent.representative_image is set "
-                    "but no images were provided"
-                )
-            if content.representative_image >= len(content.images):
-                raise ValueError(
-                    f"PostContent.representative_image={content.representative_image} "
-                    f"is out of range (only {len(content.images)} image(s) provided)"
+                    "ContentOption.min_paragraph_length must be <= max_paragraph_length"
                 )
 
-    def _upload_images(self, content: PostContent) -> None:
-        """
-        Upload all images, moving the cursor to the end between each.
+        if self._meta is not None:
+            if self._meta.min_tags > self._meta.max_tags:
+                raise ValueError("MetaOption.min_tags must be <= max_tags")
+            if not (0 <= self._meta.backlink_ratio <= 100):
+                raise ValueError("MetaOption.backlink_ratio must be 0–100")
+            if not (0 <= self._meta.internal_link_ratio <= 100):
+                raise ValueError("MetaOption.internal_link_ratio must be 0–100")
 
-        After all uploads, sets the representative image if requested.
+        if self._setting is not None:
+            if self._setting.post_interval < 0:
+                raise ValueError("RunSetting.post_interval must be >= 0")
+            if self._setting.max_daily_posts < 1:
+                raise ValueError("RunSetting.max_daily_posts must be >= 1")
+
+    # ------------------------------------------------------------------
+    # Content generation (stub — replaced by AI generator later)
+    # ------------------------------------------------------------------
+
+    def _generate_content(
+        self,
+        title:   TitleOption,
+        content: ContentOption,
+        meta:    MetaOption,
+    ) -> PostContent:
         """
-        for i, path in enumerate(content.images):
+        Produce a PostContent from options.
+
+        Currently returns a minimal PostContent using extra_prompt fields as
+        title/body. This will be replaced by an AI content generation pipeline.
+
+        The PostContent contract is stable — the editor layer never changes
+        regardless of how content is generated here.
+        """
+        images: list[str] = list(content.preview_images)
+        rep_index: int | None = None
+
+        if content.thumbnail_image:
+            images.append(content.thumbnail_image)
+            rep_index = len(images) - 1
+
+        return PostContent(
+            title=title.extra_prompt or "(제목 생성 필요)",
+            body=content.extra_prompt or "(본문 생성 필요)",
+            images=images,
+            representative_image=rep_index,
+            tags=[],
+        )
+
+    # ------------------------------------------------------------------
+    # Editor execution
+    # ------------------------------------------------------------------
+
+    def _execute(self, editor: BlogEditor, post: PostContent) -> None:
+        """Drive the editor through the full publish sequence."""
+        editor.open()
+        editor.write_title(post.title)
+        editor.write_body(post.body)
+        self._upload_images(editor, post)
+        editor.publish()
+
+    def _upload_images(self, editor: BlogEditor, post: PostContent) -> None:
+        """Upload all images, moving cursor to end between each."""
+        for i, path in enumerate(post.images):
             if i > 0:
-                # Move cursor so the next image appends as a new block
-                self._editor.move_cursor_to_end()
-            self._editor.upload_image(path)
+                editor.move_cursor_to_end()
+            editor.upload_image(path)
 
-        if content.representative_image is not None:
-            self._editor.set_representative_image(content.representative_image)
+        if post.representative_image is not None:
+            editor.set_representative_image(post.representative_image)

@@ -5,19 +5,26 @@ Concrete implementation of BlogEditor for Naver Smart Editor One.
 
 THIS IS THE ONLY FILE THAT KNOWS ABOUT DOM.
 
-All CSS selectors, iframe paths, JavaScript evaluation, overlay dismissal,
-and Playwright-specific timing are contained here. When Naver updates the
-editor, this file is the only one that needs to change.
+All DOM knowledge — CSS selectors, iframe paths, JavaScript evaluation,
+overlay dismissal, and Playwright-specific timing — lives here.
+
+The DOM logic is ported directly from blog.py, replacing the procedural
+function API with the BlogEditor interface so NaverBlogJob can drive it
+without any Playwright imports.
 
 Usage:
     from playwright.sync_api import sync_playwright
     from automator.smart_editor import SmartEditorOne
-    from automator.config import settings
+    from automator.options import AccountOption, RunSetting
+
+    account = AccountOption(naver_id="id", naver_pw="pw", blog_id="blog")
+    setting = RunSetting()
 
     with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page    = browser.new_context().new_page()
-        editor  = SmartEditorOne(page, settings)
+        browser = p.chromium.launch(headless=setting.headless)
+        ctx     = browser.new_context()
+        page    = ctx.new_page()
+        editor  = SmartEditorOne(page, account.write_url)
         editor.open()
         editor.write_title("제목")
         editor.write_body("본문")
@@ -41,43 +48,27 @@ from automator.browser import (
     REP_IMAGE_BUTTON_SELECTED,
     POPUP_CANCEL_BUTTON,
     HELP_CLOSE_BUTTON,
+    NaverEditorLocators,
     editor_frame,
     editor_js_frame,
 )
-from automator.selector_loader import SelectorLoader
-
-
-# ---------------------------------------------------------------------------
-# Default selector paths
-# ---------------------------------------------------------------------------
-
-_DEFAULT_LOGIN_JSON  = Path("selectors/naver/login.json")
-_DEFAULT_EDITOR_JSON = Path("selectors/naver/editor.json")
 
 
 class SmartEditorOne(BlogEditor):
     """
     Naver Smart Editor One implementation of BlogEditor.
 
-    Encapsulates all DOM knowledge: iframe detection, CSS class names,
-    JavaScript workarounds, and overlay dismissal.
+    All DOM knowledge is contained here. When Naver updates the editor,
+    this file is the only one that needs to change.
 
     Args:
-        page:        An authenticated Playwright Page already navigated to
-                     the Naver session domain (cookies present).
-        write_url:   Blog write page URL (e.g. from settings.write_url).
-        editor_json: Path to the superselect editor selector JSON file.
+        page:      An authenticated Playwright Page.
+        write_url: Blog write page URL (from AccountOption.write_url).
     """
 
-    def __init__(
-        self,
-        page:        Page,
-        write_url:   str,
-        editor_json: str | Path = _DEFAULT_EDITOR_JSON,
-    ) -> None:
-        self._page        = page
-        self._write_url   = write_url
-        self._sel         = SelectorLoader.load(editor_json)
+    def __init__(self, page: Page, write_url: str) -> None:
+        self._page      = page
+        self._write_url = write_url
 
     # ------------------------------------------------------------------
     # BlogEditor interface
@@ -87,11 +78,9 @@ class SmartEditorOne(BlogEditor):
         """
         Navigate to the write page and wait until the editor is ready.
 
-        Dismisses two overlays that appear on first load:
+        Dismisses:
           1. Draft-recovery popup (button.se-popup-button-cancel)
-             — appears with a variable delay; polled for up to 5 s.
           2. Help panel (button.se-help-panel-close-button)
-             — intercepts pointer events over the publish button.
         """
         self._page.goto(self._write_url)
         self._page.wait_for_load_state("domcontentloaded")
@@ -110,7 +99,7 @@ class SmartEditorOne(BlogEditor):
     def write_title(self, title: str) -> None:
         """Click the title placeholder and type ``title``."""
         frame = editor_frame(self._page)
-        el    = self._sel.locator(frame, "editor_title")
+        el    = NaverEditorLocators.title_area(frame)
         el.wait_for(state="visible", timeout=5_000)
         el.click()
         self._page.keyboard.type(title)
@@ -118,7 +107,7 @@ class SmartEditorOne(BlogEditor):
     def write_body(self, body: str) -> None:
         """Click the body placeholder and type ``body``."""
         frame = editor_frame(self._page)
-        el    = self._sel.locator(frame, "editor_body")
+        el    = NaverEditorLocators.body_area(frame)
         el.wait_for(state="visible", timeout=5_000)
         el.click()
         self._page.keyboard.type(body)
@@ -127,19 +116,15 @@ class SmartEditorOne(BlogEditor):
         """
         Upload an image via the toolbar button.
 
-        After file selection, Naver sometimes opens a media library sidebar.
-        If it does, it is closed automatically before waiting for the image
-        to appear in the editor.
-
         Raises:
-            FileNotFoundError: If ``image_path`` does not exist on disk.
+            FileNotFoundError: If ``image_path`` does not exist.
         """
         path = Path(image_path)
         if not path.exists():
             raise FileNotFoundError(f"Image file not found: {image_path!r}")
 
         frame   = editor_frame(self._page)
-        trigger = self._sel.locator(frame, "image_trigger")
+        trigger = NaverEditorLocators.image_trigger(frame)
         trigger.wait_for(state="visible", timeout=10_000)
 
         with self._page.expect_file_chooser() as fc_info:
@@ -148,9 +133,8 @@ class SmartEditorOne(BlogEditor):
 
         # Close media library sidebar if it opens
         try:
-            close_btn = self._sel.locator(frame, "library_close")
-            close_btn.wait_for(state="visible", timeout=3_000)
-            close_btn.click()
+            NaverEditorLocators.library_close(frame).wait_for(state="visible", timeout=3_000)
+            NaverEditorLocators.library_close(frame).click()
         except Exception:
             pass
 
@@ -160,10 +144,8 @@ class SmartEditorOne(BlogEditor):
         """
         Set the thumbnail image using JavaScript dispatchEvent.
 
-        The rep button is hidden by CSS; Playwright's visibility checks
-        prevent normal hover/click from working on any button beyond index 0.
-        We bypass CSS visibility entirely via JS and verify the result by
-        checking for the se-is-selected class.
+        The rep button is hidden by CSS; we bypass visibility via JS and
+        verify by checking for the se-is-selected class.
 
         Raises:
             ValueError:   If ``index`` is negative.
@@ -201,38 +183,22 @@ class SmartEditorOne(BlogEditor):
         )
 
     def move_cursor_to_end(self) -> None:
-        """
-        Move the editor cursor to the document end via Ctrl+End.
-
-        Required between consecutive image uploads — without this the second
-        upload may overwrite the first image block instead of appending.
-        """
+        """Move the editor cursor to the document end via Ctrl+End."""
         frame = editor_frame(self._page)
         frame.locator(EDITOR_CONTENT).click()
         self._page.keyboard.press("Control+End")
 
     def publish(self) -> None:
-        """
-        Open the publish popover and confirm.
-
-        The 발행 trigger button lives in the page-level toolbar (outside the
-        iframe). Tries page-level first; falls back to iframe context if not
-        found there.
-        """
+        """Open the publish popover and confirm."""
         self._click_publish_trigger()
         self._click_publish_confirm()
 
     # ------------------------------------------------------------------
-    # Private helpers — overlay dismissal and publish internals
+    # Private helpers
     # ------------------------------------------------------------------
 
     def _dismiss_recovery_popup(self, frame, timeout_ms: int = 5_000) -> None:
-        """
-        Poll for the draft-recovery popup and dismiss it if found.
-
-        The popup appears with a variable delay after the editor loads,
-        so we probe in short intervals rather than doing a single long wait.
-        """
+        """Poll for the draft-recovery popup and dismiss it if found."""
         probe_interval = 200
         deadline = time.monotonic() + timeout_ms / 1_000
         while time.monotonic() < deadline:
@@ -245,12 +211,7 @@ class SmartEditorOne(BlogEditor):
                 pass
 
     def _dismiss_help_panel(self, frame) -> None:
-        """
-        Close the help panel if it is open.
-
-        The panel intercepts pointer events and blocks clicks on the publish
-        button. It only appears on first load of a new session.
-        """
+        """Close the help panel if it is open."""
         try:
             btn = frame.locator(HELP_CLOSE_BUTTON).first
             btn.wait_for(state="visible", timeout=2_000)
@@ -259,9 +220,9 @@ class SmartEditorOne(BlogEditor):
             pass
 
     def _click_publish_trigger(self, timeout: int = 5_000) -> None:
-        """Click the publish trigger button (page-level first, then iframe)."""
+        """Click the publish trigger button — page-level first, then iframe."""
         try:
-            el = self._sel.locator(self._page, "publish_trigger")
+            el = NaverEditorLocators.publish_trigger(self._page)
             el.wait_for(state="visible", timeout=timeout)
             el.click()
             return
@@ -269,14 +230,14 @@ class SmartEditorOne(BlogEditor):
             pass
 
         frame = editor_frame(self._page)
-        el    = self._sel.locator(frame, "publish_trigger")
+        el    = NaverEditorLocators.publish_trigger(frame)
         el.wait_for(state="visible", timeout=timeout)
         el.click()
 
     def _click_publish_confirm(self, timeout: int = 5_000) -> None:
-        """Click the publish confirm button (page-level first, then iframe)."""
+        """Click the publish confirm button — page-level first, then iframe."""
         try:
-            el = self._sel.locator(self._page, "publish_confirm")
+            el = NaverEditorLocators.publish_confirm(self._page)
             el.wait_for(state="visible", timeout=timeout)
             el.click()
             return
@@ -284,6 +245,6 @@ class SmartEditorOne(BlogEditor):
             pass
 
         frame = editor_frame(self._page)
-        el    = self._sel.locator(frame, "publish_confirm")
+        el    = NaverEditorLocators.publish_confirm(frame)
         el.wait_for(state="visible", timeout=timeout)
         el.click()

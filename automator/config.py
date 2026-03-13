@@ -1,12 +1,16 @@
 """
 automator/config.py
 -------------------
-Loads and validates all environment variables including localization settings.
+Browser localization settings only.
+
+Account credentials have moved to AccountOption in options.py.
+config.py owns only the settings that describe *how the browser behaves*,
+not *who is logging in*.
+
 Usage:
-    from automator.config import settings
-    print(settings.naver_blog_id)  # "rlawjddn00az"
-    print(settings.locale)         # "ko_KR"
-    print(settings.timezone)       # "Asia/Seoul"
+    from automator.config import browser_settings
+    print(browser_settings.locale)    # "ko_KR"
+    print(browser_settings.timezone)  # "Asia/Seoul"
 """
 
 from __future__ import annotations
@@ -26,7 +30,7 @@ load_dotenv()
 
 @dataclass(frozen=True)
 class Geolocation:
-    latitude: float
+    latitude:  float
     longitude: float
 
     @classmethod
@@ -37,47 +41,36 @@ class Geolocation:
             return cls(latitude=float(lat.strip()), longitude=float(lng.strip()))
         except (ValueError, AttributeError) as e:
             raise ValueError(
-                f"GEOLOCATION must be 'latitude,longitude' (e.g. 37.5665,126.9780), got: {value!r}"
+                f"GEOLOCATION must be 'latitude,longitude' "
+                f"(e.g. 37.5665,126.9780), got: {value!r}"
             ) from e
 
 
 # ---------------------------------------------------------------------------
-# Main settings dataclass
+# BrowserSettings
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
-class Settings:
-    # Credentials
-    naver_id:      str
-    naver_pw:      str
-    naver_blog_id: str   # Blog ID used to construct WRITE_URL
-    session_path:  Path
+class BrowserSettings:
+    """
+    Localization and browser-fingerprint settings.
 
-    # Localization
-    locale:                str         # e.g. "ko_KR", "en_US", "ja_JP"
-    timezone:              str         # e.g. "Asia/Seoul", "America/New_York"
-    language:              str         # e.g. "ko", "en", "ja"
+    Passed to Playwright's new_context(). Does not contain account credentials.
+    """
+    locale:                str
+    timezone:              str
+    language:              str
     geolocation:           Geolocation
-    timezone_offset_hours: int         # UTC offset for timestamp composition
-    user_agent:            str | None  # None = use Playwright default
-
-    @property
-    def write_url(self) -> str:
-        """Construct the blog write URL from naver_blog_id."""
-        return f"https://blog.naver.com/{self.naver_blog_id}?Redirect=Write&"
+    timezone_offset_hours: int
+    user_agent:            str | None
 
 
-def _load_settings() -> Settings:
-    """Read all variables from environment / .env and return a Settings instance."""
+def _load_browser_settings() -> BrowserSettings:
+    """Read localization variables from environment / .env."""
     geo_raw        = os.getenv("GEOLOCATION", "37.5665,126.9780")
     user_agent_raw = os.getenv("USER_AGENT", "").strip()
 
-    return Settings(
-        naver_id=os.getenv("NAVER_ID", ""),
-        naver_pw=os.getenv("NAVER_PW", ""),
-        naver_blog_id=os.getenv("NAVER_BLOG_ID", ""),
-        session_path=Path(os.getenv("SESSION_PATH", "session_state.json")),
-
+    return BrowserSettings(
         locale=os.getenv("LOCALE", "ko_KR"),
         timezone=os.getenv("TIMEZONE", "Asia/Seoul"),
         language=os.getenv("LANGUAGE", "ko"),
@@ -87,5 +80,8 @@ def _load_settings() -> Settings:
     )
 
 
-# Module-level singleton — import this everywhere
-settings = _load_settings()
+# Module-level singleton
+browser_settings = _load_browser_settings()
+
+# Backward-compatibility alias (old code imported `settings`)
+settings = browser_settings

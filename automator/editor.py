@@ -4,17 +4,10 @@ automator/editor.py
 Abstract interface for a blog editor.
 
 NaverBlogJob depends only on this interface — it has no knowledge of DOM,
-CSS selectors, iframes, or any other front-end implementation detail.
+CSS selectors, iframes, or any browser implementation detail.
 
 If Naver replaces Smart Editor One with a different editor, only the
-concrete implementation (smart_editor.py) needs to change. The job layer
-and all job-level tests remain untouched.
-
-Contract
---------
-All methods are synchronous and raise on failure. Callers (NaverBlogJob)
-do not need to handle partial-success states — any exception means the
-operation failed and the job should abort.
+concrete implementation (smart_editor.py) needs to change.
 """
 
 from __future__ import annotations
@@ -24,31 +17,34 @@ from dataclasses import dataclass, field
 
 
 # ---------------------------------------------------------------------------
-# Value objects — pure data, no Playwright dependency
+# PostContent — resolved post ready for the editor
 # ---------------------------------------------------------------------------
 
 @dataclass
 class PostContent:
     """
-    All content needed to publish a single blog post.
+    Resolved content ready to be written into the editor.
+
+    Produced by NaverBlogJob._generate_content() from the option objects.
+    The editor layer only ever sees this — never raw options.
 
     Attributes:
-        title:                Text for the post title field.
-        body:                 Text for the post body field.
-        images:               Ordered list of local image file paths to upload.
-        representative_image: Index into ``images`` to use as the thumbnail.
-                              None means no representative image is set.
-        tags:                 List of tag strings (not yet wired to the editor).
+        title:                Final title string.
+        body:                 Final body string.
+        images:               Ordered image paths to upload.
+        representative_image: Index into images to set as thumbnail.
+                              None = do not set a thumbnail.
+        tags:                 List of tag strings.
     """
     title:                str
     body:                 str
-    images:               list[str]        = field(default_factory=list)
-    representative_image: int | None       = None
-    tags:                 list[str]        = field(default_factory=list)
+    images:               list[str]  = field(default_factory=list)
+    representative_image: int | None = None
+    tags:                 list[str]  = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
-# Abstract editor interface
+# BlogEditor ABC
 # ---------------------------------------------------------------------------
 
 class BlogEditor(ABC):
@@ -58,14 +54,13 @@ class BlogEditor(ABC):
     Concrete implementations (e.g. SmartEditorOne) translate each method
     into the appropriate DOM interactions. NaverBlogJob calls only these
     methods and never touches Playwright directly.
+
+    All methods are synchronous and raise on failure.
     """
 
     @abstractmethod
     def open(self) -> None:
-        """
-        Navigate to the editor page and wait until it is ready for input.
-        Dismisses any blocking overlays (recovery popups, help panels).
-        """
+        """Navigate to the editor and wait until it is ready for input."""
 
     @abstractmethod
     def write_title(self, title: str) -> None:
@@ -78,16 +73,16 @@ class BlogEditor(ABC):
     @abstractmethod
     def upload_image(self, image_path: str) -> None:
         """
-        Upload the image at ``image_path`` via the editor toolbar.
+        Upload the image at ``image_path``.
 
         Raises:
-            FileNotFoundError: If ``image_path`` does not exist on disk.
+            FileNotFoundError: If the file does not exist.
         """
 
     @abstractmethod
     def set_representative_image(self, index: int) -> None:
         """
-        Mark the image at ``index`` (0-based) as the post thumbnail.
+        Mark image at ``index`` (0-based) as the post thumbnail.
 
         Raises:
             ValueError:   If ``index`` is negative.
@@ -99,14 +94,10 @@ class BlogEditor(ABC):
         """
         Move the editor cursor to the end of the document.
 
-        Call this between consecutive image uploads to ensure each image
-        is appended as a new block rather than inserted at the same position.
+        Call this between consecutive image uploads so each image is
+        appended as a new block.
         """
 
     @abstractmethod
     def publish(self) -> None:
-        """
-        Open the publish popover and confirm publication.
-
-        After this call returns the post is live.
-        """
+        """Open the publish popover and confirm. Post is live after this."""
