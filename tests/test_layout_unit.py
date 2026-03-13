@@ -193,3 +193,29 @@ def test_paragraph_count_matches_layout_max():
 @pytest.mark.unit
 def test_paragraph_count_single():
     assert paragraph_count(["Paragraph 1"]) == 1
+
+# ===========================================================================
+# 6. ContentOption.paragraph_newlines
+# ===========================================================================
+
+@pytest.mark.unit
+def test_paragraph_newlines_default_is_two():
+    from automator.options import ContentOption
+    assert ContentOption().paragraph_newlines == 2
+
+
+@pytest.mark.unit
+def test_paragraph_newlines_custom():
+    from automator.options import ContentOption
+    opt = ContentOption(paragraph_newlines=3)
+    assert opt.paragraph_newlines == 3
+
+
+@pytest.mark.unit
+def test_paragraph_newlines_is_immutable():
+    import dataclasses
+    from automator.options import ContentOption
+    opt = ContentOption(paragraph_newlines=1)
+    new = dataclasses.replace(opt, paragraph_newlines=5)
+    assert opt.paragraph_newlines == 1
+    assert new.paragraph_newlines == 5

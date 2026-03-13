@@ -8,7 +8,7 @@ Quick start
     from automator import (
         NaverBlogJob,
         AccountOption, TitleOption, ContentOption, MetaOption, RunSetting,
-        BlogEditor, PostContent,
+        BlogEditor, PostContent, PostStep,
         SmartEditorOne,
     )
 
@@ -19,8 +19,23 @@ Quick start
             naver_pw="my_pw",
             blog_id="my_blog",
         ))
-        .with_title(TitleOption(subjects=["국어", "수학"]))
-        .with_content(ContentOption(paragraph_count=5))
+        .with_title(TitleOption(
+            template="지역+과목+학습형태+솔트",
+            learning_type="과외",
+            include_suffix=True,
+        ))
+        .with_content(ContentOption(
+            preview_images=["images/preview_1.jpg", "images/preview_2.jpg"],
+            thumbnail_images=["images/thumbnail.jpg"],
+            layout=[
+                "Image 1",
+                "Image 2",
+                "Paragraph 1",
+                "Thumbnail 1",
+                "Paragraph 2",
+                "Paragraph 3",
+            ],
+        ))
         .with_meta(MetaOption(min_tags=10, max_tags=15))
         .with_setting(RunSetting(post_interval=30))
     )
@@ -36,7 +51,7 @@ from automator.options import (
     MetaOption,
     RunSetting,
 )
-from automator.editor import BlogEditor, PostContent
+from automator.editor import BlogEditor, PostContent, PostStep
 from automator.smart_editor import SmartEditorOne
 from automator.job import NaverBlogJob
 
@@ -48,6 +63,7 @@ __all__ = [
     "RunSetting",
     "BlogEditor",
     "PostContent",
+    "PostStep",
     "SmartEditorOne",
     "NaverBlogJob",
 ]

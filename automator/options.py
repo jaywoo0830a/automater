@@ -162,9 +162,10 @@ class ContentOption:
 
         빈 리스트이면 콘텐츠 없이 제목과 본문만 게시된다.
     """
-    preview_images:   list[str] = field(default_factory=list)
-    thumbnail_images: list[str] = field(default_factory=list)
-    layout:           list[str] = field(default_factory=list)
+    preview_images:    list[str] = field(default_factory=list)
+    thumbnail_images:  list[str] = field(default_factory=list)
+    layout:            list[str] = field(default_factory=list)
+    paragraph_newlines: int      = 2  # Enter presses appended after each paragraph
 
 
 # ---------------------------------------------------------------------------

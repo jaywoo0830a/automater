@@ -188,11 +188,13 @@ class NaverEditorLocators:
     @staticmethod
     def body_area(ctx) -> Locator:
         """
-        Body input area — matched by placeholder text via get_by_text.
-        The placeholder text changes between Naver deployments; update here
-        when the editor prompt text changes.
+        Body input area — the root contenteditable element (.se-content).
+
+        Previously matched by placeholder text ("글감과 함께...") which
+        disappears after the first image upload. .se-content is stable
+        both before and after image uploads (always count=1, visible=True).
         """
-        return ctx.get_by_text("글감과 함께 나의 일상을 기록해보세요!", exact=True)
+        return ctx.locator(".se-content")
 
     @staticmethod
     def image_trigger(ctx) -> Locator:

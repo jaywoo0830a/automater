@@ -339,3 +339,73 @@ def test_full_post_sequence(
         .with_setting(RunSetting())
     )
     assert job.run(editor) is True
+
+
+
+
+# ---------------------------------------------------------------------------
+# Diagnostic: help panel dismiss behavior
+# ---------------------------------------------------------------------------
+
+@pytest.mark.e2e
+def test_help_panel_dismiss_diagnostic(page: Page, account: AccountOption):
+    """
+    Diagnostic — observe exactly what happens to the DOM when the help
+    panel close button is clicked.
+
+    Run:
+        pytest tests/test_blog_e2e.py::test_help_panel_dismiss_diagnostic -m e2e -s -v
+    """
+    from automator.browser import editor_frame, HELP_CLOSE_BUTTON
+
+    page.goto(account.write_url)
+    page.wait_for_load_state("domcontentloaded")
+    page.wait_for_timeout(3_000)
+
+    frame = editor_frame(page)
+
+    def dump_panel(label: str) -> None:
+        info = page.evaluate("""
+            () => {
+                const iframe = document.querySelector('#mainFrame');
+                const doc = iframe ? iframe.contentDocument : document;
+                const panel = doc.querySelector('.se-help-panel');
+                if (!panel) return { found: false };
+                return {
+                    found:      true,
+                    classes:    panel.className,
+                    display:    getComputedStyle(panel).display,
+                    visibility: getComputedStyle(panel).visibility,
+                    opacity:    getComputedStyle(panel).opacity,
+                    offsetParent: panel.offsetParent !== null,
+                    childCount: panel.children.length,
+                };
+            }
+        """)
+        print(f"  [{label}] {info}")
+
+    print("\n========== HELP PANEL DISMISS DIAGNOSTIC ==========")
+    dump_panel("before click")
+
+    try:
+        btn = frame.locator(HELP_CLOSE_BUTTON).first
+        btn.wait_for(state="visible", timeout=5_000)
+        btn.click()
+        print("  [clicked close button]")
+    except Exception as e:
+        print(f"  [ERROR clicking] {e}")
+
+    page.wait_for_timeout(1_000)
+    dump_panel("1s after click")
+
+    page.wait_for_timeout(2_000)
+    dump_panel("3s after click")
+
+    # also check if 'hidden' state is reachable
+    try:
+        frame.locator(".se-help-panel").wait_for(state="hidden", timeout=3_000)
+        print("  [wait_for hidden] SUCCESS")
+    except Exception as e:
+        print(f"  [wait_for hidden] TIMEOUT: {e!s:.80s}")
+
+    print("====================================================\n")

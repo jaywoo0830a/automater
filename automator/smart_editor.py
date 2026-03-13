@@ -27,7 +27,7 @@ Usage:
         editor  = SmartEditorOne(page, account.write_url)
         editor.open()
         editor.write_title("제목")
-        editor.write_body("본문")
+        editor.write_paragraph("본문 단락")
         editor.publish()
 """
 
@@ -100,8 +100,7 @@ class SmartEditorOne(BlogEditor):
                 .locator(EDITOR_CONTENT) \
                 .wait_for(state="visible", timeout=30_000)
 
-        self._dismiss_recovery_popup(frame)
-        self._dismiss_help_panel(frame)
+        self._dismiss_overlays(frame)
 
     def write_title(self, title: str) -> None:
         """Click the title placeholder and type ``title``."""
@@ -111,13 +110,22 @@ class SmartEditorOne(BlogEditor):
         el.click()
         self._page.keyboard.type(title)
 
-    def write_body(self, body: str) -> None:
-        """Click the body placeholder and type ``body``."""
+    def write_paragraph(self, text: str, newlines: int = 2) -> None:
+        """
+        Click the body area and type one paragraph of ``text``.
+
+        After typing, presses Enter ``newlines`` times (default: 2) to create
+        a blank-line separation before the next paragraph or image block.
+        """
         frame = editor_frame(self._page)
-        el    = NaverEditorLocators.body_area(frame)
-        el.wait_for(state="visible", timeout=5_000)
-        el.click()
-        self._page.keyboard.type(body)
+        # Click the last text paragraph to ensure focus is on the contenteditable
+        # block (not an image component's inner iframe), then type.
+        last_para = frame.locator("p.se-text-paragraph").last
+        last_para.wait_for(state="visible", timeout=5_000)
+        last_para.click()
+        self._page.keyboard.type(text)
+        for _ in range(max(newlines, 1)):
+            self._page.keyboard.press("Enter")
 
     def upload_image(self, image_path: str) -> None:
         """
@@ -139,11 +147,7 @@ class SmartEditorOne(BlogEditor):
         fc_info.value.set_files(str(path))
 
         # Close media library sidebar if it opens
-        try:
-            NaverEditorLocators.library_close(frame).wait_for(state="visible", timeout=3_000)
-            NaverEditorLocators.library_close(frame).click()
-        except Exception:
-            pass
+        self._dismiss_library(frame)
 
         frame.locator(UPLOADED_IMAGE).first.wait_for(state="visible", timeout=10_000)
 
@@ -190,9 +194,17 @@ class SmartEditorOne(BlogEditor):
         )
 
     def move_cursor_to_end(self) -> None:
-        """Move the editor cursor to the document end via Ctrl+End."""
+        """
+        Move the editor cursor to the end of the document.
+
+        Clicking .se-content directly can land on an image component's inner
+        iframe, trapping focus inside it. Instead we click the last text
+        paragraph (p.se-text-paragraph) which is always a plain contenteditable
+        block, then press Ctrl+End to jump to the document end.
+        """
         frame = editor_frame(self._page)
-        frame.locator(EDITOR_CONTENT).click()
+        last_para = frame.locator("p.se-text-paragraph").last
+        last_para.click()
         self._page.keyboard.press("Control+End")
 
     def publish(self) -> None:
@@ -204,33 +216,63 @@ class SmartEditorOne(BlogEditor):
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _dismiss_recovery_popup(self, frame, timeout_ms: int = 5_000) -> None:
-        """Poll for the draft-recovery popup and dismiss it if found."""
-        probe_interval = 200
-        deadline = time.monotonic() + timeout_ms / 1_000
-        while time.monotonic() < deadline:
+    def _dismiss_overlays(self, frame, timeout_ms: int = 6_000) -> None:
+        """
+        Dismiss all known blocking overlays in order of priority:
+          1. Draft-recovery popup  (button.se-popup-button-cancel)
+          2. Help panel            (button.se-help-panel-close-button)
+
+        Each overlay is attempted within ``timeout_ms`` total.
+        Failures are silently ignored — the overlay may simply not appear.
+        """
+        self._dismiss_one(
+            frame,
+            locator=frame.locator(POPUP_CANCEL_BUTTON).first,
+            wait_after=None,
+            timeout_ms=timeout_ms,
+            poll=True,
+        )
+        self._dismiss_one(
+            frame,
+            locator=frame.locator(HELP_CLOSE_BUTTON).first,
+            wait_after=frame.locator(".se-help-panel"),
+            timeout_ms=5_000,
+            poll=False,
+        )
+
+    def _dismiss_one(self, frame, locator, wait_after, timeout_ms: int, poll: bool) -> None:
+        """
+        Click ``locator`` if visible within ``timeout_ms``.
+
+        poll=True: repeatedly probe until deadline (for race-condition popups).
+        poll=False: single wait_for attempt.
+        After clicking, optionally waits for ``wait_after`` to become hidden.
+        """
+        if poll:
+            probe = 200
+            deadline = time.monotonic() + timeout_ms / 1_000
+            while time.monotonic() < deadline:
+                try:
+                    locator.wait_for(state="visible", timeout=probe)
+                    locator.click()
+                    break
+                except Exception:
+                    pass
+        else:
             try:
-                btn = frame.locator(POPUP_CANCEL_BUTTON).first
-                btn.wait_for(state="visible", timeout=probe_interval)
-                btn.click()
-                break
+                locator.wait_for(state="visible", timeout=timeout_ms)
+                locator.click()
+                if wait_after is not None:
+                    wait_after.wait_for(state="hidden", timeout=3_000)
             except Exception:
                 pass
 
-    def _dismiss_help_panel(self, frame) -> None:
-        """
-        Close the help panel if it is open.
-
-        The help panel animates in after the editor content is ready,
-        so we wait up to 5 s for the close button to appear before giving up.
-        After clicking, we wait for the panel to detach/hide.
-        """
+    def _dismiss_library(self, frame) -> None:
+        """Close the media library sidebar if it appeared after image upload."""
         try:
-            btn = frame.locator(HELP_CLOSE_BUTTON).first
-            btn.wait_for(state="visible", timeout=5_000)
+            btn = NaverEditorLocators.library_close(frame)
+            btn.wait_for(state="visible", timeout=3_000)
             btn.click()
-            # Wait for the panel itself to disappear
-            frame.locator(".se-help-panel").wait_for(state="hidden", timeout=3_000)
         except Exception:
             pass
 

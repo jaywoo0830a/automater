@@ -132,7 +132,7 @@ def test_open_dismisses_help_panel():
 
 
 # ===========================================================================
-# write_title() / write_body()
+# write_title() / write_paragraph()
 # ===========================================================================
 
 @pytest.mark.unit
@@ -148,15 +148,37 @@ def test_write_title_types_correct_text(editor, mock_page):
 
 
 @pytest.mark.unit
-def test_write_body_uses_editor_iframe(editor, mock_page):
-    editor.write_body("본문")
+def test_write_paragraph_uses_editor_iframe(editor, mock_page):
+    editor.write_paragraph("단락")
     mock_page.frame_locator.assert_called_with(MAIN_FRAME)
 
 
 @pytest.mark.unit
-def test_write_body_types_correct_text(editor, mock_page):
-    editor.write_body("입력 본문")
-    mock_page.keyboard.type.assert_called_once_with("입력 본문")
+def test_write_paragraph_types_correct_text(editor, mock_page):
+    editor.write_paragraph("입력 단락")
+    mock_page.keyboard.type.assert_called_once_with("입력 단락")
+
+
+@pytest.mark.unit
+def test_write_paragraph_presses_enter_default(editor, mock_page):
+    # default newlines=2 → Enter pressed twice
+    editor.write_paragraph("단락")
+    enter_calls = [
+        c for c in mock_page.keyboard.press.call_args_list
+        if c.args == ("Enter",)
+    ]
+    assert len(enter_calls) == 2
+
+
+@pytest.mark.unit
+def test_write_paragraph_presses_enter_custom(editor, mock_page):
+    # newlines=3 → Enter pressed three times
+    editor.write_paragraph("단락", newlines=3)
+    enter_calls = [
+        c for c in mock_page.keyboard.press.call_args_list
+        if c.args == ("Enter",)
+    ]
+    assert len(enter_calls) == 3
 
 
 # ===========================================================================

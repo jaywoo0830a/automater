@@ -27,7 +27,7 @@ import sys
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from automator.editor import BlogEditor, PostContent
+from automator.editor import BlogEditor, PostContent, PostStep
 from automator.title_generator import TitleGenerator, validate_template
 from automator.layout import validate_layout, paragraph_count, parse_alias
 from automator.options import (
@@ -182,62 +182,80 @@ class NaverBlogJob:
 
         Layout processing
         -----------------
-        Iterates content.layout in order:
-          - "Image N"     → preview_images[N-1] added to upload queue
-          - "Thumbnail N" → thumbnail_images[N-1] added to upload queue,
-                            marked as representative image
-          - "Paragraph N" → body paragraphs are generated (stub)
+        Iterates content.layout in order and builds a PostStep list that
+        preserves the exact sequence:
 
-        Paragraph count is derived from layout automatically.
-        The PostContent contract is stable — the editor layer never changes
-        regardless of how content is generated here.
+          "Image N"     → PostStep("image",     preview_images[N-1])
+          "Thumbnail N" → PostStep("thumbnail", thumbnail_images[N-1])
+          "Paragraph N" → PostStep("paragraph", placeholder_text)
+
+        The editor executes steps in order, so the published post matches
+        the layout exactly.
         """
         generated_title = TitleGenerator(title).generate()
 
-        # Build ordered image list and locate representative index from layout
-        images:    list[str]  = []
-        rep_index: int | None = None
-
+        # Stub: pre-generate paragraph texts indexed by N
         n_paragraphs = paragraph_count(content.layout)
-        # Stub: generate placeholder paragraphs (replaced by AI pipeline later)
-        paragraphs = [f"(단락 {i} 생성 필요)" for i in range(1, n_paragraphs + 1)]
+        paragraphs = {
+            i: f"(단락 {i} 생성 필요)"
+            for i in range(1, n_paragraphs + 1)
+        }
 
+        steps: list[PostStep] = []
         for alias in content.layout:
             kind, n = parse_alias(alias)
             if kind == "image":
-                images.append(content.preview_images[n - 1])
+                steps.append(PostStep("image", content.preview_images[n - 1]))
             elif kind == "thumbnail":
-                images.append(content.thumbnail_images[n - 1])
-                rep_index = len(images) - 1
+                steps.append(PostStep("thumbnail", content.thumbnail_images[n - 1]))
+            elif kind == "paragraph":
+                steps.append(PostStep("paragraph", paragraphs[n]))
 
-        body = "\n\n".join(paragraphs) if paragraphs else "(본문 생성 필요)"
+        # Empty layout — add a single placeholder paragraph so the post isn't blank
+        if not steps:
+            steps.append(PostStep("paragraph", "(본문 생성 필요)"))
 
-        return PostContent(
-            title=generated_title,
-            body=body,
-            images=images,
-            representative_image=rep_index,
-            tags=[],
-        )
+        return PostContent(title=generated_title, steps=steps, tags=[], paragraph_newlines=content.paragraph_newlines)
 
     # ------------------------------------------------------------------
     # Editor execution
     # ------------------------------------------------------------------
 
     def _execute(self, editor: BlogEditor, post: PostContent) -> None:
-        """Drive the editor through the full publish sequence."""
+        """
+        Drive the editor through the full publish sequence.
+
+        Executes each PostStep in layout order:
+          "paragraph" → write_paragraph()
+          "image"     → move_cursor_to_end() + upload_image()
+          "thumbnail" → move_cursor_to_end() + upload_image()
+                        + set_representative_image()
+
+        The first step never needs move_cursor_to_end() — the editor
+        cursor starts at the top of the body field after open().
+        """
         editor.open()
         editor.write_title(post.title)
-        editor.write_body(post.body)
-        self._upload_images(editor, post)
-        editor.publish()
 
-    def _upload_images(self, editor: BlogEditor, post: PostContent) -> None:
-        """Upload all images, moving cursor to end between each."""
-        for i, path in enumerate(post.images):
+        # Track uploaded image count to compute the representative index
+        image_upload_count = 0
+        rep_index: int | None = None
+
+        for i, step in enumerate(post.steps):
+            # Move cursor to end before every step except the very first
             if i > 0:
                 editor.move_cursor_to_end()
-            editor.upload_image(path)
 
-        if post.representative_image is not None:
-            editor.set_representative_image(post.representative_image)
+            if step.kind == "paragraph":
+                editor.write_paragraph(step.value, newlines=post.paragraph_newlines)
+
+            elif step.kind in ("image", "thumbnail"):
+                editor.upload_image(step.value)
+                if step.kind == "thumbnail":
+                    rep_index = image_upload_count
+                image_upload_count += 1
+
+        if rep_index is not None:
+            editor.set_representative_image(rep_index)
+
+        editor.publish()

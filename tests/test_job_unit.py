@@ -8,7 +8,7 @@ No browser, no Playwright — MockEditor only.
 import pytest
 from dataclasses import replace
 
-from automator.editor import BlogEditor, PostContent
+from automator.editor import BlogEditor, PostContent, PostStep
 from automator.job import NaverBlogJob
 from automator.options import AccountOption, TitleOption, ContentOption, MetaOption, RunSetting
 
@@ -29,7 +29,7 @@ class MockEditor(BlogEditor):
 
     def open(self)                          -> None: self._record("open")
     def write_title(self, title: str)       -> None: self._record("write_title", title)
-    def write_body(self, body: str)         -> None: self._record("write_body", body)
+    def write_paragraph(self, text: str, newlines: int = 2) -> None: self._record("write_paragraph", text)
     def upload_image(self, path: str)       -> None: self._record("upload_image", path)
     def set_representative_image(self, idx) -> None: self._record("set_representative_image", idx)
     def move_cursor_to_end(self)            -> None: self._record("move_cursor_to_end")
@@ -275,7 +275,7 @@ def test_run_opens_editor_first(full_job, editor):
 def test_run_writes_title_before_body(full_job, editor):
     full_job.run(editor)
     names = [a[0] for a in editor.actions]
-    assert names.index("write_title") < names.index("write_body")
+    assert names.index("write_title") < names.index("write_paragraph")
 
 
 @pytest.mark.unit
@@ -303,17 +303,14 @@ def test_run_title_is_generated(account, editor):
 @pytest.mark.unit
 def test_run_body_is_generated(account, editor):
     """
-    ContentOption 없이도 run()이 write_body()를 호출한다.
-    본문은 비어 있지 않은 문자열이어야 한다.
-    (구버전 test_run_body_from_extra_prompt 대체 —
-     extra_prompt로 본문을 직접 지정하는 방식은 ContentOption에서 삭제됨)
+    ContentOption 없이도 run()이 write_paragraph()를 호출한다.
+    단락 텍스트는 비어 있지 않은 문자열이어야 한다.
     """
     job = NaverBlogJob.for_account(account).with_content(ContentOption())
     job.run(editor)
-    body_calls = [a for a in editor.actions if a[0] == "write_body"]
-    assert len(body_calls) == 1
-    assert isinstance(body_calls[0][1], str)
-    assert len(body_calls[0][1]) > 0
+    para_calls = [a for a in editor.actions if a[0] == "write_paragraph"]
+    assert len(para_calls) >= 1
+    assert all(isinstance(a[1], str) and len(a[1]) > 0 for a in para_calls)
 
 
 @pytest.mark.unit
@@ -349,29 +346,60 @@ def test_thumbnail_is_representative(job_with_images, editor):
 
 
 @pytest.mark.unit
-def test_cursor_moved_between_images(job_with_images, editor):
-    # 3 images total → 2 cursor moves (before 2nd and 3rd upload)
+def test_cursor_moved_before_each_non_first_step(job_with_images, editor):
+    # layout: ["Image 1","Image 2","Paragraph 1","Thumbnail 1","Paragraph 2"]
+    # step 0 (Image 1)     — no move_cursor_to_end (first step, i=0)
+    # step 1 (Image 2)     — move_cursor_to_end (i>0)
+    # step 2 (Paragraph 1) — move_cursor_to_end (i>0)
+    # step 3 (Thumbnail 1) — move_cursor_to_end (i>0)
+    # step 4 (Paragraph 2) — move_cursor_to_end (i>0)
+    # total: 4 move_cursor_to_end calls
     job_with_images.run(editor)
     names   = [a[0] for a in editor.actions]
-    ups     = [i for i, n in enumerate(names) if n == "upload_image"]
     cursors = [i for i, n in enumerate(names) if n == "move_cursor_to_end"]
-    assert len(cursors) == 2
-    assert ups[0] < cursors[0] < ups[1]
-    assert ups[1] < cursors[1] < ups[2]
+    ups     = [i for i, n in enumerate(names) if n == "upload_image"]
+    assert len(cursors) == 4
+    # every upload after the first must be preceded by a cursor move
+    assert all(any(c < u for c in cursors) for u in ups[1:])
 
 
 @pytest.mark.unit
-def test_no_cursor_before_first_image(job_with_images, editor):
+def test_no_cursor_before_first_step(job_with_images, editor):
+    # The very first step (Image 1) must not be preceded by move_cursor_to_end
     job_with_images.run(editor)
     names    = [a[0] for a in editor.actions]
     first_up = names.index("upload_image")
-    assert all(i > first_up for i, n in enumerate(names) if n == "move_cursor_to_end")
+    cursors_before_first = [i for i, n in enumerate(names)
+                            if n == "move_cursor_to_end" and i < first_up]
+    assert not cursors_before_first
 
 
 @pytest.mark.unit
 def test_no_images_no_upload_calls(base_job, editor):
     base_job.run(editor)
     assert not any(a[0] == "upload_image" for a in editor.actions)
+
+
+@pytest.mark.unit
+def test_layout_order_is_preserved(job_with_images, editor):
+    """
+    layout: ["Image 1","Image 2","Paragraph 1","Thumbnail 1","Paragraph 2"]
+    → 에디터 액션 순서: upload(a.jpg) → upload(b.jpg) → write_paragraph
+                        → upload(thumb.jpg) → write_paragraph
+    """
+    job_with_images.run(editor)
+    # Extract only content actions (ignore move_cursor_to_end, open, write_title, publish)
+    content_actions = [
+        (a[0], a[1]) for a in editor.actions
+        if a[0] in ("upload_image", "write_paragraph")
+    ]
+    assert content_actions == [
+        ("upload_image",    "a.jpg"),
+        ("upload_image",    "b.jpg"),
+        ("write_paragraph", "(단락 1 생성 필요)"),
+        ("upload_image",    "thumb.jpg"),
+        ("write_paragraph", "(단락 2 생성 필요)"),
+    ]
 
 
 @pytest.mark.unit

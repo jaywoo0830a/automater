@@ -17,6 +17,28 @@ from dataclasses import dataclass, field
 
 
 # ---------------------------------------------------------------------------
+# PostStep — a single unit of editor action in layout order
+# ---------------------------------------------------------------------------
+
+@dataclass
+class PostStep:
+    """
+    One ordered step for the editor to execute.
+
+    kind:
+        "paragraph" — write a paragraph of body text
+        "image"     — upload an image (not representative)
+        "thumbnail" — upload an image and mark it as representative
+    value:
+        "paragraph" → the paragraph text to write
+        "image"     → file path to upload
+        "thumbnail" → file path to upload
+    """
+    kind:  str   # "paragraph" | "image" | "thumbnail"
+    value: str   # text or file path
+
+
+# ---------------------------------------------------------------------------
 # PostContent — resolved post ready for the editor
 # ---------------------------------------------------------------------------
 
@@ -29,18 +51,15 @@ class PostContent:
     The editor layer only ever sees this — never raw options.
 
     Attributes:
-        title:                Final title string.
-        body:                 Final body string.
-        images:               Ordered image paths to upload.
-        representative_image: Index into images to set as thumbnail.
-                              None = do not set a thumbnail.
-        tags:                 List of tag strings.
+        title:  Final title string.
+        steps:  Ordered list of PostStep — drives the editor in layout order.
+                Each step is one of: paragraph, image, thumbnail.
+        tags:   List of tag strings.
     """
-    title:                str
-    body:                 str
-    images:               list[str]  = field(default_factory=list)
-    representative_image: int | None = None
-    tags:                 list[str]  = field(default_factory=list)
+    title:              str
+    steps:              list[PostStep] = field(default_factory=list)
+    tags:               list[str]     = field(default_factory=list)
+    paragraph_newlines: int           = 2  # Enter presses after each paragraph
 
 
 # ---------------------------------------------------------------------------
@@ -67,8 +86,14 @@ class BlogEditor(ABC):
         """Type ``title`` into the title field."""
 
     @abstractmethod
-    def write_body(self, body: str) -> None:
-        """Type ``body`` into the body field."""
+    def write_paragraph(self, text: str, newlines: int = 2) -> None:
+        """
+        Append a paragraph of text into the body field.
+
+        Called once per "Paragraph N" step in the layout.
+        After typing, presses Enter ``newlines`` times to create separation
+        between consecutive paragraphs (default: 2).
+        """
 
     @abstractmethod
     def upload_image(self, image_path: str) -> None:
