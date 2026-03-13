@@ -218,11 +218,19 @@ class SmartEditorOne(BlogEditor):
                 pass
 
     def _dismiss_help_panel(self, frame) -> None:
-        """Close the help panel if it is open."""
+        """
+        Close the help panel if it is open.
+
+        The help panel animates in after the editor content is ready,
+        so we wait up to 5 s for the close button to appear before giving up.
+        After clicking, we wait for the panel to detach/hide.
+        """
         try:
             btn = frame.locator(HELP_CLOSE_BUTTON).first
-            btn.wait_for(state="visible", timeout=2_000)
+            btn.wait_for(state="visible", timeout=5_000)
             btn.click()
+            # Wait for the panel itself to disappear
+            frame.locator(".se-help-panel").wait_for(state="hidden", timeout=3_000)
         except Exception:
             pass
 
