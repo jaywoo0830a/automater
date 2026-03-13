@@ -29,6 +29,7 @@ UNIT_TESTS=(
     tests/test_selector_unit.py
     tests/test_config.py
     tests/test_title_unit.py
+    tests/test_layout_unit.py
 )
 
 MODE="${1:---unit}"

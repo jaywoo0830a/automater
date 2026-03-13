@@ -36,6 +36,15 @@ NAVER_BLOG_ID = os.getenv("NAVER_BLOG_ID", "")
 SESSION_PATH  = os.getenv("SESSION_PATH", "session_state.json")
 IMAGE_PATH    = os.getenv("TEST_IMAGE_PATH", "smile.jpg")
 
+# Images for test_full_post_sequence
+# Set these in .env to use real images in the publish test.
+# e.g. TEST_PREVIEW_1=images/math_1.jpg
+#      TEST_PREVIEW_2=images/math_2.jpg
+#      TEST_THUMBNAIL_1=images/thumb_base.jpg
+TEST_PREVIEW_1    = os.getenv("TEST_PREVIEW_1", "")
+TEST_PREVIEW_2    = os.getenv("TEST_PREVIEW_2", "")
+TEST_THUMBNAIL_1  = os.getenv("TEST_THUMBNAIL_1", "")
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -249,20 +258,82 @@ def test_image_trigger_selector_after_upload(page: Page, account: AccountOption)
 
 # ---------------------------------------------------------------------------
 # E2E: Full job (publishes a live post — delete afterward)
+#
+# Scenario: "대치동 수학 과외" 를 검색하는 학부모 타겟 포스팅
+#   - TitleOption: 프리셋 랜덤 생성 (지역+과목+학습형태+솔트)
+#   - ContentOption layout: Image 1 → Image 2 → Paragraph 1
+#                           → Thumbnail 1 → Paragraph 2 → Paragraph 3
+#   - 이미지: 환경변수 TEST_PREVIEW_1, TEST_PREVIEW_2, TEST_THUMBNAIL_1 로 주입
+#             미설정 시 pytest.skip
 # ---------------------------------------------------------------------------
+
+@pytest.fixture
+def post_images():
+    """
+    Resolve real image paths from environment variables.
+
+    Set in .env:
+        TEST_PREVIEW_1=images/math_1.jpg
+        TEST_PREVIEW_2=images/math_2.jpg
+        TEST_THUMBNAIL_1=images/thumb_base.jpg
+
+    Skips the test if any path is missing or the file does not exist.
+    """
+    paths = {
+        "TEST_PREVIEW_1":   TEST_PREVIEW_1,
+        "TEST_PREVIEW_2":   TEST_PREVIEW_2,
+        "TEST_THUMBNAIL_1": TEST_THUMBNAIL_1,
+    }
+    for env_key, val in paths.items():
+        if not val:
+            pytest.skip(f"Set {env_key} in .env to run the publish test")
+        if not os.path.exists(val):
+            pytest.skip(f"{env_key}={val!r} — file not found")
+    return TEST_PREVIEW_1, TEST_PREVIEW_2, TEST_THUMBNAIL_1
+
 
 @pytest.mark.e2e
 @pytest.mark.slow
-def test_full_post_sequence(editor: SmartEditorOne, account: AccountOption):
+def test_full_post_sequence(
+    editor: SmartEditorOne,
+    account: AccountOption,
+    post_images: tuple,
+):
+    """
+    Full end-to-end publish test.
+
+    Scenario — "대치동 수학 과외" 타겟 포스팅:
+      - 제목: 프리셋 기반 랜덤 생성 (지역+과목+학습형태+솔트)
+      - 레이아웃: Image 1 → Image 2 → Paragraph 1
+                  → Thumbnail 1 → Paragraph 2 → Paragraph 3
+      - 이미지: .env의 TEST_PREVIEW_1, TEST_PREVIEW_2, TEST_THUMBNAIL_1
+
+    Prerequisites:
+        1. session_state.json (또는 NAVER_ID/PW) 유효
+        2. .env에 TEST_PREVIEW_1, TEST_PREVIEW_2, TEST_THUMBNAIL_1 설정
+        3. 포스팅 후 수동 삭제 필요
+    """
+    preview_1, preview_2, thumbnail_1 = post_images
+
     job = (
         NaverBlogJob
         .for_account(account)
-        .with_title(TitleOption())
+        .with_title(TitleOption(
+            template="지역+과목+학습형태+솔트",
+            learning_type="과외",
+            include_suffix=True,
+        ))
         .with_content(ContentOption(
-            extra_prompt=(
-                "안녕하세요! 이 글은 Playwright 자동화 테스트로 작성된 포스트입니다.\n\n"
-                "테스트 완료 후 삭제 예정입니다."
-            )
+            preview_images=[preview_1, preview_2],
+            thumbnail_images=[thumbnail_1],
+            layout=[
+                "Image 1",
+                "Image 2",
+                "Paragraph 1",
+                "Thumbnail 1",
+                "Paragraph 2",
+                "Paragraph 3",
+            ],
         ))
         .with_meta(MetaOption())
         .with_setting(RunSetting())

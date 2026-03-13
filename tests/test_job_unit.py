@@ -62,7 +62,7 @@ def full_job(account) -> NaverBlogJob:
         NaverBlogJob
         .for_account(account)
         .with_title(TitleOption())
-        .with_content(ContentOption(extra_prompt="테스트 본문"))
+        .with_content(ContentOption())
         .with_meta(MetaOption())
         .with_setting(RunSetting())
     )
@@ -76,8 +76,9 @@ def job_with_images(account) -> NaverBlogJob:
         .with_title(TitleOption())
         .with_content(ContentOption(
             preview_images=["a.jpg", "b.jpg"],
-            thumbnail_image="thumb.jpg",
-            extra_prompt="본문",
+            thumbnail_images=["thumb.jpg"],
+            layout=["Image 1", "Image 2", "Paragraph 1", "Thumbnail 1",
+                    "Paragraph 2"],
         ))
     )
 
@@ -183,18 +184,42 @@ def test_validate_raises_on_invalid_template(account):
 
 
 @pytest.mark.unit
-def test_validate_raises_on_zero_paragraph_count(account):
-    with pytest.raises(ValueError, match="paragraph_count"):
+def test_validate_raises_on_unknown_layout_alias(account):
+    with pytest.raises(ValueError, match="Unknown layout alias"):
         NaverBlogJob.for_account(account).with_content(
-            ContentOption(paragraph_count=0)
+            ContentOption(layout=["Unknown 1"])
         ).validate()
 
 
 @pytest.mark.unit
-def test_validate_raises_on_paragraph_length_inversion(account):
-    with pytest.raises(ValueError, match="min_paragraph_length"):
+def test_validate_raises_on_image_alias_out_of_range(account):
+    with pytest.raises(ValueError, match="Image 2"):
         NaverBlogJob.for_account(account).with_content(
-            ContentOption(min_paragraph_length=10, max_paragraph_length=5)
+            ContentOption(
+                preview_images=["a.jpg"],
+                layout=["Image 1", "Image 2"],  # Image 2 but only 1 image
+            )
+        ).validate()
+
+
+@pytest.mark.unit
+def test_validate_raises_on_paragraph_gap(account):
+    with pytest.raises(ValueError, match="contiguous"):
+        NaverBlogJob.for_account(account).with_content(
+            ContentOption(
+                layout=["Paragraph 1", "Paragraph 3"],  # gap: missing 2
+            )
+        ).validate()
+
+
+@pytest.mark.unit
+def test_validate_raises_on_duplicate_alias(account):
+    with pytest.raises(ValueError, match="Duplicate"):
+        NaverBlogJob.for_account(account).with_content(
+            ContentOption(
+                preview_images=["a.jpg"],
+                layout=["Image 1", "Image 1"],
+            )
         ).validate()
 
 
@@ -276,10 +301,19 @@ def test_run_title_is_generated(account, editor):
 
 
 @pytest.mark.unit
-def test_run_body_from_extra_prompt(account, editor):
-    job = NaverBlogJob.for_account(account).with_content(ContentOption(extra_prompt="생성된 본문"))
+def test_run_body_is_generated(account, editor):
+    """
+    ContentOption 없이도 run()이 write_body()를 호출한다.
+    본문은 비어 있지 않은 문자열이어야 한다.
+    (구버전 test_run_body_from_extra_prompt 대체 —
+     extra_prompt로 본문을 직접 지정하는 방식은 ContentOption에서 삭제됨)
+    """
+    job = NaverBlogJob.for_account(account).with_content(ContentOption())
     job.run(editor)
-    assert ("write_body", "생성된 본문") in editor.actions
+    body_calls = [a for a in editor.actions if a[0] == "write_body"]
+    assert len(body_calls) == 1
+    assert isinstance(body_calls[0][1], str)
+    assert len(body_calls[0][1]) > 0
 
 
 @pytest.mark.unit
@@ -307,6 +341,8 @@ def test_thumbnail_uploaded_last(job_with_images, editor):
 
 @pytest.mark.unit
 def test_thumbnail_is_representative(job_with_images, editor):
+    # layout: ["Image 1","Image 2","Paragraph 1","Thumbnail 1","Paragraph 2"]
+    # images added in layout order: a.jpg(0), b.jpg(1), thumb.jpg(2)
     job_with_images.run(editor)
     rep = [a for a in editor.actions if a[0] == "set_representative_image"]
     assert rep == [("set_representative_image", 2)]
@@ -314,6 +350,7 @@ def test_thumbnail_is_representative(job_with_images, editor):
 
 @pytest.mark.unit
 def test_cursor_moved_between_images(job_with_images, editor):
+    # 3 images total → 2 cursor moves (before 2nd and 3rd upload)
     job_with_images.run(editor)
     names   = [a[0] for a in editor.actions]
     ups     = [i for i, n in enumerate(names) if n == "upload_image"]
@@ -339,11 +376,15 @@ def test_no_images_no_upload_calls(base_job, editor):
 
 @pytest.mark.unit
 def test_no_rep_image_without_thumbnail(account, editor):
+    # No Thumbnail alias in layout → no set_representative_image call
     job = (
         NaverBlogJob
         .for_account(account)
         .with_title(TitleOption())
-        .with_content(ContentOption(preview_images=["a.jpg"], extra_prompt="본문"))
+        .with_content(ContentOption(
+            preview_images=["a.jpg"],
+            layout=["Image 1", "Paragraph 1"],
+        ))
     )
     job.run(editor)
     assert not any(a[0] == "set_representative_image" for a in editor.actions)

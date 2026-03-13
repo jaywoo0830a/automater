@@ -131,31 +131,40 @@ class TitleOption:
 # ContentOption
 # ---------------------------------------------------------------------------
 
-ThumbnailLayout = Literal[
-    "왼쪽오른쪽", "왼쪽 위", "오른쪽 위", "오른쪽 중앙",
-    "오른쪽 아래", "오른테 위", "정중앙", "가운테 아래",
-    "왼쪽 중앙", "왼쪽 아래",
-]
-
-UidVariation = Literal["5%", "25%", "50%"]
-
-
 @dataclass(frozen=True)
 class ContentOption:
-    """Rules for generating post body content and images."""
-    preview_images:       list[str]       = field(default_factory=list)
-    thumbnail_image:      str | None      = None
-    thumbnail_layout:     ThumbnailLayout = "왼쪽오른쪽"
-    paragraph_count:      int             = 5
-    min_paragraph_length: int             = 5
-    max_paragraph_length: int             = 10
-    uid_variation:        UidVariation    = "5%"
-    seo_exif:             bool            = False
-    seo_filename:         bool            = False
-    seo_alt_text:         bool            = False
-    watermark_body:       bool            = False
-    watermark_thumbnail:  bool            = False
-    extra_prompt:         str             = ""
+    """
+    Rules for generating post body content and image layout.
+
+    Fields
+    ------
+    preview_images:
+        본문에 삽입할 이미지 경로 리스트.
+        alias: "Image 1", "Image 2", ... (인덱스+1 순서로 자동 부여)
+
+    thumbnail_images:
+        썸네일 베이스 이미지 경로 리스트.
+        alias: "Thumbnail 1", "Thumbnail 2", ...
+        현재는 1장만 사용하지만, 네이버 정책 변경 대비 리스트로 관리.
+
+    layout:
+        alias 문자열 리스트로 포스트 내용의 순서를 지정한다.
+        유효 alias:
+          "Image N"       — preview_images[N-1] 업로드
+          "Thumbnail N"   — thumbnail_images[N-1] 업로드 (대표 이미지)
+          "Paragraph N"   — N번째 AI 생성 단락 삽입
+        파라그래프 개수는 layout 내 "Paragraph N" 최대 번호로 자동 결정된다.
+
+        예시:
+          ["Image 1", "Image 2", "Paragraph 1", "Thumbnail 1",
+           "Paragraph 2", "Paragraph 3"]
+          → 이미지 2장 → 단락 1 → 썸네일 → 단락 2, 3
+
+        빈 리스트이면 콘텐츠 없이 제목과 본문만 게시된다.
+    """
+    preview_images:   list[str] = field(default_factory=list)
+    thumbnail_images: list[str] = field(default_factory=list)
+    layout:           list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

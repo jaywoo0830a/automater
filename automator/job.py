@@ -29,6 +29,7 @@ from pathlib import Path
 
 from automator.editor import BlogEditor, PostContent
 from automator.title_generator import TitleGenerator, validate_template
+from automator.layout import validate_layout, paragraph_count, parse_alias
 from automator.options import (
     AccountOption,
     TitleOption,
@@ -150,12 +151,7 @@ class NaverBlogJob:
             validate_template(self._title.template)
 
         if self._content is not None:
-            if self._content.paragraph_count < 1:
-                raise ValueError("ContentOption.paragraph_count must be >= 1")
-            if self._content.min_paragraph_length > self._content.max_paragraph_length:
-                raise ValueError(
-                    "ContentOption.min_paragraph_length must be <= max_paragraph_length"
-                )
+            validate_layout(self._content)
 
         if self._meta is not None:
             if self._meta.min_tags > self._meta.max_tags:
@@ -184,24 +180,41 @@ class NaverBlogJob:
         """
         Produce a PostContent from options.
 
-        Currently returns a minimal PostContent using extra_prompt fields as
-        title/body. This will be replaced by an AI content generation pipeline.
+        Layout processing
+        -----------------
+        Iterates content.layout in order:
+          - "Image N"     → preview_images[N-1] added to upload queue
+          - "Thumbnail N" → thumbnail_images[N-1] added to upload queue,
+                            marked as representative image
+          - "Paragraph N" → body paragraphs are generated (stub)
 
+        Paragraph count is derived from layout automatically.
         The PostContent contract is stable — the editor layer never changes
         regardless of how content is generated here.
         """
-        images: list[str] = list(content.preview_images)
+        generated_title = TitleGenerator(title).generate()
+
+        # Build ordered image list and locate representative index from layout
+        images:    list[str]  = []
         rep_index: int | None = None
 
-        if content.thumbnail_image:
-            images.append(content.thumbnail_image)
-            rep_index = len(images) - 1
+        n_paragraphs = paragraph_count(content.layout)
+        # Stub: generate placeholder paragraphs (replaced by AI pipeline later)
+        paragraphs = [f"(단락 {i} 생성 필요)" for i in range(1, n_paragraphs + 1)]
 
-        generated_title = TitleGenerator(title).generate()
+        for alias in content.layout:
+            kind, n = parse_alias(alias)
+            if kind == "image":
+                images.append(content.preview_images[n - 1])
+            elif kind == "thumbnail":
+                images.append(content.thumbnail_images[n - 1])
+                rep_index = len(images) - 1
+
+        body = "\n\n".join(paragraphs) if paragraphs else "(본문 생성 필요)"
 
         return PostContent(
             title=generated_title,
-            body=content.extra_prompt or "(본문 생성 필요)",
+            body=body,
             images=images,
             representative_image=rep_index,
             tags=[],

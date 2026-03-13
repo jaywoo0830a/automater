@@ -85,13 +85,20 @@ class SmartEditorOne(BlogEditor):
         self._page.goto(self._write_url)
         self._page.wait_for_load_state("domcontentloaded")
 
+        # Detect login redirect — naver redirects to nid.naver.com when session expires
+        if "nid.naver.com" in self._page.url or "login" in self._page.url.lower():
+            raise RuntimeError(
+                "Redirected to login page. Session may have expired. "
+                f"Current URL: {self._page.url}"
+            )
+
         frame = editor_frame(self._page)
         if frame is self._page:
-            self._page.locator(EDITOR_CONTENT).wait_for(state="visible", timeout=15_000)
+            self._page.locator(EDITOR_CONTENT).wait_for(state="visible", timeout=30_000)
         else:
             self._page.frame_locator(MAIN_FRAME) \
                 .locator(EDITOR_CONTENT) \
-                .wait_for(state="visible", timeout=15_000)
+                .wait_for(state="visible", timeout=30_000)
 
         self._dismiss_recovery_popup(frame)
         self._dismiss_help_panel(frame)
