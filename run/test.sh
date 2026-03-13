@@ -6,6 +6,7 @@
 # Usage:
 #   bash ./run/test.sh              # unit tests only (default, fast)
 #   bash ./run/test.sh --e2e        # unit + e2e tests
+#   bash ./run/test.sh --publish    # publish test only (test_full_post_sequence)
 #   bash ./run/test.sh --all        # all tests including slow/publish
 
 set -euo pipefail
@@ -58,6 +59,19 @@ case "${MODE}" in
     pytest tests/test_blog_e2e.py -m "e2e and not slow" -v
     ;;
 
+  --publish)
+    echo "Mode : publish test only (WARNING: will create a real blog post)"
+    echo ""
+    read -rp "This will publish a real blog post. Continue? [y/N] " confirm
+    if [[ "${confirm}" != "y" && "${confirm}" != "Y" ]]; then
+        echo "Aborted."
+        exit 0
+    fi
+
+    echo ""
+    pytest tests/test_blog_e2e.py::test_full_post_sequence -m "e2e and slow" -v -s
+    ;;
+
   --all)
     echo "Mode : all tests including slow/publish (WARNING: may publish a post)"
     echo ""
@@ -83,9 +97,10 @@ case "${MODE}" in
   *)
     echo "Unknown option: ${MODE}"
     echo "Usage:"
-    echo "  bash ./run/test.sh           # unit tests only"
-    echo "  bash ./run/test.sh --e2e     # unit + e2e"
-    echo "  bash ./run/test.sh --all     # all including publish"
+    echo "  bash ./run/test.sh              # unit tests only"
+    echo "  bash ./run/test.sh --e2e        # unit + e2e"
+    echo "  bash ./run/test.sh --publish    # publish test only"
+    echo "  bash ./run/test.sh --all        # all including publish"
     exit 1
     ;;
 
