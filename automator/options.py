@@ -12,9 +12,7 @@ Each dataclass maps directly to one configuration step in the UI:
     RunSetting     ← 기타 실행 설정
 
 All dataclasses are frozen (immutable). To modify a value, use
-dataclasses.replace():
-
-    new_job = replace(job, _title=TitleOption(extra_prompt="새 제목"))
+dataclasses.replace().
 
 No I/O, no Playwright, no imports beyond stdlib.
 """
@@ -26,7 +24,7 @@ from typing import Literal
 
 
 # ---------------------------------------------------------------------------
-# AccountOption — 계정 설정
+# AccountOption
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
@@ -35,13 +33,11 @@ class AccountOption:
     Naver account credentials and per-account posting quota.
 
     Attributes:
-        naver_id:   Naver login ID.
-        naver_pw:   Naver login password.
-        blog_id:    Blog ID used to construct the write URL.
-                    e.g. "rlawjddn00az" → blog.naver.com/rlawjddn00az
-        post_count: Number of posts to publish with this account.
-        proxies:    Proxy addresses ("ip:port") to cycle through.
-                    Empty list means no proxy.
+        naver_id:     Naver login ID.
+        naver_pw:     Naver login password.
+        blog_id:      Blog ID used to construct the write URL.
+        post_count:   Number of posts to publish with this account.
+        proxies:      Proxy addresses ("ip:port") to cycle through.
         session_path: Path to Playwright storage-state JSON.
                       Defaults to "<naver_id>_session.json".
     """
@@ -50,33 +46,23 @@ class AccountOption:
     blog_id:      str
     post_count:   int       = 1
     proxies:      list[str] = field(default_factory=list)
-    session_path: str       = ""   # empty → auto-derived in NaverBlogJob
+    session_path: str       = ""
 
     @property
     def write_url(self) -> str:
-        """Naver blog write URL for this account."""
         return f"https://blog.naver.com/{self.blog_id}?Redirect=Write&"
 
     @property
     def resolved_session_path(self) -> str:
-        """Return session_path, falling back to '<naver_id>_session.json'."""
         return self.session_path or f"{self.naver_id}_session.json"
 
 
 # ---------------------------------------------------------------------------
-# TitleOption — 제목 설정
+# TitleOption
 # ---------------------------------------------------------------------------
 
-TitleTemplate = Literal[
-    "지역+과목+학습형태+솔트",
-    "과목+지역+학습형태+솔트",
-]
-
-RegionScope = Literal[
-    "핵심 시군구",
-    "전국 시군구",
-    "전국 읍면읍",
-]
+# Valid token names that can appear in a template string
+TITLE_TOKENS = frozenset({"지역", "과목", "학습형태", "솔트"})
 
 LearningType = Literal["과외", "학원"]
 
@@ -84,38 +70,65 @@ LearningType = Literal["과외", "학원"]
 @dataclass(frozen=True)
 class TitleOption:
     """
-    Rules for generating the post title.
+    Rules for generating a blog post title for SEO keyword targeting.
 
-    Attributes:
-        template:         Keyword assembly order.
-        region_scope:     Which administrative units to draw region names from.
-        include_particle: Whether to append a Korean location particle.
-        subjects:         Subject names to cycle through (e.g. ["국어", "수학"]).
-        learning_type:    과외 or 학원.
-        salts:            Modifier keywords to vary the title.
-        min_length:       Minimum character count for a generated title.
-        max_length:       Maximum character count for a generated title.
-        has_space:        Whether spaces are allowed between keywords.
-        add_particle:     Whether to prepend/append a location particle.
-        randomize_chars:  Whether to substitute random lookalike characters.
-        extra_prompt:     Free-text hint passed to the AI title generator.
+    목적: "대치동 영어 과외 강력 추천" 같은 검색 키워드 기반 제목을 생성한다.
+
+    Preset files (JSON)
+    -------------------
+    세 가지 프리셋을 JSON 파일로 관리한다. 경로를 비워두면
+    TitleGenerator가 presets/title/ 의 기본 파일을 사용한다.
+
+    region_preset:  regions.json  — [{base_name, full_name, tier}, ...]
+    subject_preset: subjects.json — [과목명, ...]
+    salt_preset:    salts.json    — [솔트 텍스트, ...]
+
+    Assembly rules
+    --------------
+    template:
+        '+' 로 구분된 토큰 순서 문자열. 유효 토큰: 지역, 과목, 학습형태, 솔트.
+        네 토큰 모두 반드시 포함해야 한다.
+
+        기본값:  "지역+과목+학습형태+솔트"  → "대치동 영어 과외 강력 추천"
+        솔트 앞: "솔트+지역+과목+학습형태"  → "강력 추천 대치동 영어 과외"
+        트렌드에 따라 자유롭게 순서를 변경할 수 있다.
+
+    learning_type:
+        "과외" or "학원". 항상 포함. 트렌드에 따라 변경 가능.
+
+    include_suffix:
+        True  → full_name 사용 ("대치동", "강남구") — 행정구역 단위 포함
+        False → base_name 사용 ("대치", "강남")     — 단위 제외
+
+    Stub features (구현 예정 — 현재는 무시됨)
+    ------------------------------------------
+    has_space:        토큰 사이 공백 삽입 여부.
+    add_affix:        제목 앞뒤에 랜덤 조사/어미 추가 여부.
+    randomize_chars:  유사 문자 치환 여부 (스팸 필터 우회용).
+    ai_preset_prompt: Gemini API로 추가 프리셋을 생성할 때 쓸 프롬프트.
     """
-    template:         TitleTemplate = "지역+과목+학습형태+솔트"
-    region_scope:     RegionScope   = "핵심 시군구"
-    include_particle: bool          = True
-    subjects:         list[str]     = field(default_factory=list)
-    learning_type:    LearningType  = "과외"
-    salts:            list[str]     = field(default_factory=lambda: ["완벽", "인기", "즉시"])
-    min_length:       int           = 12
-    max_length:       int           = 24
-    has_space:        bool          = True
-    add_particle:     bool          = True
-    randomize_chars:  bool          = True
-    extra_prompt:     str           = ""
+    # Preset file paths (empty string → TitleGenerator uses built-in default)
+    region_preset:  str = ""
+    subject_preset: str = ""
+    salt_preset:    str = ""
+
+    # Assembly rules
+    template:       str          = "지역+과목+학습형태+솔트"
+    learning_type:  LearningType = "과외"
+    include_suffix: bool         = True   # True=대치동, False=대치
+
+    # Direct override — skips TitleGenerator entirely when set
+    fixed_title: str = ""           # non-empty → use this string as-is
+
+    # Stub features
+    has_space:        bool = True   # stub: always True for now
+    add_affix:        bool = False  # stub: not yet implemented
+    randomize_chars:  bool = False  # stub: not yet implemented
+    ai_preset_prompt: str  = ""     # stub: Gemini API preset generation
 
 
 # ---------------------------------------------------------------------------
-# ContentOption — 내용 설정
+# ContentOption
 # ---------------------------------------------------------------------------
 
 ThumbnailLayout = Literal[
@@ -129,24 +142,7 @@ UidVariation = Literal["5%", "25%", "50%"]
 
 @dataclass(frozen=True)
 class ContentOption:
-    """
-    Rules for generating post body content and images.
-
-    Attributes:
-        preview_images:       Paths to body images (displayed in order).
-        thumbnail_image:      Path to the representative/thumbnail image.
-        thumbnail_layout:     Where to place the thumbnail relative to body text.
-        paragraph_count:      Number of AI-generated paragraphs.
-        min_paragraph_length: Minimum character count per paragraph.
-        max_paragraph_length: Maximum character count per paragraph.
-        uid_variation:        How aggressively to vary invisible characters.
-        seo_exif:             Embed SEO data in image EXIF.
-        seo_filename:         Rename image files for SEO.
-        seo_alt_text:         Inject AI-generated alt text.
-        watermark_body:       Add watermark to body images.
-        watermark_thumbnail:  Add watermark to thumbnail image.
-        extra_prompt:         Free-text hint passed to the AI content generator.
-    """
+    """Rules for generating post body content and images."""
     preview_images:       list[str]       = field(default_factory=list)
     thumbnail_image:      str | None      = None
     thumbnail_layout:     ThumbnailLayout = "왼쪽오른쪽"
@@ -163,30 +159,17 @@ class ContentOption:
 
 
 # ---------------------------------------------------------------------------
-# MetaOption — 메타데이터 설정
+# MetaOption
 # ---------------------------------------------------------------------------
 
 TagStyle = Literal[
-    "dynamic",       # 본문 언급 단어 기반 동적 생성
-    "education",     # 교육 관련 태그
-    "region",        # 지역 관련 태그
-    "subject",       # 과목 관련 태그
-    "learning_type", # 학습 형태 관련 태그
+    "dynamic", "education", "region", "subject", "learning_type",
 ]
 
 
 @dataclass(frozen=True)
 class MetaOption:
-    """
-    Rules for post metadata: tags, backlinks, internal links.
-
-    Attributes:
-        min_tags:            Minimum number of tags to generate.
-        max_tags:            Maximum number of tags to generate.
-        tag_style:           Strategy for tag generation.
-        backlink_ratio:      0–100. Probability (%) that a backlink is injected.
-        internal_link_ratio: 0–100. Probability (%) of an internal link.
-    """
+    """Rules for post metadata: tags, backlinks, internal links."""
     min_tags:            int      = 12
     max_tags:            int      = 20
     tag_style:           TagStyle = "dynamic"
@@ -195,33 +178,18 @@ class MetaOption:
 
 
 # ---------------------------------------------------------------------------
-# RunSetting — 실행 설정
+# RunSetting
 # ---------------------------------------------------------------------------
 
-OnFailure = Literal[
-    "stop",           # 즉시 중단
-    "switch_account", # 다른 계정으로 변경해서 계속
-]
+OnFailure = Literal["stop", "switch_account"]
 
 
 @dataclass(frozen=True)
 class RunSetting:
-    """
-    Runtime behaviour: scheduling, throttling, failure handling, browser.
-
-    Attributes:
-        scheduled:          Whether to use scheduled (delayed) publishing.
-        schedule_interval:  Hours between scheduled publish times.
-        post_interval:      Seconds to wait between consecutive posts.
-        max_daily_posts:    Hard cap on posts per calendar day.
-        on_failure:         What to do when a post fails.
-        rotate_user_agent:  Randomly pick a User-Agent string each run.
-        headless:           Run browser in headless mode.
-        slow_mo:            Milliseconds to slow down Playwright actions.
-    """
+    """Runtime behaviour: scheduling, throttling, failure handling, browser."""
     scheduled:         bool      = True
-    schedule_interval: int       = 12   # hours
-    post_interval:     int       = 60   # seconds
+    schedule_interval: int       = 12
+    post_interval:     int       = 60
     max_daily_posts:   int       = 10
     on_failure:        OnFailure = "stop"
     rotate_user_agent: bool      = True

@@ -257,7 +257,7 @@ def test_full_post_sequence(editor: SmartEditorOne, account: AccountOption):
     job = (
         NaverBlogJob
         .for_account(account)
-        .with_title(TitleOption(extra_prompt="[자동화 테스트] Playwright로 작성한 포스트"))
+        .with_title(TitleOption())
         .with_content(ContentOption(
             extra_prompt=(
                 "안녕하세요! 이 글은 Playwright 자동화 테스트로 작성된 포스트입니다.\n\n"

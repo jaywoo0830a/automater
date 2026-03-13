@@ -28,6 +28,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from automator.editor import BlogEditor, PostContent
+from automator.title_generator import TitleGenerator, validate_template
 from automator.options import (
     AccountOption,
     TitleOption,
@@ -146,8 +147,7 @@ class NaverBlogJob:
             raise ValueError("AccountOption.post_count must be >= 1")
 
         if self._title is not None:
-            if self._title.min_length > self._title.max_length:
-                raise ValueError("TitleOption.min_length must be <= max_length")
+            validate_template(self._title.template)
 
         if self._content is not None:
             if self._content.paragraph_count < 1:
@@ -197,8 +197,10 @@ class NaverBlogJob:
             images.append(content.thumbnail_image)
             rep_index = len(images) - 1
 
+        generated_title = TitleGenerator(title).generate()
+
         return PostContent(
-            title=title.extra_prompt or "(제목 생성 필요)",
+            title=generated_title,
             body=content.extra_prompt or "(본문 생성 필요)",
             images=images,
             representative_image=rep_index,

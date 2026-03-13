@@ -1,0 +1,15 @@
+{
+  "_comment": "지역 프리셋. include_suffix=true면 행정구역 단위(동/구/시 등)까지 포함한 full_name을 사용하고, false면 base_name만 사용한다.",
+  "regions": [
+    { "base_name": "대치",   "full_name": "대치동",   "tier": "핵심" },
+    { "base_name": "목동",   "full_name": "목동",     "tier": "핵심" },
+    { "base_name": "중계",   "full_name": "중계동",   "tier": "핵심" },
+    { "base_name": "분당",   "full_name": "분당구",   "tier": "핵심" },
+    { "base_name": "일산",   "full_name": "일산",     "tier": "핵심" },
+    { "base_name": "수원",   "full_name": "수원시",   "tier": "전국" },
+    { "base_name": "인천",   "full_name": "인천시",   "tier": "전국" },
+    { "base_name": "부산",   "full_name": "부산시",   "tier": "전국" },
+    { "base_name": "광주",   "full_name": "광주시",   "tier": "전국" },
+    { "base_name": "대전",   "full_name": "대전시",   "tier": "전국" }
+  ]
+}
