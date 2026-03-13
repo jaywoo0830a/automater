@@ -60,26 +60,16 @@ case "${MODE}" in
     ;;
 
   --publish)
-    echo "Mode : publish test only (WARNING: will create a real blog post)"
+    echo "Mode : publish test only (dry_run=True — no real post is published)"
     echo ""
-    read -rp "This will publish a real blog post. Continue? [y/N] " confirm
-    if [[ "${confirm}" != "y" && "${confirm}" != "Y" ]]; then
-        echo "Aborted."
-        exit 0
-    fi
 
     echo ""
     pytest tests/test_blog_e2e.py::test_full_post_sequence -m "e2e and slow" -v -s
     ;;
 
   --all)
-    echo "Mode : all tests including slow/publish (WARNING: may publish a post)"
+    echo "Mode : all tests including slow/publish (dry_run=True — no real post is published)"
     echo ""
-    read -rp "This will run the publish test and create a real blog post. Continue? [y/N] " confirm
-    if [[ "${confirm}" != "y" && "${confirm}" != "Y" ]]; then
-        echo "Aborted."
-        exit 0
-    fi
 
     echo ""
     echo "--- [1/3] Unit tests ---"

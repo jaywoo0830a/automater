@@ -276,24 +276,32 @@ def test_set_rep_image_raises_when_not_selected():
 
 # ===========================================================================
 # publish()
+# publish() 테스트는 dry_run=False로 생성해야 실제 클릭 로직에 진입한다.
+# dry_run=True(기본값)이면 publish()는 즉시 반환하므로 DOM 상호작용이 없다.
 # ===========================================================================
 
 @pytest.mark.unit
-def test_publish_tries_page_level_trigger_first(editor, mock_page):
-    editor.publish()
-    mock_page.get_by_role.assert_any_call("button", name="발행")
+def test_publish_tries_page_level_trigger_first():
+    page = _make_page()
+    e = SmartEditorOne(page, "https://example.com", dry_run=False)
+    e.publish()
+    page.get_by_role.assert_any_call("button", name="발행")
 
 
 @pytest.mark.unit
-def test_publish_trigger_clicks_when_found(editor, mock_page):
-    editor.publish()
-    mock_page.get_by_role.return_value.click.assert_called()
+def test_publish_trigger_clicks_when_found():
+    page = _make_page()
+    e = SmartEditorOne(page, "https://example.com", dry_run=False)
+    e.publish()
+    page.get_by_role.return_value.click.assert_called()
 
 
 @pytest.mark.unit
-def test_publish_confirm_uses_test_id(editor, mock_page):
-    editor.publish()
-    mock_page.get_by_test_id.assert_called_with("seOnePublishBtn")
+def test_publish_confirm_uses_test_id():
+    page = _make_page()
+    e = SmartEditorOne(page, "https://example.com", dry_run=False)
+    e.publish()
+    page.get_by_test_id.assert_called_with("seOnePublishBtn")
 
 
 @pytest.mark.unit
@@ -309,8 +317,17 @@ def test_publish_falls_back_to_iframe_on_failure():
     frame_loc = MagicMock()
     frame.get_by_role.return_value = frame_loc
 
-    e = SmartEditorOne(page, "https://example.com")
+    e = SmartEditorOne(page, "https://example.com", dry_run=False)
     e.publish()
 
     frame.get_by_role.assert_called()
     frame_loc.click.assert_called()
+
+
+@pytest.mark.unit
+def test_publish_dry_run_skips_clicks(mock_page):
+    """dry_run=True(기본값)이면 publish()가 DOM을 건드리지 않는다."""
+    e = SmartEditorOne(mock_page, "https://example.com")  # dry_run=True
+    e.publish()
+    mock_page.get_by_role.assert_not_called()
+    mock_page.get_by_test_id.assert_not_called()

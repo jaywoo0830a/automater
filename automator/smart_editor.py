@@ -64,11 +64,15 @@ class SmartEditorOne(BlogEditor):
     Args:
         page:      An authenticated Playwright Page.
         write_url: Blog write page URL (from AccountOption.write_url).
+        dry_run:   If True (default), publish() is a no-op — content is
+                   written but the post is never actually published.
+                   Set dry_run=False explicitly for production use.
     """
 
-    def __init__(self, page: Page, write_url: str) -> None:
+    def __init__(self, page: Page, write_url: str, dry_run: bool = True) -> None:
         self._page      = page
         self._write_url = write_url
+        self._dry_run   = dry_run  # True (default) → publish() logs only, does not click
 
     # ------------------------------------------------------------------
     # BlogEditor interface
@@ -100,6 +104,14 @@ class SmartEditorOne(BlogEditor):
                 .locator(EDITOR_CONTENT) \
                 .wait_for(state="visible", timeout=30_000)
 
+        # Wait for the help panel to fully animate in before attempting dismissal.
+        # The panel appears after the editor content is ready, so we give it
+        # up to 3 s to appear. If it never shows up, dismiss_overlays will
+        # simply find nothing and move on.
+        try:
+            frame.locator(HELP_CLOSE_BUTTON).wait_for(state="visible", timeout=3_000)
+        except Exception:
+            pass
         self._dismiss_overlays(frame)
 
     def write_title(self, title: str) -> None:
@@ -208,7 +220,15 @@ class SmartEditorOne(BlogEditor):
         self._page.keyboard.press("Control+End")
 
     def publish(self) -> None:
-        """Open the publish popover and confirm."""
+        """Open the publish popover and confirm.
+
+        In dry_run mode, skips the actual publish clicks and logs a warning
+        instead. Use dry_run=True in tests to avoid accidentally publishing.
+        """
+        if self._dry_run:
+            import sys
+            print("[SmartEditorOne] DRY RUN — publish() skipped", file=sys.stderr)
+            return
         self._click_publish_trigger()
         self._click_publish_confirm()
 
@@ -236,7 +256,7 @@ class SmartEditorOne(BlogEditor):
             frame,
             locator=frame.locator(HELP_CLOSE_BUTTON).first,
             wait_after=frame.locator(".se-help-panel"),
-            timeout_ms=5_000,
+            timeout_ms=8_000,  # panel animates in after editor content — give it time
             poll=False,
         )
 

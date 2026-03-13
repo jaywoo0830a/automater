@@ -99,6 +99,7 @@ def page(auth_context: BrowserContext):
 
 @pytest.fixture
 def editor(page: Page, account: AccountOption) -> SmartEditorOne:
+    # dry_run=True is the SmartEditorOne default — publish() is always a no-op in tests.
     return SmartEditorOne(page, account.write_url)
 
 
@@ -300,7 +301,7 @@ def test_full_post_sequence(
     post_images: tuple,
 ):
     """
-    Full end-to-end publish test.
+    Full end-to-end sequence test (DRY RUN — publish is skipped).
 
     Scenario — "대치동 수학 과외" 타겟 포스팅:
       - 제목: 프리셋 기반 랜덤 생성 (지역+과목+학습형태+솔트)
@@ -308,10 +309,12 @@ def test_full_post_sequence(
                   → Thumbnail 1 → Paragraph 2 → Paragraph 3
       - 이미지: .env의 TEST_PREVIEW_1, TEST_PREVIEW_2, TEST_THUMBNAIL_1
 
+    publish()는 dry_run=True로 인해 실제 발행하지 않습니다.
+    글쓰기 팝업은 수동으로 닫거나 그냥 두면 됩니다.
+
     Prerequisites:
         1. session_state.json (또는 NAVER_ID/PW) 유효
         2. .env에 TEST_PREVIEW_1, TEST_PREVIEW_2, TEST_THUMBNAIL_1 설정
-        3. 포스팅 후 수동 삭제 필요
     """
     preview_1, preview_2, thumbnail_1 = post_images
 
@@ -339,6 +342,7 @@ def test_full_post_sequence(
         .with_setting(RunSetting())
     )
     assert job.run(editor) is True
+
 
 
 

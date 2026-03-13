@@ -41,7 +41,10 @@ Quick start
     )
 
     # editor requires a live Playwright Page:
+    # Dry run (default — no publish):
     # success = job.run(SmartEditorOne(page, job._account.write_url))
+    # Live publish (explicit):
+    # success = job.run(SmartEditorOne(page, job._account.write_url, dry_run=False))
 """
 
 from automator.options import (
