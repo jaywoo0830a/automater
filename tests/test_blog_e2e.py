@@ -188,6 +188,66 @@ def test_set_third_image_as_representative(editor, page):
 
 
 # ---------------------------------------------------------------------------
+# Diagnostic: find the correct image trigger selector after an upload
+# ---------------------------------------------------------------------------
+
+@pytest.mark.e2e
+def test_image_trigger_selector_after_upload(page: Page, account: AccountOption):
+    """
+    Uploads one image, then probes every candidate selector for the
+    image-add button and prints count + visibility.
+
+    Run with -s to see output:
+        pytest tests/test_blog_e2e.py::test_image_trigger_selector_after_upload -m e2e -s
+    """
+    if not os.path.exists(IMAGE_PATH):
+        pytest.skip(f"Test image not found: {IMAGE_PATH!r}")
+
+    local_editor = SmartEditorOne(page, account.write_url)
+    local_editor.open()
+    local_editor.upload_image(IMAGE_PATH)
+
+    frame = page.frame_locator(MAIN_FRAME).first
+
+    print("\n\n========== IMAGE TRIGGER DIAGNOSTIC ==========")
+
+    # CSS selectors
+    css_candidates = [
+        "button[data-name='image']",
+        "button[data-name='image'][data-group='documentToolbar']",
+        ".se-image-toolbar-button",
+        ".se-document-toolbar-basic-button[data-name='image']",
+        "button.se-text-icon-toolbar-button[data-name='image']",
+    ]
+    for sel in css_candidates:
+        try:
+            count   = frame.locator(sel).count()
+            visible = frame.locator(sel).first.is_visible() if count > 0 else False
+            print(f"  locator({sel!r:60s}) count={count}  first_visible={visible}")
+        except Exception as e:
+            print(f"  locator({sel!r:60s}) ERROR: {e}")
+
+    # get_by_role variants
+    role_candidates = [
+        ("사진",    {}),
+        ("사진 추가", {}),
+        ("사진 추가", {"exact": True}),
+        ("사진 교체", {}),
+    ]
+    for name, kw in role_candidates:
+        kw_str = f", {kw}" if kw else ""
+        try:
+            loc     = frame.get_by_role("button", name=name, **kw)
+            count   = loc.count()
+            visible = loc.first.is_visible() if count > 0 else False
+            print(f"  get_by_role('button', name={name!r}{kw_str:20s}) count={count}  first_visible={visible}")
+        except Exception as e:
+            print(f"  get_by_role('button', name={name!r}{kw_str:20s}) ERROR: {e}")
+
+    print("==============================================\n")
+
+
+# ---------------------------------------------------------------------------
 # E2E: Full job (publishes a live post — delete afterward)
 # ---------------------------------------------------------------------------
 

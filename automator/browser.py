@@ -197,10 +197,14 @@ class NaverEditorLocators:
     @staticmethod
     def image_trigger(ctx) -> Locator:
         """
-        Image upload toolbar button — matched by role+name.
-        The button label '사진' is stable across Naver Smart Editor versions.
+        Image upload toolbar button — matched by role + exact name.
+
+        After an image is uploaded the editor shows additional buttons
+        ('사진 교체', '사진 편집') whose accessible names also contain '사진',
+        causing a strict-mode violation with a partial match.
+        Using exact=True on '사진 추가' keeps count=1 regardless of state.
         """
-        return ctx.get_by_role("button", name="사진")
+        return ctx.get_by_role("button", name="사진 추가", exact=True)
 
     @staticmethod
     def publish_trigger(ctx) -> Locator:
