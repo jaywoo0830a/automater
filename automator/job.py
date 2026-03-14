@@ -30,6 +30,7 @@ from pathlib import Path
 from automator.editor import BlogEditor, PostContent, PostStep
 from automator.title_generator import TitleGenerator, validate_template
 from automator.layout import validate_layout, paragraph_count, parse_alias
+from automator.paragraph_generator import ParagraphGenerator
 from automator.options import (
     AccountOption,
     TitleOption,
@@ -194,12 +195,16 @@ class NaverBlogJob:
         """
         generated_title = TitleGenerator(title).generate()
 
-        # Stub: pre-generate paragraph texts indexed by N
+        # Generate paragraph texts — use Gemini if prompt is set, else placeholder
         n_paragraphs = paragraph_count(content.layout)
-        paragraphs = {
-            i: f"(단락 {i} 생성 필요)"
-            for i in range(1, n_paragraphs + 1)
-        }
+        if content.paragraph_prompt and n_paragraphs > 0:
+            texts = ParagraphGenerator(prompt=content.paragraph_prompt).generate(n_paragraphs)
+            paragraphs = {i: texts[i - 1] for i in range(1, n_paragraphs + 1)}
+        else:
+            paragraphs = {
+                i: f"(단락 {i} 생성 필요)"
+                for i in range(1, n_paragraphs + 1)
+            }
 
         steps: list[PostStep] = []
         for alias in content.layout:

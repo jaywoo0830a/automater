@@ -166,6 +166,7 @@ class ContentOption:
     thumbnail_images:  list[str] = field(default_factory=list)
     layout:            list[str] = field(default_factory=list)
     paragraph_newlines: int      = 2  # Enter presses appended after each paragraph
+    paragraph_prompt:   str      = ""  # Gemini prompt for paragraph generation; empty = placeholder
 
 
 # ---------------------------------------------------------------------------

@@ -79,6 +79,7 @@ def job_with_images(account) -> NaverBlogJob:
             thumbnail_images=["thumb.jpg"],
             layout=["Image 1", "Image 2", "Paragraph 1", "Thumbnail 1",
                     "Paragraph 2"],
+            paragraph_prompt="test prompt",  # triggers mock in conftest
         ))
     )
 
@@ -396,9 +397,9 @@ def test_layout_order_is_preserved(job_with_images, editor):
     assert content_actions == [
         ("upload_image",    "a.jpg"),
         ("upload_image",    "b.jpg"),
-        ("write_paragraph", "(단락 1 생성 필요)"),
+        ("write_paragraph", "(단락 1 mock)"),  # conftest stub
         ("upload_image",    "thumb.jpg"),
-        ("write_paragraph", "(단락 2 생성 필요)"),
+        ("write_paragraph", "(단락 2 mock)"),  # conftest stub
     ]
 
 

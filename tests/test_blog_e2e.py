@@ -34,7 +34,7 @@ NAVER_ID      = os.getenv("NAVER_ID", "")
 NAVER_PW      = os.getenv("NAVER_PW", "")
 NAVER_BLOG_ID = os.getenv("NAVER_BLOG_ID", "")
 SESSION_PATH  = os.getenv("SESSION_PATH", "session_state.json")
-IMAGE_PATH    = os.getenv("TEST_IMAGE_PATH", "smile.jpg")
+IMAGE_PATH    = os.getenv("TEST_IMAGE_PATH", "images/preview_1.png")
 
 # Images for test_full_post_sequence
 # Set these in .env to use real images in the publish test.
@@ -341,6 +341,10 @@ def test_full_post_sequence(
                 "Paragraph 2",
                 "Paragraph 3",
             ],
+            paragraph_prompt=(
+                "대치동 수학 과외를 홍보하는 학부모 대상 블로그 글을 작성해주세요. "
+                "신뢰감 있고 따뜻한 톤으로, 실제 학부모가 쓴 것처럼 자연스럽게 작성해주세요."
+            ),
         ))
         .with_meta(MetaOption())
         .with_setting(RunSetting())
@@ -350,3 +354,72 @@ def test_full_post_sequence(
 
 
 
+
+
+# ---------------------------------------------------------------------------
+# Diagnostic: ParagraphGenerator — Gemini API 실제 호출 확인
+# ---------------------------------------------------------------------------
+
+@pytest.mark.e2e
+def test_paragraph_generator_diagnostic():
+    """
+    Gemini API 실제 호출 단계별 진단 테스트.
+
+    확인 항목:
+      1. GEMINI_API_KEY 환경변수 로드 여부
+      2. ParagraphGenerator 생성 (API 키 유효성)
+      3. 실제 API 호출 및 응답 수신
+      4. JSON 파싱 결과
+      5. 단락 텍스트 내용
+
+    Run:
+        pytest tests/test_blog_e2e.py::test_paragraph_generator_diagnostic -m e2e -s -v
+    """
+    import os
+    from automator.paragraph_generator import ParagraphGenerator
+
+    print("\n========== PARAGRAPH GENERATOR DIAGNOSTIC ==========")
+
+    # 1. API 키 확인
+    api_key = os.getenv("GEMINI_API_KEY", "")
+    print(f"  [1] GEMINI_API_KEY: {'✅ 설정됨 (' + api_key[:6] + '...)' if api_key else '❌ 미설정'}")
+    assert api_key, "GEMINI_API_KEY가 .env에 설정되어 있지 않습니다."
+
+    # 2. 생성
+    try:
+        gen = ParagraphGenerator(
+            prompt="대치동 수학 과외를 홍보하는 학부모 대상 블로그 글",
+            api_key=api_key,
+        )
+        print("  [2] ParagraphGenerator 생성: ✅")
+    except Exception as e:
+        print(f"  [2] ParagraphGenerator 생성 실패: ❌ {e}")
+        raise
+
+    # 3. 원본 API 응답 확인
+    try:
+        raw = gen._call_api(count=2)
+        print(f"  [3] API 원본 응답:")
+        print(f"      {raw[:300]!r}")
+    except Exception as e:
+        print(f"  [3] API 호출 실패: ❌ {e}")
+        raise
+
+    # 4. 파싱 결과 확인
+    try:
+        parsed = gen._parse(raw, count=2)
+        print(f"  [4] 파싱 결과: ✅ {len(parsed)}개")
+        for i, p in enumerate(parsed, 1):
+            print(f"      단락 {i} ({len(p)}자): {p[:80]}...")
+    except Exception as e:
+        print(f"  [4] 파싱 실패: ❌ {e}")
+        raise
+
+    # 5. generate() 통합 호출
+    result = gen.generate(count=3)
+    print(f"  [5] generate(3) 결과: {len(result)}개")
+    for i, p in enumerate(result, 1):
+        print(f"      단락 {i} ({len(p)}자): {p[:80]}")
+        assert len(p) > 10, f"단락 {i}가 너무 짧습니다: {p!r}"
+
+    print("=====================================================\n")

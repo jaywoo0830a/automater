@@ -47,6 +47,7 @@ Quick start
     # success = job.run(SmartEditorOne(page, job._account.write_url, dry_run=False))
 """
 
+from automator.paragraph_generator import ParagraphGenerator
 from automator.options import (
     AccountOption,
     TitleOption,

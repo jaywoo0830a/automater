@@ -35,7 +35,7 @@ load_dotenv()
 SESSION_PATH     = os.getenv("SESSION_PATH", "session_state.json")
 EDITOR_JSON_PATH = os.getenv("EDITOR_JSON_PATH", "selectors/naver/editor.json")
 LOGIN_JSON_PATH  = os.getenv("LOGIN_JSON_PATH",  "selectors/naver/login.json")
-IMAGE_PATH       = os.getenv("TEST_IMAGE_PATH", "smile.jpg")
+IMAGE_PATH       = os.getenv("TEST_IMAGE_PATH", "images/preview_1.png")
 NAVER_ID         = os.getenv("NAVER_ID", "")
 NAVER_PW         = os.getenv("NAVER_PW", "")
 

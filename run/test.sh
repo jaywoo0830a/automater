@@ -31,6 +31,7 @@ UNIT_TESTS=(
     tests/test_config.py
     tests/test_title_unit.py
     tests/test_layout_unit.py
+    tests/test_paragraph_generator.py
 )
 
 MODE="${1:---unit}"
