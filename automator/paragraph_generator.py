@@ -31,9 +31,10 @@ import os
 import re
 import sys
 
-# gemini-2.0-flash-lite: google-genai SDK (v1beta) + Free Tier 지원
+# gemini-flash-latest: always points to the latest available Flash model.
+# Use this alias to avoid hard-coding a specific version that may be blocked.
 # Ref: https://ai.google.dev/gemini-api/docs/models
-GEMINI_MODEL = "gemini-2.0-flash-lite"
+GEMINI_MODEL = "gemini-flash-latest"
 
 _SYSTEM_PROMPT = """\
 You are a Korean blog content writer specializing in education marketing.
