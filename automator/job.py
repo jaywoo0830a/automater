@@ -23,8 +23,10 @@ The editor is injected at run() time because it requires a live Playwright Page.
 
 from __future__ import annotations
 
+import random
 import sys
 from dataclasses import dataclass, field, replace
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from automator.editor import BlogEditor, PostContent, PostStep
@@ -37,6 +39,7 @@ from automator.options import (
     ContentOption,
     MetaOption,
     RunSetting,
+    KST,
 )
 
 
@@ -162,6 +165,46 @@ class NaverBlogJob:
             if not (0 <= self._meta.internal_link_ratio <= 100):
                 raise ValueError("MetaOption.internal_link_ratio must be 0–100")
 
+            # --- publish schedule ---
+            mode = self._meta.schedule_mode
+            if mode != "immediate":
+                at = self._meta.schedule_at
+
+                # rule 1: schedule_at is required
+                if at is None:
+                    raise ValueError(
+                        "MetaOption.schedule_at은 schedule_mode가 "
+                        f"'{mode}'일 때 반드시 지정해야 합니다."
+                    )
+
+                # rule 2: must be timezone-aware
+                if at.tzinfo is None:
+                    raise ValueError(
+                        "MetaOption.schedule_at은 timezone-aware datetime이어야 합니다. "
+                        "예: datetime(2025, 6, 1, 9, 0, tzinfo=KST)"
+                    )
+
+                # rule 3: earliest possible time must be in the future
+                now = datetime.now(tz=KST)
+                if mode == "random_window":
+                    jitter = self._meta.schedule_jitter_minutes
+                    earliest = at - timedelta(minutes=jitter)
+                else:
+                    earliest = at
+                if earliest <= now:
+                    raise ValueError(
+                        "MetaOption.schedule_at은 현재 시각보다 미래여야 합니다. "
+                        f"(earliest={earliest.isoformat()}, now={now.isoformat()})"
+                    )
+
+            # rule 4: jitter must be positive for random_window
+            if self._meta.schedule_mode == "random_window":
+                if self._meta.schedule_jitter_minutes <= 0:
+                    raise ValueError(
+                        "MetaOption.schedule_jitter_minutes은 양수여야 합니다. "
+                        f"(got {self._meta.schedule_jitter_minutes})"
+                    )
+
         if self._setting is not None:
             if self._setting.post_interval < 0:
                 raise ValueError("RunSetting.post_interval must be >= 0")
@@ -220,7 +263,38 @@ class NaverBlogJob:
         if not steps:
             steps.append(PostStep("paragraph", "(본문 생성 필요)"))
 
-        return PostContent(title=generated_title, steps=steps, tags=[], paragraph_newlines=content.paragraph_newlines)
+        return PostContent(
+            title=generated_title,
+            steps=steps,
+            tags=[],
+            paragraph_newlines=content.paragraph_newlines,
+            schedule_at=self._resolve_schedule(meta),
+        )
+
+    # ------------------------------------------------------------------
+    # Schedule resolution
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _resolve_schedule(meta: MetaOption) -> datetime | None:
+        """
+        Resolve MetaOption schedule fields into a concrete datetime.
+
+        Returns:
+            None                  — for "immediate" mode.
+            meta.schedule_at      — for "fixed" mode (returned as-is).
+            randomised datetime   — for "random_window" mode; picks a
+                                    uniformly random offset within
+                                    ±schedule_jitter_minutes of schedule_at.
+        """
+        if meta.schedule_mode == "immediate":
+            return None
+        if meta.schedule_mode == "fixed":
+            return meta.schedule_at
+        # random_window
+        jitter_secs = meta.schedule_jitter_minutes * 60
+        offset_secs = random.uniform(-jitter_secs, jitter_secs)
+        return meta.schedule_at + timedelta(seconds=offset_secs)
 
     # ------------------------------------------------------------------
     # Editor execution
@@ -263,4 +337,4 @@ class NaverBlogJob:
         if rep_index is not None:
             editor.set_representative_image(rep_index)
 
-        editor.publish()
+        editor.publish(schedule_at=post.schedule_at)

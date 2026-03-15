@@ -20,7 +20,11 @@ No I/O, no Playwright, no imports beyond stdlib.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from typing import Literal
+
+# Korean Standard Time (UTC+9) — use for all schedule_at values
+KST = timezone(timedelta(hours=9))
 
 
 # ---------------------------------------------------------------------------
@@ -177,15 +181,51 @@ TagStyle = Literal[
     "dynamic", "education", "region", "subject", "learning_type",
 ]
 
+ScheduleMode = Literal[
+    "immediate",      # publish immediately (default — existing behaviour)
+    "fixed",          # publish at exactly schedule_at
+    "random_window",  # publish at a random time within schedule_at ± jitter
+]
+
 
 @dataclass(frozen=True)
 class MetaOption:
-    """Rules for post metadata: tags, backlinks, internal links."""
+    """
+    Rules for post metadata: tags, backlinks, internal links, publish schedule.
+
+    Publish schedule
+    ----------------
+    schedule_mode = "immediate"  (default)
+        Publish immediately. schedule_at and schedule_jitter_minutes are ignored.
+
+    schedule_mode = "fixed"
+        Reserve the post at the exact KST datetime given in schedule_at.
+        schedule_at must be a timezone-aware future datetime. (validated by job)
+
+    schedule_mode = "random_window"
+        Pick a random datetime within schedule_at ± schedule_jitter_minutes and
+        reserve the post at that time. Useful for evading spam-detection patterns
+        caused by identical posting times across multiple accounts.
+        schedule_at must be timezone-aware, and schedule_at - jitter must be in
+        the future. (validated by job)
+
+    Notes:
+        - schedule_at must always be a timezone-aware datetime.
+        - Recommended timezone: KST  (from automator.options import KST)
+        - NaverBlogJob.validate() raises ValueError for any constraint violation.
+    """
+
+    # --- existing fields (unchanged) ---
     min_tags:            int      = 12
     max_tags:            int      = 20
     tag_style:           TagStyle = "dynamic"
     backlink_ratio:      int      = 0
     internal_link_ratio: int      = 0
+
+    # --- publish schedule ---
+    schedule_mode:           ScheduleMode    = "immediate"
+    schedule_at:             datetime | None = None
+    schedule_jitter_minutes: int             = 30
 
 
 # ---------------------------------------------------------------------------

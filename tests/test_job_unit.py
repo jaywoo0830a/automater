@@ -33,7 +33,7 @@ class MockEditor(BlogEditor):
     def upload_image(self, path: str)       -> None: self._record("upload_image", path)
     def set_representative_image(self, idx) -> None: self._record("set_representative_image", idx)
     def move_cursor_to_end(self)            -> None: self._record("move_cursor_to_end")
-    def publish(self)                       -> None: self._record("publish")
+    def publish(self, schedule_at=None)     -> None: self._record("publish", schedule_at)
 
 
 # ===========================================================================
@@ -282,7 +282,7 @@ def test_run_writes_title_before_body(full_job, editor):
 @pytest.mark.unit
 def test_run_publishes_last(full_job, editor):
     full_job.run(editor)
-    assert editor.actions[-1] == ("publish",)
+    assert editor.actions[-1][0] == "publish"
 
 
 @pytest.mark.unit
@@ -417,3 +417,199 @@ def test_no_rep_image_without_thumbnail(account, editor):
     )
     job.run(editor)
     assert not any(a[0] == "set_representative_image" for a in editor.actions)
+
+
+# ===========================================================================
+# 5. MetaOption — publish schedule validation
+# ===========================================================================
+
+from datetime import datetime, timezone, timedelta
+from automator.options import KST
+
+
+# --- helpers ----------------------------------------------------------------
+
+def _future(minutes: int = 60) -> datetime:
+    """Return a KST-aware datetime ``minutes`` from now."""
+    return datetime.now(tz=KST) + timedelta(minutes=minutes)
+
+
+def _past(minutes: int = 60) -> datetime:
+    """Return a KST-aware datetime ``minutes`` ago."""
+    return datetime.now(tz=KST) - timedelta(minutes=minutes)
+
+
+# --- immediate (default) ----------------------------------------------------
+
+@pytest.mark.unit
+def test_meta_immediate_default_passes(account):
+    """Default MetaOption() has schedule_mode='immediate' and passes validation."""
+    NaverBlogJob.for_account(account).with_meta(MetaOption()).validate()
+
+
+@pytest.mark.unit
+def test_meta_immediate_ignores_schedule_at(account):
+    """'immediate' mode ignores schedule_at even when set — no error."""
+    NaverBlogJob.for_account(account).with_meta(
+        MetaOption(schedule_mode="immediate", schedule_at=_past())
+    ).validate()
+
+
+# --- fixed ------------------------------------------------------------------
+
+@pytest.mark.unit
+def test_meta_fixed_future_passes(account):
+    """'fixed' mode with a future KST datetime passes validation."""
+    NaverBlogJob.for_account(account).with_meta(
+        MetaOption(schedule_mode="fixed", schedule_at=_future())
+    ).validate()
+
+
+@pytest.mark.unit
+def test_meta_fixed_none_raises(account):
+    """'fixed' mode without schedule_at raises ValueError."""
+    with pytest.raises(ValueError, match="schedule_at"):
+        NaverBlogJob.for_account(account).with_meta(
+            MetaOption(schedule_mode="fixed", schedule_at=None)
+        ).validate()
+
+
+@pytest.mark.unit
+def test_meta_fixed_naive_datetime_raises(account):
+    """'fixed' mode with a naive (no tzinfo) datetime raises ValueError."""
+    naive = datetime(2099, 1, 1, 9, 0)  # no tzinfo
+    with pytest.raises(ValueError, match="timezone"):
+        NaverBlogJob.for_account(account).with_meta(
+            MetaOption(schedule_mode="fixed", schedule_at=naive)
+        ).validate()
+
+
+@pytest.mark.unit
+def test_meta_fixed_past_raises(account):
+    """'fixed' mode with a past datetime raises ValueError."""
+    with pytest.raises(ValueError, match="미래"):
+        NaverBlogJob.for_account(account).with_meta(
+            MetaOption(schedule_mode="fixed", schedule_at=_past())
+        ).validate()
+
+
+# --- random_window ----------------------------------------------------------
+
+@pytest.mark.unit
+def test_meta_random_window_future_passes(account):
+    """'random_window' mode with future schedule_at and positive jitter passes."""
+    NaverBlogJob.for_account(account).with_meta(
+        MetaOption(
+            schedule_mode="random_window",
+            schedule_at=_future(120),
+            schedule_jitter_minutes=30,
+        )
+    ).validate()
+
+
+@pytest.mark.unit
+def test_meta_random_window_none_raises(account):
+    """'random_window' mode without schedule_at raises ValueError."""
+    with pytest.raises(ValueError, match="schedule_at"):
+        NaverBlogJob.for_account(account).with_meta(
+            MetaOption(schedule_mode="random_window", schedule_at=None)
+        ).validate()
+
+
+@pytest.mark.unit
+def test_meta_random_window_zero_jitter_raises(account):
+    """'random_window' mode with jitter=0 raises ValueError."""
+    with pytest.raises(ValueError, match="jitter"):
+        NaverBlogJob.for_account(account).with_meta(
+            MetaOption(
+                schedule_mode="random_window",
+                schedule_at=_future(),
+                schedule_jitter_minutes=0,
+            )
+        ).validate()
+
+
+@pytest.mark.unit
+def test_meta_random_window_negative_jitter_raises(account):
+    """'random_window' mode with negative jitter raises ValueError."""
+    with pytest.raises(ValueError, match="jitter"):
+        NaverBlogJob.for_account(account).with_meta(
+            MetaOption(
+                schedule_mode="random_window",
+                schedule_at=_future(),
+                schedule_jitter_minutes=-10,
+            )
+        ).validate()
+
+
+@pytest.mark.unit
+def test_meta_random_window_earliest_in_past_raises(account):
+    """
+    'random_window': schedule_at - jitter가 과거이면 ValueError.
+    e.g. schedule_at=지금+10분, jitter=30분 → earliest=지금-20분 (과거)
+    """
+    with pytest.raises(ValueError, match="미래"):
+        NaverBlogJob.for_account(account).with_meta(
+            MetaOption(
+                schedule_mode="random_window",
+                schedule_at=_future(10),   # +10 min from now
+                schedule_jitter_minutes=30, # earliest = -20 min → past
+            )
+        ).validate()
+
+
+# --- PostContent schedule_at propagation ------------------------------------
+
+@pytest.mark.unit
+def test_immediate_produces_none_schedule_at(account, editor):
+    """
+    'immediate' mode: _generate_content() returns PostContent.schedule_at=None.
+    publish() must be called without a schedule argument.
+    """
+    job = (
+        NaverBlogJob.for_account(account)
+        .with_meta(MetaOption(schedule_mode="immediate"))
+    )
+    job.run(editor)
+    publish_calls = [a for a in editor.actions if a[0] == "publish"]
+    assert len(publish_calls) == 1
+    # MockEditor records publish(schedule_at=None) as ("publish", None)
+    assert publish_calls[0] == ("publish", None)
+
+
+@pytest.mark.unit
+def test_fixed_schedule_propagated_to_publish(account, editor):
+    """
+    'fixed' mode: resolved schedule_at is propagated to editor.publish().
+    """
+    target = _future(120)
+    job = (
+        NaverBlogJob.for_account(account)
+        .with_meta(MetaOption(schedule_mode="fixed", schedule_at=target))
+    )
+    job.run(editor)
+    publish_calls = [a for a in editor.actions if a[0] == "publish"]
+    assert len(publish_calls) == 1
+    assert publish_calls[0] == ("publish", target)
+
+
+@pytest.mark.unit
+def test_random_window_schedule_within_range(account, editor):
+    """
+    'random_window' mode: resolved schedule_at must be within
+    [schedule_at - jitter, schedule_at + jitter].
+    """
+    center  = _future(120)
+    jitter  = 30
+    job = (
+        NaverBlogJob.for_account(account)
+        .with_meta(MetaOption(
+            schedule_mode="random_window",
+            schedule_at=center,
+            schedule_jitter_minutes=jitter,
+        ))
+    )
+    job.run(editor)
+    publish_calls = [a for a in editor.actions if a[0] == "publish"]
+    resolved: datetime = publish_calls[0][1]
+    assert center - timedelta(minutes=jitter) <= resolved <= center + timedelta(minutes=jitter)

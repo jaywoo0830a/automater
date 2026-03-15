@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from datetime import datetime
 
 
 # ---------------------------------------------------------------------------
@@ -51,15 +52,19 @@ class PostContent:
     The editor layer only ever sees this — never raw options.
 
     Attributes:
-        title:  Final title string.
-        steps:  Ordered list of PostStep — drives the editor in layout order.
-                Each step is one of: paragraph, image, thumbnail.
-        tags:   List of tag strings.
+        title:       Final title string.
+        steps:       Ordered list of PostStep — drives the editor in layout order.
+                     Each step is one of: paragraph, image, thumbnail.
+        tags:        List of tag strings.
+        schedule_at: KST-aware datetime to reserve the post, or None for
+                     immediate publish. Resolved from MetaOption by the job;
+                     the editor receives a concrete datetime (never a mode string).
     """
     title:              str
     steps:              list[PostStep] = field(default_factory=list)
     tags:               list[str]     = field(default_factory=list)
-    paragraph_newlines: int           = 2  # Enter presses after each paragraph
+    paragraph_newlines: int           = 2
+    schedule_at:        datetime | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -124,5 +129,13 @@ class BlogEditor(ABC):
         """
 
     @abstractmethod
-    def publish(self) -> None:
-        """Open the publish popover and confirm. Post is live after this."""
+    def publish(self, schedule_at: datetime | None = None) -> None:
+        """
+        Finalise and submit the post.
+
+        Args:
+            schedule_at: KST-aware datetime to reserve the post, or None to
+                         publish immediately. The editor implementation is
+                         responsible for interacting with the reservation UI
+                         when this is not None.
+        """

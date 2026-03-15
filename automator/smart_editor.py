@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 from playwright.sync_api import Page
@@ -244,11 +245,33 @@ class SmartEditorOne(BlogEditor):
         sel.locator(frame, "editor_paragraph_container").last.click()
         self._page.keyboard.press("Control+End")
 
-    def publish(self) -> None:
-        """Open publish popover and confirm. No-op in dry_run mode."""
+    def publish(self, schedule_at: datetime | None = None) -> None:
+        """
+        Open publish popover and confirm. No-op in dry_run mode.
+
+        Args:
+            schedule_at: KST-aware datetime for reserved publish, or None for
+                         immediate publish. When set, the implementation must
+                         interact with Naver's reservation UI before confirming.
+                         (reservation UI interaction is a stub — not yet implemented)
+        """
         if self._dry_run:
-            print("[SmartEditorOne] DRY RUN — publish() skipped", file=sys.stderr)
+            label = schedule_at.isoformat() if schedule_at else "immediate"
+            print(
+                f"[SmartEditorOne] DRY RUN — publish() skipped (schedule_at={label})",
+                file=sys.stderr,
+            )
             return
+
+        if schedule_at is not None:
+            # TODO: interact with Naver reservation UI to set schedule_at
+            # (stub — falls through to immediate publish for now)
+            print(
+                f"[SmartEditorOne] WARN — reservation UI not yet implemented "
+                f"(schedule_at={schedule_at.isoformat()}). Publishing immediately.",
+                file=sys.stderr,
+            )
+
         self._click_publish_trigger()
         self._click_publish_confirm()
 
