@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # run/dev.sh
 # ----------
-# 개발 환경을 띄운다: 가상환경 활성화 + 유용한 개발 도구 실행.
+# 개발 환경 진입 및 개발 도구 실행.
 #
-# Usage:
-#   bash ./run/dev.sh              # 가상환경 활성화 후 셸 진입
-#   bash ./run/dev.sh --watch      # 파일 변경 감지 시 unit 테스트 자동 재실행
-#   bash ./run/dev.sh --capture    # 셀렉터 캡처 도구 실행 (Chromium 오픈)
-#   bash ./run/dev.sh --session    # 네이버 로그인 후 session_state.json 저장
+# 명령어:
+#   (없음)           가상환경 활성화 후 셸 진입
+#   --watch          파일 변경 감지 시 unit 테스트 자동 재실행
+#   --session        네이버 로그인 후 session_state.json 저장
+#   --capture        셀렉터 캡처 도구 실행 (Chromium 오픈)
+#   --factory-shell  factory 관련 변수 세팅 후 셸 진입
 
 set -euo pipefail
 
@@ -15,61 +16,77 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 VENV_DIR="${PROJECT_ROOT}/.venv"
 
-_print_help() {
-    echo "Usage:"
-    echo "  bash ./run/dev.sh              # 가상환경 활성화 후 셸 진입"
-    echo "  bash ./run/dev.sh --watch      # 파일 변경 시 unit 테스트 자동 재실행"
-    echo "  bash ./run/dev.sh --capture    # 셀렉터 캡처 도구 실행"
-    echo "  bash ./run/dev.sh --session    # 네이버 로그인 후 session_state.json 저장"
+_header() {
+    echo ""
+    echo "  automator dev — $1"
+    echo "  ────────────────────────────────────────"
+}
+
+_require_venv() {
+    if [ ! -d "${VENV_DIR}" ]; then
+        echo "  ❌ .venv 없음. 먼저 실행하세요: bash ./run/init.sh"
+        exit 1
+    fi
+    source "${VENV_DIR}/bin/activate"
 }
 
 MODE="${1:---shell}"
 
-# ── --help: venv 체크 전에 처리 ──────────────────────────────────────────────
 if [ "${MODE}" = "--help" ] || [ "${MODE}" = "-h" ]; then
-    _print_help
+    cat << 'HELP'
+
+  automator dev
+
+  명령어:
+    (없음)           가상환경 활성화 후 셸 진입
+    --watch          파일 변경 시 unit 테스트 자동 재실행
+    --session        네이버 로그인 후 session_state.json 저장
+    --capture        셀렉터 캡처 도구 실행
+    --factory-shell  factory 환경 셸 진입
+
+  자주 쓰는 명령 (셸 진입 후):
+    bash ./run/test.sh                  # unit 테스트
+    bash ./run/test.sh --e2e            # e2e 포함
+    bash ./run/test.sh --pipeline 1     # 파이프라인 1번
+    bash ./run/factory.sh status        # 공장 현황
+    bash ./run/factory.sh db-up         # DB 시작
+
+HELP
     exit 0
 fi
 
-# ── 가상환경 확인 ────────────────────────────────────────────────────────────
 cd "${PROJECT_ROOT}"
+_require_venv
 
-if [ ! -d "${VENV_DIR}" ]; then
-    echo "ERROR: .venv not found. Run: bash ./run/init.sh"
-    exit 1
-fi
-
-source "${VENV_DIR}/bin/activate"
-
-echo "========================================"
-echo "  automator — dev environment"
-echo "========================================"
-echo "Project root : ${PROJECT_ROOT}"
-echo "Python       : $(python --version)"
-echo "Activated    : ${VIRTUAL_ENV}"
-echo ""
+_header "${MODE}"
+echo "  Python : $(python --version)"
+echo "  루트   : ${PROJECT_ROOT}"
 
 case "${MODE}" in
 
-  # ── 기본: 활성화된 셸로 진입 ─────────────────────────────────────────────────
+  # ── 기본: 활성화된 셸로 진입 ─────────────────────────────────────────────
   --shell)
-    echo "개발 환경이 활성화됐습니다."
     echo ""
-    echo "자주 쓰는 명령:"
-    echo "  bash ./run/test.sh                   # unit tests"
-    echo "  bash ./run/test.sh --pipeline <1-8>  # 파이프라인 단일 시나리오"
-    echo "  bash ./run/dev.sh --watch            # 파일 변경 감지 자동 테스트"
-    echo "  bash ./run/dev.sh --capture          # 셀렉터 캡처 도구"
-    echo "  bash ./run/dev.sh --session          # 네이버 세션 저장"
+    echo "  자주 쓰는 명령:"
+    echo "    bash ./run/test.sh                   # unit 테스트"
+    echo "    bash ./run/test.sh --e2e             # e2e smoke 포함"
+    echo "    bash ./run/test.sh --schedule        # 예약 발행 e2e"
+    echo "    bash ./run/test.sh --pipeline 1      # 파이프라인 1번"
+    echo "    bash ./run/test.sh --all             # 전체 테스트"
+    echo ""
+    echo "    bash ./run/factory.sh db-up          # MySQL 시작"
+    echo "    bash ./run/factory.sh seed           # 조합 생성"
+    echo "    bash ./run/factory.sh dispatch       # 배치 할당"
+    echo "    bash ./run/factory.sh status         # 현황 확인"
     echo ""
     exec "${SHELL}"
     ;;
 
-  # ── Watch: unit 테스트 자동 재실행 ───────────────────────────────────────────
+  # ── Watch: unit 테스트 자동 재실행 ──────────────────────────────────────
   --watch)
-    echo "Mode : watch (unit 테스트 자동 재실행)"
-    echo "       automator/ 또는 tests/ 파일 변경 시 자동 실행됩니다."
-    echo "       종료: Ctrl+C"
+    echo ""
+    echo "  automator/ 또는 tests/ 변경 시 unit 테스트 자동 실행"
+    echo "  종료: Ctrl+C"
     echo ""
 
     UNIT_TESTS=(
@@ -85,43 +102,28 @@ case "${MODE}" in
     if python -c "import pytest_watch" 2>/dev/null; then
         pytest-watch "${UNIT_TESTS[@]}" -- -m unit -v
     elif command -v entr &>/dev/null; then
-        echo "(entr 사용 — pip install pytest-watch 으로 더 정교한 감지 가능)"
+        echo "  (entr 사용 — pip install pytest-watch 으로 더 정교한 감지 가능)"
         echo ""
-        find automator tests -name "*.py" | entr -c \
+        find automator tests factory -name "*.py" | entr -c \
             pytest "${UNIT_TESTS[@]}" -m unit -v
     else
-        echo "ERROR: pytest-watch 또는 entr이 필요합니다."
+        echo "  ❌ pytest-watch 또는 entr 이 필요합니다."
         echo ""
-        echo "설치 방법:"
-        echo "  pip install pytest-watch   # 권장"
-        echo "  brew install entr          # macOS 대안"
+        echo "     pip install pytest-watch   # 권장"
+        echo "     brew install entr          # macOS 대안"
         exit 1
     fi
     ;;
 
-  # ── Capture: 셀렉터 캡처 도구 ────────────────────────────────────────────────
-  --capture)
-    echo "Mode : selector capture (Chromium 오픈)"
-    echo "       selectors/naver/editor.json 업데이트 후 종료됩니다."
-    echo ""
-
-    if [ ! -f scripts/capture_selectors.py ]; then
-        echo "ERROR: scripts/capture_selectors.py not found"
-        exit 1
-    fi
-
-    python scripts/capture_selectors.py
-    ;;
-
-  # ── Session: 네이버 로그인 후 세션 저장 ──────────────────────────────────────
+  # ── Session: 네이버 로그인 후 세션 저장 ──────────────────────────────────
   --session)
-    echo "Mode : session capture"
-    echo "       브라우저가 열리면 직접 로그인하세요."
-    echo "       로그인 완료 후 Enter를 누르면 session_state.json이 저장됩니다."
+    echo ""
+    echo "  브라우저가 열리면 직접 네이버에 로그인하세요."
+    echo "  로그인 완료 후 Enter 를 누르면 세션이 저장됩니다."
     echo ""
 
     if [ ! -f .env ]; then
-        echo "ERROR: .env not found. cp .env.example .env 후 NAVER_BLOG_ID를 설정하세요."
+        echo "  ❌ .env 없음. cp .env.example .env 후 NAVER_BLOG_ID 를 설정하세요."
         exit 1
     fi
 
@@ -138,20 +140,54 @@ with sync_playwright() as p:
     ctx     = browser.new_context()
     page    = ctx.new_page()
     page.goto("https://nid.naver.com/nidlogin.login")
-    print("  브라우저에서 네이버 로그인을 완료하세요.")
-    input("  로그인 완료 후 Enter 키를 누르세요... ")
+    print(f"  브라우저에서 로그인을 완료하세요.")
+    input("  완료 후 Enter 키를 누르세요... ")
     ctx.storage_state(path=session_path)
     browser.close()
 
-print(f"  ✓ 세션 저장 완료: {session_path}")
+print(f"  ✅ 세션 저장 완료: {session_path}")
 PYEOF
     ;;
 
-  # ── Help / unknown ────────────────────────────────────────────────────────────
-  *)
-    echo "Unknown option: ${MODE}"
+  # ── Capture: 셀렉터 캡처 도구 ────────────────────────────────────────────
+  --capture)
     echo ""
-    _print_help
+    echo "  Chromium 을 열고 셀렉터를 캡처합니다."
+    echo "  결과: selectors/naver/editor.json"
+    echo ""
+
+    if [ ! -f scripts/capture_selectors.py ]; then
+        echo "  ❌ scripts/capture_selectors.py 없음"
+        exit 1
+    fi
+
+    python scripts/capture_selectors.py
+    ;;
+
+  # ── Factory shell: factory 관련 셸 진입 ─────────────────────────────────
+  --factory-shell)
+    if [ ! -f factory/.env ]; then
+        echo ""
+        echo "  ⚠️  factory/.env 없음."
+        echo "     cp factory/.env.example factory/.env"
+        echo ""
+    fi
+
+    echo ""
+    echo "  factory 환경 자주 쓰는 명령:"
+    echo "    bash ./run/factory.sh db-up          # MySQL 시작"
+    echo "    bash ./run/factory.sh seed           # 조합 생성"
+    echo "    bash ./run/factory.sh dispatch       # 배치 할당"
+    echo "    bash ./run/factory.sh run --dry-run  # 테스트 실행"
+    echo "    bash ./run/factory.sh status         # 현황 확인"
+    echo ""
+    exec "${SHELL}"
+    ;;
+
+  *)
+    echo ""
+    echo "  알 수 없는 명령어: ${MODE}"
+    echo "  도움말: bash ./run/dev.sh --help"
     exit 1
     ;;
 
