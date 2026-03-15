@@ -193,29 +193,44 @@ def test_set_third_image_as_representative(editor, page):
     _assert_selected(page, 2, 3)
 
 
+# ===========================================================================
+# E2E Pipeline Tests
+#
+# 모든 파이프라인 테스트는 dry_run=True (editor fixture 기본값) 상태에서
+# 실행되므로 실제 발행은 일어나지 않습니다.
+#
+# 시나리오 구성:
+#   [이미지 필요] TEST_PREVIEW_1~3, TEST_THUMBNAIL_1 (.env 설정 필요)
+#   [이미지 불필요] 텍스트 전용 / 예약 발행 검증용
+#
+# Run all pipeline tests:
+#   pytest tests/test_blog_e2e.py -m "e2e and slow" -v
+#
+# Run a single scenario:
+#   pytest tests/test_blog_e2e.py::test_pipeline_default -m "e2e" -v -s
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# Scenario 1: 기본 — 과외, 지역+과목+학습형태+솔트, full layout  (기존 test_full_post_sequence)
+# ---------------------------------------------------------------------------
 
 @pytest.mark.e2e
 @pytest.mark.slow
-def test_full_post_sequence(
+def test_pipeline_default(
     editor: SmartEditorOne,
     account: AccountOption,
     post_images: tuple,
 ):
     """
-    Full end-to-end sequence test (DRY RUN — publish is skipped).
+    [Pipeline 1/8] 기본 시나리오 — "대치동 수학 과외" 타겟 포스팅.
 
-    Scenario — "대치동 수학 과외" 타겟 포스팅:
-      - 제목: 프리셋 기반 랜덤 생성 (지역+과목+학습형태+솔트)
-      - 레이아웃: Image 1 → Image 2 → Image 3 → Paragraph 1
-                  → Thumbnail 1 → Paragraph 2 → Paragraph 3
-      - 이미지: .env의 TEST_PREVIEW_1~3, TEST_THUMBNAIL_1
-
-    publish()는 dry_run=True로 인해 실제 발행하지 않습니다.
-    글쓰기 팝업은 수동으로 닫거나 그냥 두면 됩니다.
-
-    Prerequisites:
-        1. session_state.json (또는 NAVER_ID/PW) 유효
-        2. .env에 TEST_PREVIEW_1, TEST_PREVIEW_2, TEST_PREVIEW_3, TEST_THUMBNAIL_1 설정
+    Options
+    -------
+    - TitleOption  : template="지역+과목+학습형태+솔트", learning_type="과외", include_suffix=True
+    - ContentOption: Image×3 → Paragraph 1 → Thumbnail → Paragraph 2, 3
+    - MetaOption   : 즉시 발행 (기본값)
+    - RunSetting   : 기본값
     """
     preview_1, preview_2, preview_3, thumbnail_1 = post_images
 
@@ -245,6 +260,339 @@ def test_full_post_sequence(
             ),
         ))
         .with_meta(MetaOption())
+        .with_setting(RunSetting())
+    )
+    assert job.run(editor) is True
+
+
+# ---------------------------------------------------------------------------
+# Scenario 2: 학원 타겟 — learning_type="학원", include_suffix=False (base_name)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.e2e
+@pytest.mark.slow
+def test_pipeline_hagwon(
+    editor: SmartEditorOne,
+    account: AccountOption,
+    post_images: tuple,
+):
+    """
+    [Pipeline 2/8] 학원 타겟 시나리오.
+
+    Options
+    -------
+    - TitleOption  : learning_type="학원", include_suffix=False → base_name 사용
+                     e.g. "대치 수학 학원 강력 추천" (suffix 없이 짧은 지역명)
+    - ContentOption: Image 1 → Paragraph 1 → Thumbnail 1 → Paragraph 2
+    - MetaOption   : 즉시 발행 (기본값)
+    """
+    preview_1, _, _, thumbnail_1 = post_images
+
+    job = (
+        NaverBlogJob
+        .for_account(account)
+        .with_title(TitleOption(
+            template="지역+과목+학습형태+솔트",
+            learning_type="학원",
+            include_suffix=False,
+        ))
+        .with_content(ContentOption(
+            preview_images=[preview_1],
+            thumbnail_images=[thumbnail_1],
+            layout=[
+                "Image 1",
+                "Paragraph 1",
+                "Thumbnail 1",
+                "Paragraph 2",
+            ],
+            paragraph_prompt=(
+                "대치동 수학 학원을 홍보하는 학부모 대상 블로그 글을 작성해주세요. "
+                "학원의 체계적인 커리큘럼과 성적 향상 사례를 중심으로 작성해주세요."
+            ),
+        ))
+        .with_meta(MetaOption())
+        .with_setting(RunSetting())
+    )
+    assert job.run(editor) is True
+
+
+# ---------------------------------------------------------------------------
+# Scenario 3: 솔트 앞 — template="솔트+지역+과목+학습형태"
+# ---------------------------------------------------------------------------
+
+@pytest.mark.e2e
+@pytest.mark.slow
+def test_pipeline_salt_first(
+    editor: SmartEditorOne,
+    account: AccountOption,
+    post_images: tuple,
+):
+    """
+    [Pipeline 3/8] 솔트 앞 제목 조합.
+
+    Options
+    -------
+    - TitleOption: template="솔트+지역+과목+학습형태"
+                   → e.g. "강력 추천 대치동 수학 과외"
+                   솔트를 앞에 두면 검색 노출 패턴이 달라져 스팸 탐지 우회에 유리.
+    - ContentOption: Image×2 → Thumbnail → Paragraph×2
+    """
+    preview_1, preview_2, _, thumbnail_1 = post_images
+
+    job = (
+        NaverBlogJob
+        .for_account(account)
+        .with_title(TitleOption(
+            template="솔트+지역+과목+학습형태",
+            learning_type="과외",
+            include_suffix=True,
+        ))
+        .with_content(ContentOption(
+            preview_images=[preview_1, preview_2],
+            thumbnail_images=[thumbnail_1],
+            layout=[
+                "Image 1",
+                "Image 2",
+                "Thumbnail 1",
+                "Paragraph 1",
+                "Paragraph 2",
+            ],
+            paragraph_prompt=(
+                "강남 영어 과외를 홍보하는 블로그 글을 작성해주세요. "
+                "원어민 수준의 회화와 내신 대비를 동시에 잡는 커리큘럼을 강조해주세요."
+            ),
+        ))
+        .with_meta(MetaOption())
+        .with_setting(RunSetting())
+    )
+    assert job.run(editor) is True
+
+
+# ---------------------------------------------------------------------------
+# Scenario 4: 고정 제목 — fixed_title (TitleGenerator 우회)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.e2e
+@pytest.mark.slow
+def test_pipeline_fixed_title(
+    editor: SmartEditorOne,
+    account: AccountOption,
+    post_images: tuple,
+):
+    """
+    [Pipeline 4/8] 고정 제목 시나리오.
+
+    Options
+    -------
+    - TitleOption: fixed_title="목동 수학 과외 후기 강추" → TitleGenerator를 완전히 우회.
+                   A/B 테스트나 특정 키워드를 정확히 타겟할 때 사용.
+    - ContentOption: Paragraph 1 → Image 1 → Thumbnail 1 → Paragraph 2
+                     (단락을 이미지보다 먼저 배치하는 레이아웃)
+    """
+    preview_1, _, _, thumbnail_1 = post_images
+
+    job = (
+        NaverBlogJob
+        .for_account(account)
+        .with_title(TitleOption(
+            fixed_title="목동 수학 과외 후기 강추",
+        ))
+        .with_content(ContentOption(
+            preview_images=[preview_1],
+            thumbnail_images=[thumbnail_1],
+            layout=[
+                "Paragraph 1",
+                "Image 1",
+                "Thumbnail 1",
+                "Paragraph 2",
+            ],
+            paragraph_prompt=(
+                "목동 수학 과외 후기를 작성해주세요. "
+                "실제 학부모 입장에서 성적 향상 경험을 생생하게 서술해주세요."
+            ),
+        ))
+        .with_meta(MetaOption())
+        .with_setting(RunSetting())
+    )
+    assert job.run(editor) is True
+
+
+# ---------------------------------------------------------------------------
+# Scenario 5: 텍스트 전용 — 이미지 없음, 단락만 (post_images 불필요)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.e2e
+@pytest.mark.slow
+def test_pipeline_text_only(
+    editor: SmartEditorOne,
+    account: AccountOption,
+):
+    """
+    [Pipeline 5/8] 텍스트 전용 시나리오 — 이미지 없음.
+
+    Options
+    -------
+    - ContentOption: Paragraph×3 레이아웃 (이미지·썸네일 없음)
+    - 용도: 이미지가 준비되지 않은 상황, 또는 텍스트 SEO 집중 포스팅.
+    - post_images fixture 불필요 — .env IMAGE_PATH 없어도 실행 가능.
+    """
+    job = (
+        NaverBlogJob
+        .for_account(account)
+        .with_title(TitleOption(
+            template="지역+과목+학습형태+솔트",
+            learning_type="과외",
+            include_suffix=True,
+        ))
+        .with_content(ContentOption(
+            layout=[
+                "Paragraph 1",
+                "Paragraph 2",
+                "Paragraph 3",
+            ],
+            paragraph_prompt=(
+                "송파구 국어 과외를 홍보하는 블로그 글을 작성해주세요. "
+                "논술 및 수능 국어 대비를 중심으로 학부모의 공감을 이끌어내주세요."
+            ),
+        ))
+        .with_meta(MetaOption())
+        .with_setting(RunSetting())
+    )
+    assert job.run(editor) is True
+
+
+# ---------------------------------------------------------------------------
+# Scenario 6: 최소 레이아웃 — 단락 1개, 이미지 없음 (post_images 불필요)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.e2e
+@pytest.mark.slow
+def test_pipeline_minimal(
+    editor: SmartEditorOne,
+    account: AccountOption,
+):
+    """
+    [Pipeline 6/8] 최소 레이아웃 시나리오.
+
+    Options
+    -------
+    - ContentOption: layout=[] → 빈 레이아웃. 단락 플레이스홀더 1개만 삽입.
+    - 용도: 에디터 기본 동작(open → write_title → publish) 전체 경로 최소 검증.
+    - MetaOption   : 기본값 (즉시 발행)
+    """
+    job = (
+        NaverBlogJob
+        .for_account(account)
+        .with_title(TitleOption(
+            fixed_title="테스트 포스트 — 최소 레이아웃",
+        ))
+        .with_content(ContentOption())  # empty layout
+        .with_meta(MetaOption())
+        .with_setting(RunSetting())
+    )
+    assert job.run(editor) is True
+
+
+# ---------------------------------------------------------------------------
+# Scenario 7: 예약 발행 (fixed) — schedule_mode="fixed"
+# ---------------------------------------------------------------------------
+
+@pytest.mark.e2e
+@pytest.mark.slow
+def test_pipeline_scheduled_fixed(
+    editor: SmartEditorOne,
+    account: AccountOption,
+):
+    """
+    [Pipeline 7/8] 고정 예약 발행 시나리오.
+
+    Options
+    -------
+    - MetaOption: schedule_mode="fixed", schedule_at=지금+2시간
+    - 에디터가 예약 라디오를 클릭하고 시/분 select를 설정하는 UI 흐름 검증.
+    - dry_run=True이므로 "발행하기" 버튼은 눌리지 않음.
+      → 발행 팝오버가 열린 채로 유지됨. 수동으로 닫거나 그냥 두면 됨.
+    - post_images fixture 불필요.
+    """
+    from datetime import datetime, timedelta
+    from automator.options import KST
+
+    # 현재 시각 기준 2시간 뒤, 분을 10의 배수로 맞춰 UI 오차 없게 설정
+    now    = datetime.now(tz=KST)
+    target = now.replace(minute=(now.minute // 10) * 10, second=0, microsecond=0) \
+             + timedelta(hours=2)
+
+    job = (
+        NaverBlogJob
+        .for_account(account)
+        .with_title(TitleOption(
+            template="지역+과목+학습형태+솔트",
+            learning_type="과외",
+            include_suffix=True,
+        ))
+        .with_content(ContentOption(
+            layout=["Paragraph 1", "Paragraph 2"],
+            paragraph_prompt=(
+                "마포구 영어 과외를 홍보하는 블로그 글을 작성해주세요. "
+                "원어민 발음 교정과 영어 독해 향상을 핵심으로 작성해주세요."
+            ),
+        ))
+        .with_meta(MetaOption(
+            schedule_mode="fixed",
+            schedule_at=target,
+        ))
+        .with_setting(RunSetting())
+    )
+    assert job.run(editor) is True
+
+
+# ---------------------------------------------------------------------------
+# Scenario 8: 예약 발행 (random_window) — schedule_mode="random_window"
+# ---------------------------------------------------------------------------
+
+@pytest.mark.e2e
+@pytest.mark.slow
+def test_pipeline_scheduled_random_window(
+    editor: SmartEditorOne,
+    account: AccountOption,
+):
+    """
+    [Pipeline 8/8] 랜덤 윈도우 예약 발행 시나리오.
+
+    Options
+    -------
+    - MetaOption: schedule_mode="random_window", schedule_at=지금+3시간, jitter=30분
+                  → 실제 예약 시각은 [+2h30m, +3h30m] 범위 내 랜덤 결정.
+    - 스팸 탐지 우회 목적: 여러 계정이 동일 시각에 발행되는 패턴을 방지.
+    - dry_run=True이므로 실제 발행 없음.
+    - post_images fixture 불필요.
+    """
+    from datetime import datetime, timedelta
+    from automator.options import KST
+
+    center = datetime.now(tz=KST).replace(second=0, microsecond=0) \
+             + timedelta(hours=3)
+
+    job = (
+        NaverBlogJob
+        .for_account(account)
+        .with_title(TitleOption(
+            template="지역+학습형태+과목+솔트",
+            learning_type="과외",
+            include_suffix=True,
+        ))
+        .with_content(ContentOption(
+            layout=["Paragraph 1", "Paragraph 2"],
+            paragraph_prompt=(
+                "노원구 수학 과외를 홍보하는 블로그 글을 작성해주세요. "
+                "중등 수학 기초 다지기와 고등 수학 선행 학습을 강조해주세요."
+            ),
+        ))
+        .with_meta(MetaOption(
+            schedule_mode="random_window",
+            schedule_at=center,
+            schedule_jitter_minutes=30,
+        ))
         .with_setting(RunSetting())
     )
     assert job.run(editor) is True

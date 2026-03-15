@@ -31,14 +31,16 @@ from playwright.sync_api import Page
 
 from automator.editor import BlogEditor
 from automator.selector_loader import SelectorLoader
-from automator.browser_actions import (
+from automator.browser_actions import (  # noqa: E402 (after path setup)
     click_if_visible,
     click_polling,
     dismiss_polling,
     find_editor_frame,
     find_js_frame,
+    hover_if_visible,
     js_dispatch_click,
     locator_dispatch_click,
+    select_option_by_value,
     wait_until_attached,
 )
 
@@ -251,9 +253,8 @@ class SmartEditorOne(BlogEditor):
 
         Args:
             schedule_at: KST-aware datetime for reserved publish, or None for
-                         immediate publish. When set, the implementation must
-                         interact with Naver's reservation UI before confirming.
-                         (reservation UI interaction is a stub — not yet implemented)
+                         immediate publish. When set, clicks the "예약" radio
+                         and sets hour/minute before confirming.
         """
         if self._dry_run:
             label = schedule_at.isoformat() if schedule_at else "immediate"
@@ -263,21 +264,71 @@ class SmartEditorOne(BlogEditor):
             )
             return
 
-        if schedule_at is not None:
-            # TODO: interact with Naver reservation UI to set schedule_at
-            # (stub — falls through to immediate publish for now)
-            print(
-                f"[SmartEditorOne] WARN — reservation UI not yet implemented "
-                f"(schedule_at={schedule_at.isoformat()}). Publishing immediately.",
-                file=sys.stderr,
-            )
-
         self._click_publish_trigger()
+
+        if schedule_at is not None:
+            self._set_scheduled_publish(schedule_at)
+
         self._click_publish_confirm()
 
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _round_minute_to_10(minute: int) -> str:
+        """
+        Floor ``minute`` to the nearest multiple of 10 and return as
+        a zero-padded 2-character string.
+
+        Naver's reservation UI exposes minute values only in steps of 10
+        (00, 10, 20, 30, 40, 50).  We always floor (never ceil) so that
+        the scheduled time never overshoots the caller's intent.
+
+        Examples:
+            0  → "00"
+            9  → "00"
+            15 → "10"
+            37 → "30"
+            55 → "50"
+            59 → "50"
+        """
+        return f"{(minute // 10) * 10:02d}"
+
+    def _set_scheduled_publish(self, schedule_at: datetime) -> None:
+        """
+        Interact with Naver's reservation UI inside the publish popover.
+
+        Sequence
+        --------
+        1. Click the "예약" radio label  (publish_scheduled)
+        2. Select hour value             (publish_scheduled_hour)
+        3. Select minute value           (publish_scheduled_min, floored to 10)
+
+        The publish popover is rendered at page level (outside the editor
+        iframe), so both page and frame contexts are tried for each locator,
+        mirroring the pattern used by _click_publish_trigger().
+
+        Args:
+            schedule_at: KST-aware datetime whose hour/minute are used.
+        """
+        sel        = self._sel()
+        hour_str   = str(schedule_at.hour)
+        minute_str = self._round_minute_to_10(schedule_at.minute)
+
+        for ctx in (self._page, self._frame()):
+            # Step 1: select "예약" radio
+            click_if_visible(sel.locator(ctx, "publish_scheduled"))
+
+            # Step 2: set hour
+            select_option_by_value(
+                sel.locator(ctx, "publish_scheduled_hour"), hour_str
+            )
+
+            # Step 3: set minute (floored to nearest 10)
+            select_option_by_value(
+                sel.locator(ctx, "publish_scheduled_min"), minute_str
+            )
 
     def _sel(self) -> SelectorLoader:
         return SelectorLoader.load(_EDITOR_JSON)

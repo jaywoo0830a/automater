@@ -313,3 +313,141 @@ def test_wait_for_editor_ready_checks_all_overlays_per_cycle(mock_page):
 
     # 첫 사이클에서 2개 오버레이 모두 체크됨 (short-circuit 없음)
     assert call_count[0] >= 2, "both overlays must be checked in the same cycle"
+
+
+# ===========================================================================
+# 9. publish() — schedule_at propagation into Naver reservation UI
+# ===========================================================================
+
+from datetime import datetime, timedelta, timezone
+from automator.options import KST
+
+
+def _make_schedule_page() -> MagicMock:
+    """
+    _make_page()에 select_option 지원을 추가한 버전.
+    publish_scheduled / publish_scheduled_hour / publish_scheduled_min
+    locator 모두 동일한 mock locator를 반환한다.
+    """
+    page = _make_page()
+    loc  = _make_locator()
+    page.locator       = MagicMock(return_value=loc)
+    page.get_by_role   = MagicMock(return_value=loc)
+    page.get_by_label  = MagicMock(return_value=loc)
+    frame = page.frame_locator.return_value.first
+    frame.locator      = MagicMock(return_value=loc)
+    frame.get_by_role  = MagicMock(return_value=loc)
+    frame.get_by_label = MagicMock(return_value=loc)
+    return page, loc
+
+
+@pytest.mark.unit
+def test_round_minute_to_10_floors_to_nearest_ten():
+    """_round_minute_to_10 is a floor-to-10 operation."""
+    from automator.smart_editor import SmartEditorOne
+    r = SmartEditorOne._round_minute_to_10
+    assert r(0)  == "00"
+    assert r(9)  == "00"
+    assert r(10) == "10"
+    assert r(15) == "10"
+    assert r(37) == "30"
+    assert r(40) == "40"
+    assert r(55) == "50"
+    assert r(59) == "50"
+
+
+@pytest.mark.unit
+def test_publish_dry_run_with_schedule_at_does_not_click(mock_page):
+    """dry_run=True이면 schedule_at이 있어도 클릭 없이 종료한다."""
+    target = datetime.now(tz=KST) + timedelta(hours=2)
+    SmartEditorOne(mock_page, WRITE_URL, dry_run=True).publish(schedule_at=target)
+    mock_page.get_by_role.return_value.click.assert_not_called()
+    mock_page.locator.return_value.click.assert_not_called()
+
+
+@pytest.mark.unit
+def test_publish_with_schedule_at_calls_set_scheduled(mock_page):
+    """
+    schedule_at이 주어지면 publish()가 _set_scheduled_publish()를 호출해야 한다.
+    """
+    target = datetime.now(tz=KST) + timedelta(hours=2)
+    editor = SmartEditorOne(mock_page, WRITE_URL, dry_run=False)
+    called = []
+    editor._set_scheduled_publish = lambda dt: called.append(dt)
+    editor.publish(schedule_at=target)
+    assert called == [target], "_set_scheduled_publish must be called with schedule_at"
+
+
+@pytest.mark.unit
+def test_publish_without_schedule_at_skips_set_scheduled(mock_page):
+    """
+    schedule_at=None이면 _set_scheduled_publish()를 호출하지 않는다.
+    """
+    editor = SmartEditorOne(mock_page, WRITE_URL, dry_run=False)
+    called = []
+    editor._set_scheduled_publish = lambda dt: called.append(dt)
+    editor.publish(schedule_at=None)
+    assert called == [], "_set_scheduled_publish must NOT be called for immediate publish"
+
+
+@pytest.mark.unit
+def test_set_scheduled_publish_selects_hour_and_minute(mock_page):
+    """
+    _set_scheduled_publish()가 예약 라디오 클릭 → 시 선택 → 분 선택을 수행한다.
+    select_option이 hour와 rounded minute으로 호출됐는지 검증한다.
+    """
+    # target: 16시 37분 → hour="16", minute="30" (floor)
+    target = datetime(2026, 3, 15, 16, 37, tzinfo=KST)
+    editor = SmartEditorOne(mock_page, WRITE_URL, dry_run=False)
+
+    hour_calls   = []
+    minute_calls = []
+
+    def fake_select_hour(locator, value, timeout_ms=5_000):
+        hour_calls.append(value)
+        return True
+
+    def fake_select_minute(locator, value, timeout_ms=5_000):
+        minute_calls.append(value)
+        return True
+
+    with patch("automator.smart_editor.click_if_visible",   return_value=True), \
+         patch("automator.smart_editor.select_option_by_value",
+               side_effect=[True, True, True]):
+        # Patch select directly on the module to capture arguments
+        import automator.smart_editor as sm_mod
+        original = sm_mod.select_option_by_value
+        calls = []
+        def capturing_select(locator, value, timeout_ms=5_000):
+            calls.append(value)
+            return True
+        sm_mod.select_option_by_value = capturing_select
+        try:
+            editor._set_scheduled_publish(target)
+        finally:
+            sm_mod.select_option_by_value = original
+
+    assert "16" in calls,  f"hour '16' must be selected, got {calls}"
+    assert "30" in calls,  f"minute '30' must be selected (floor of 37), got {calls}"
+
+
+@pytest.mark.unit
+def test_set_scheduled_publish_rounds_minute_55_to_50(mock_page):
+    """55분은 50으로 내림된다 (분 드롭다운은 10분 단위)."""
+    target = datetime(2026, 3, 15, 9, 55, tzinfo=KST)
+    editor = SmartEditorOne(mock_page, WRITE_URL, dry_run=False)
+
+    import automator.smart_editor as sm_mod
+    calls = []
+    original = sm_mod.select_option_by_value
+    def capturing_select(locator, value, timeout_ms=5_000):
+        calls.append(value)
+        return True
+    sm_mod.select_option_by_value = capturing_select
+    try:
+        with patch("automator.smart_editor.click_if_visible", return_value=True):
+            editor._set_scheduled_publish(target)
+    finally:
+        sm_mod.select_option_by_value = original
+
+    assert "50" in calls, f"minute '50' must be selected (floor of 55), got {calls}"
