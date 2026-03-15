@@ -394,10 +394,4 @@ def test_css_missing_key_raises(login_json):
         SelectorLoader.load(login_json).css("nonexistent")
 
 
-@pytest.mark.unit
-def test_real_editor_json_rep_btn_has_css(mock_frame):
-    """editor_image_rep must have a CSS locator (used in JS evaluate)."""
-    loader = SelectorLoader.load("selectors/naver/editor.json")
-    assert loader.css("editor_image_rep") is not None, (
-        "editor_image_rep needs a css locator for JS dispatchEvent"
-    )
+

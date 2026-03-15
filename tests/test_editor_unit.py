@@ -179,17 +179,22 @@ def test_set_rep_image_raises_for_negative_index(editor):
 
 
 @pytest.mark.unit
-def test_set_rep_image_calls_js_evaluate(mock_page):
-    mock_page.frames = [mock_page.main_frame]
-    mock_page.main_frame.evaluate = MagicMock(return_value="selected")
+def test_set_rep_image_hovers_before_click(mock_page):
+    """set_representative_image는 hover 후 locator.evaluate로 클릭한다."""
+    frame = mock_page.frame_locator.return_value.first
+    loc   = frame.locator.return_value
+    loc.nth.return_value.evaluate = MagicMock(return_value="selected")
     SmartEditorOne(mock_page, WRITE_URL).set_representative_image(0)
-    assert mock_page.main_frame.evaluate.called
+    # image_block.nth(0).hover() 가 호출됐는지 확인
+    loc.nth.return_value.hover.assert_called()
 
 
 @pytest.mark.unit
-def test_set_rep_image_raises_when_js_returns_not_selected(mock_page):
-    mock_page.frames = [mock_page.main_frame]
-    mock_page.main_frame.evaluate = MagicMock(return_value="not-selected")
+def test_set_rep_image_raises_when_locator_evaluate_returns_not_selected(mock_page):
+    """locator_dispatch_click이 'not-selected' 반환 시 RuntimeError."""
+    frame = mock_page.frame_locator.return_value.first
+    loc   = frame.locator.return_value
+    loc.nth.return_value.evaluate = MagicMock(return_value="not-selected")
     with pytest.raises(RuntimeError, match="failed"):
         SmartEditorOne(mock_page, WRITE_URL).set_representative_image(0)
 
