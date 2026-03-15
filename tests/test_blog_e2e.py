@@ -108,6 +108,22 @@ def editor(page: Page, account: AccountOption) -> SmartEditorOne:
     return SmartEditorOne(page, account.write_url)
 
 
+@pytest.fixture(scope="session")
+def post_images() -> tuple:
+    """
+    .env의 TEST_PREVIEW_1~3, TEST_THUMBNAIL_1 경로를 반환.
+    미설정 또는 파일 없으면 테스트를 skip한다.
+    """
+    paths = (TEST_PREVIEW_1, TEST_PREVIEW_2, TEST_PREVIEW_3, TEST_THUMBNAIL_1)
+    missing = [p for p in paths if not p or not os.path.exists(p)]
+    if missing:
+        pytest.skip(
+            f"test_full_post_sequence requires TEST_PREVIEW_1~3 and "
+            f"TEST_THUMBNAIL_1 in .env. Missing: {missing}"
+        )
+    return paths
+
+
 # ---------------------------------------------------------------------------
 # E2E: Editor loads
 # ---------------------------------------------------------------------------

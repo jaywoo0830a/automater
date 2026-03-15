@@ -264,10 +264,11 @@ def test_wait_for_editor_ready_resets_streak_on_click(mock_page):
     loc.is_visible = MagicMock(return_value=True)
 
     click_log = []
-    results   = [True, True] + [False] * 20
-    idx       = [0]
+    # 처음 4번 클릭(2 오버레이 × 2 사이클), 이후 clean
+    results = [True, True, True, True] + [False] * 20
+    idx     = [0]
 
-    def fake_click(locator, timeout_ms=3_000):
+    def fake_click(locator, timeout_ms=300):
         r = results[min(idx[0], len(results) - 1)]
         idx[0] += 1
         click_log.append(r)
@@ -279,8 +280,36 @@ def test_wait_for_editor_ready_resets_streak_on_click(mock_page):
             mock_time.sleep     = MagicMock()
             SmartEditorOne(mock_page, WRITE_URL)._wait_for_editor_ready(
                 frame, MagicMock(),
-                timeout_ms=20_000, stable_streak=3, probe_ms=400,
+                timeout_ms=20_000, stable_streak=3, probe_ms=300,
             )
 
-    assert any(click_log),       "overlay click must have occurred"
-    assert len(click_log) > 2,   "probing must continue after streak reset"
+    assert any(click_log), "overlay click must have occurred"
+    assert len(click_log) > 4, "probing must continue after streak reset"
+
+
+@pytest.mark.unit
+def test_wait_for_editor_ready_checks_all_overlays_per_cycle(mock_page):
+    """한 사이클에서 모든 오버레이를 확인한다 (any() 단락 없음)."""
+    frame = mock_page.frame_locator.return_value.first
+    loc   = frame.locator.return_value
+    loc.first      = loc
+    loc.is_visible = MagicMock(return_value=True)
+
+    call_count = [0]
+
+    def fake_click(locator, timeout_ms=300):
+        call_count[0] += 1
+        # 처음 2번만 True(한 사이클 내 두 오버레이), 이후 clean
+        return call_count[0] <= 2
+
+    with patch("automator.smart_editor.click_if_visible", fake_click):
+        with patch("automator.smart_editor.time") as mock_time:
+            mock_time.monotonic = MagicMock(return_value=0)
+            mock_time.sleep     = MagicMock()
+            SmartEditorOne(mock_page, WRITE_URL)._wait_for_editor_ready(
+                frame, MagicMock(),
+                timeout_ms=20_000, stable_streak=3, probe_ms=300,
+            )
+
+    # 첫 사이클에서 2개 오버레이 모두 체크됨 (short-circuit 없음)
+    assert call_count[0] >= 2, "both overlays must be checked in the same cycle"

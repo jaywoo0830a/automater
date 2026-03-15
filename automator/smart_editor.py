@@ -95,25 +95,35 @@ class SmartEditorOne(BlogEditor):
         sel,
         timeout_ms: int    = 20_000,
         stable_streak: int = 3,
-        probe_ms: int      = 400,
+        probe_ms: int      = 300,
     ) -> None:
         """
         Dismiss overlays and wait until the editor is stable.
 
-        Polls overlays every probe_ms ms. Declares ready only after
-        stable_streak consecutive clean probes (default 3 × 400ms = 1.2s).
-        Any click resets the streak to 0.
+        Per cycle: check ALL overlays (not any-short-circuit), click each
+        that is visible. Streak increments only when no overlay was clicked
+        across the entire cycle. Declares ready after stable_streak clean
+        cycles (default 3 × 300ms = 0.9s gap with no overlay).
+
+        Why not any(): any() stops at first True — if draft is clicked, help
+        is never checked in the same cycle, so both overlays appearing
+        together keep resetting the streak indefinitely.
         """
         _OVERLAYS = ["overlay_draft_cancel", "overlay_help_close"]
         deadline  = time.monotonic() + timeout_ms / 1_000
         streak    = 0
 
         while time.monotonic() < deadline:
-            clicked = any(
+            # Check ALL overlays this cycle — never short-circuit
+            clicked_this_cycle = [
                 click_if_visible(sel.locator(frame, k).first, timeout_ms=probe_ms)
                 for k in _OVERLAYS
-            )
-            streak = 0 if clicked else streak + 1
+            ]
+
+            if any(clicked_this_cycle):
+                streak = 0
+            else:
+                streak += 1
 
             if streak >= stable_streak:
                 try:
@@ -122,9 +132,9 @@ class SmartEditorOne(BlogEditor):
                 except Exception:
                     streak = 0
 
-            time.sleep(probe_ms / 1_000)
+            time.sleep(0.1)
 
-        # Deadline exceeded — last attempt and continue
+        # Deadline exceeded — one last sweep and continue
         for k in _OVERLAYS:
             click_if_visible(sel.locator(frame, k).first, timeout_ms=1_000)
 
