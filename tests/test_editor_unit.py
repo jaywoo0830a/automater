@@ -3,17 +3,12 @@ tests/test_editor_unit.py
 --------------------------
 Layer 3: SmartEditorOne (Editor Shell) 테스트
 
-SmartEditorOne이 BlogEditor ABC를 올바르게 구현하는지 검증한다.
-DOM 조작 함수(browser_actions)는 test_browser_actions.py에서 별도 검증한다.
-
-여기서 검증하는 것:
-  - 각 공개 메서드가 올바른 인자를 keyboard/file_chooser에 전달한다.
-  - 경계 조건(빈 문자열, 음수 index, 로그인 리다이렉트)에서 올바르게 동작한다.
-  - dry_run 플래그가 publish()를 막는다.
+SmartEditorOne이 BlogEditor ABC를 올바르게 구현하는지,
+그리고 _wait_for_editor_ready의 stability window가 올바르게 동작하는지 검증한다.
 """
 
 import pytest
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock, call, patch
 
 from automator.smart_editor import SmartEditorOne
 
@@ -23,7 +18,7 @@ from automator.smart_editor import SmartEditorOne
 # ===========================================================================
 
 def _make_locator() -> MagicMock:
-    loc      = MagicMock()
+    loc       = MagicMock()
     loc.first = loc
     loc.last  = loc
     loc.nth   = MagicMock(return_value=loc)
@@ -31,7 +26,6 @@ def _make_locator() -> MagicMock:
 
 
 def _make_page() -> MagicMock:
-    """Mock Page where frame_locator('#mainFrame') succeeds."""
     page  = MagicMock()
     frame = MagicMock()
     loc   = _make_locator()
@@ -93,6 +87,20 @@ def test_open_raises_on_login_keyword_in_url(mock_page):
     mock_page.url = "https://nid.naver.com/login/form"
     with pytest.raises(RuntimeError):
         SmartEditorOne(mock_page, WRITE_URL).open()
+
+
+@pytest.mark.unit
+def test_open_calls_wait_for_editor_ready(mock_page):
+    """open()은 _wait_for_editor_ready를 반드시 호출한다."""
+    calls = []
+
+    def fake(self, frame, sel, **kwargs):
+        calls.append(True)
+
+    with patch.object(SmartEditorOne, "_wait_for_editor_ready", fake):
+        SmartEditorOne(mock_page, WRITE_URL).open()
+
+    assert calls, "_wait_for_editor_ready must be called"
 
 
 # ===========================================================================
@@ -180,12 +188,11 @@ def test_set_rep_image_raises_for_negative_index(editor):
 
 @pytest.mark.unit
 def test_set_rep_image_hovers_before_click(mock_page):
-    """set_representative_image는 hover 후 locator.evaluate로 클릭한다."""
+    """set_representative_image는 block을 hover한 후 locator.evaluate로 클릭한다."""
     frame = mock_page.frame_locator.return_value.first
     loc   = frame.locator.return_value
     loc.nth.return_value.evaluate = MagicMock(return_value="selected")
     SmartEditorOne(mock_page, WRITE_URL).set_representative_image(0)
-    # image_block.nth(0).hover() 가 호출됐는지 확인
     loc.nth.return_value.hover.assert_called()
 
 
@@ -226,22 +233,54 @@ def test_publish_non_dry_run_attempts_click(mock_page):
 
 
 # ===========================================================================
-# open() — overlay dismissal
-# ===========================================================================
+# 8. _wait_for_editor_ready() — stability window
 # ===========================================================================
 
 @pytest.mark.unit
-def test_open_uses_dismiss_parallel_for_overlays(mock_page):
-    """open()은 모든 오버레이를 dismiss_parallel로 동시에 처리한다."""
-    from unittest.mock import patch
+def test_wait_for_editor_ready_returns_after_clean_streak(mock_page):
+    """오버레이가 없는 사이클이 stable_streak번 연속되면 리턴한다."""
+    frame = mock_page.frame_locator.return_value.first
+    loc   = frame.locator.return_value
+    loc.first      = loc
+    loc.is_visible = MagicMock(return_value=True)
 
-    calls = []
-    def fake_dismiss_parallel(locators, timeout_ms=8_000):
-        calls.append(len(locators))
-        return [False] * len(locators)
+    with patch("automator.smart_editor.click_if_visible", return_value=False):
+        with patch("automator.smart_editor.time") as mock_time:
+            mock_time.monotonic = MagicMock(return_value=0)
+            mock_time.sleep     = MagicMock()
+            SmartEditorOne(mock_page, WRITE_URL)._wait_for_editor_ready(
+                frame, MagicMock(),
+                timeout_ms=20_000, stable_streak=3, probe_ms=400,
+            )
+    # 예외 없이 리턴했으면 성공
 
-    with patch("automator.smart_editor.dismiss_parallel", fake_dismiss_parallel):
-        SmartEditorOne(mock_page, WRITE_URL).open()
 
-    assert calls, "dismiss_parallel must be called at least once"
-    assert max(calls) >= 2, "at least 2 locators must be passed to dismiss_parallel"
+@pytest.mark.unit
+def test_wait_for_editor_ready_resets_streak_on_click(mock_page):
+    """오버레이를 클릭한 사이클에서는 streak이 0으로 리셋된다."""
+    frame = mock_page.frame_locator.return_value.first
+    loc   = frame.locator.return_value
+    loc.first      = loc
+    loc.is_visible = MagicMock(return_value=True)
+
+    click_log = []
+    results   = [True, True] + [False] * 20
+    idx       = [0]
+
+    def fake_click(locator, timeout_ms=3_000):
+        r = results[min(idx[0], len(results) - 1)]
+        idx[0] += 1
+        click_log.append(r)
+        return r
+
+    with patch("automator.smart_editor.click_if_visible", fake_click):
+        with patch("automator.smart_editor.time") as mock_time:
+            mock_time.monotonic = MagicMock(return_value=0)
+            mock_time.sleep     = MagicMock()
+            SmartEditorOne(mock_page, WRITE_URL)._wait_for_editor_ready(
+                frame, MagicMock(),
+                timeout_ms=20_000, stable_streak=3, probe_ms=400,
+            )
+
+    assert any(click_log),       "overlay click must have occurred"
+    assert len(click_log) > 2,   "probing must continue after streak reset"

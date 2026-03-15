@@ -9,16 +9,16 @@
     "TODO entries use CSS stubs — run capture_selectors.py --merge to update."
   ],
   "overlay_draft_cancel": {
-    "description": "초안 복구 팝업 — 취소 버튼",
+    "description": "초안 복구 팝업 — 취소 버튼 (CSS 1순위: role '취소'가 중복 매칭됨)",
     "locators": [
+      {
+        "type": "css",
+        "value": "button.se-popup-button.se-popup-button-cancel"
+      },
       {
         "type": "role",
         "value": "button",
         "name": "취소"
-      },
-      {
-        "type": "css",
-        "value": "button.se-popup-button.se-popup-button-cancel"
       }
     ]
   },
@@ -131,13 +131,13 @@
     "description": "에디터 — 대표이미지 설정 버튼 (JS dispatchEvent 전용)",
     "locators": [
       {
+        "type": "css",
+        "value": "button.se-set-rep-image-button"
+      },
+      {
         "type": "role",
         "value": "button",
         "name": "대표"
-      },
-      {
-        "type": "css",
-        "value": "button.se-set-rep-image-button"
       }
     ]
   },

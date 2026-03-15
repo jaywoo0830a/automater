@@ -23,6 +23,7 @@ Selector key naming rule: {context}_{element}_{variant?}
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 
 from playwright.sync_api import Page
@@ -33,7 +34,6 @@ from automator.browser_actions import (
     click_if_visible,
     click_polling,
     dismiss_polling,
-    dismiss_parallel,
     find_editor_frame,
     find_js_frame,
     js_dispatch_click,
@@ -87,24 +87,46 @@ class SmartEditorOne(BlogEditor):
         frame = self._frame()
         frame.locator(_EDITOR_BODY).wait_for(state="visible", timeout=30_000)
 
-        self._dismiss_all_overlays(frame, self._sel())
+        self._wait_for_editor_ready(frame, self._sel())
 
-    def _dismiss_all_overlays(self, frame, sel) -> None:
+    def _wait_for_editor_ready(
+        self,
+        frame,
+        sel,
+        timeout_ms: int    = 20_000,
+        stable_streak: int = 3,
+        probe_ms: int      = 400,
+    ) -> None:
         """
-        Dismiss all known blocking overlays simultaneously.
+        Dismiss overlays and wait until the editor is stable.
 
-        All overlays are treated as unpredictably timed. A single 8-second
-        window is shared — each is clicked the moment it becomes visible,
-        regardless of order. Total wait is 8s, not 8s × N.
+        Polls overlays every probe_ms ms. Declares ready only after
+        stable_streak consecutive clean probes (default 3 × 400ms = 1.2s).
+        Any click resets the streak to 0.
         """
-        dismiss_parallel(
-            locators = [
-                sel.locator(frame, "overlay_draft_cancel").first,
-                sel.locator(frame, "overlay_help_close").first,
-                sel.locator(frame, "library_close").first,
-            ],
-            timeout_ms = 8_000,
-        )
+        _OVERLAYS = ["overlay_draft_cancel", "overlay_help_close"]
+        deadline  = time.monotonic() + timeout_ms / 1_000
+        streak    = 0
+
+        while time.monotonic() < deadline:
+            clicked = any(
+                click_if_visible(sel.locator(frame, k).first, timeout_ms=probe_ms)
+                for k in _OVERLAYS
+            )
+            streak = 0 if clicked else streak + 1
+
+            if streak >= stable_streak:
+                try:
+                    if sel.locator(frame, "editor_title").is_visible():
+                        return
+                except Exception:
+                    streak = 0
+
+            time.sleep(probe_ms / 1_000)
+
+        # Deadline exceeded — last attempt and continue
+        for k in _OVERLAYS:
+            click_if_visible(sel.locator(frame, k).first, timeout_ms=1_000)
 
     def write_title(self, title: str) -> None:
         """Click title placeholder and type title."""
