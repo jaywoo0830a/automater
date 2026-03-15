@@ -56,6 +56,11 @@ from automator.options import (
     RunSetting,
 )
 from automator.editor import BlogEditor, PostContent, PostStep
+from automator.browser_actions import (
+    click_if_visible, click_polling,
+    dismiss, dismiss_polling, dismiss_parallel,
+    js_dispatch_click, find_editor_frame, find_js_frame,
+)
 from automator.smart_editor import SmartEditorOne
 from automator.job import NaverBlogJob
 

@@ -4,12 +4,13 @@ automator/blog.py
 Naver Blog automation logic using Playwright.
 
 Selector strings are no longer hardcoded here.
-All locators are resolved at runtime from superselect-format JSON files:
+All locators are resolved at runtime from automator-format JSON files:
   - selectors/naver/login.json   (elements outside the editor iframe)
   - selectors/naver/editor.json  (elements inside #mainFrame)
 
-To update selectors when the Naver DOM changes, re-run the SuperSelect
-extension and replace the JSON files — no Python code needs to change.
+To update selectors when the Naver DOM changes, edit the JSON files only —
+no Python code needs to change.
+Run scripts/capture_selectors.py to verify selectors are still live.
 """
 
 from __future__ import annotations

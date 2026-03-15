@@ -34,5 +34,3 @@ playwright-report/
 # ── OS ───────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
-# Test images — keep out of version control
-images/
