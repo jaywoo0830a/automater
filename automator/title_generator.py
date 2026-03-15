@@ -74,10 +74,29 @@ def load_subjects(path: str | Path = "") -> list[str]:
     return _load_json(p)["subjects"]
 
 
-def load_salts(path: str | Path = "") -> list[str]:
-    """Load salt strings from a salts.json file."""
-    p = Path(path) if path else _DEFAULT_SALT_PRESET
-    return _load_json(p)["salts"]
+def load_salts(path: str | Path = "") -> dict[str, list[str]]:
+    """
+    Load salt strings from a salts.json file.
+
+    Returns a dict with three keys:
+        "prefix" — salts that read naturally at the start of a title.
+                   e.g. "검증된 대치동 수학 과외"
+        "suffix" — salts that read naturally at the end of a title.
+                   e.g. "대치동 수학 과외 강력 추천"
+        "all"    — union of prefix and suffix (used when 솔트 is in the middle).
+
+    Raises:
+        KeyError: If the file is missing "prefix_salts" or "suffix_salts".
+    """
+    p      = Path(path) if path else _DEFAULT_SALT_PRESET
+    raw    = _load_json(p)
+    prefix = raw["prefix_salts"]
+    suffix = raw["suffix_salts"]
+    return {
+        "prefix": prefix,
+        "suffix": suffix,
+        "all":    list(dict.fromkeys(prefix + suffix)),  # order-preserving union
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -157,7 +176,11 @@ class TitleGenerator:
         self._rng      = rng or random.Random()
         self._regions  = load_regions(option.region_preset)
         self._subjects = load_subjects(option.subject_preset)
-        self._salts    = load_salts(option.salt_preset)
+
+        salt_preset      = load_salts(option.salt_preset)
+        self._prefix_salts = salt_preset["prefix"]
+        self._suffix_salts = salt_preset["suffix"]
+        self._all_salts    = salt_preset["all"]
 
     # ------------------------------------------------------------------
     # Public API
@@ -173,20 +196,46 @@ class TitleGenerator:
         Otherwise, pick one region, subject, and salt from presets and
         assemble them according to the template.
 
-        e.g. "대치동 영어 과외 강력 추천"
-             "강력 추천 대치동 영어 과외"  (솔트+지역+과목+학습형태)
+        Salt pool selection by template position
+        -----------------------------------------
+        솔트 is the first token  → prefix_salts
+            e.g. "솔트+지역+과목+학습형태" → "검증된 대치동 수학 과외"
+        솔트 is the last token   → suffix_salts
+            e.g. "지역+과목+학습형태+솔트" → "대치동 수학 과외 강력 추천"
+        솔트 is a middle token   → all_salts (prefix ∪ suffix)
+            e.g. "지역+솔트+과목+학습형태" → either pool
         """
         if self._opt.fixed_title:
             return self._opt.fixed_title
 
         region  = self._pick_region()
         subject = self._rng.choice(self._subjects)
-        salt    = self._rng.choice(self._salts)
+        salt    = self._rng.choice(self._pick_salt_pool())
         return self._assemble(region, subject, salt)
 
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    def _pick_salt_pool(self) -> list[str]:
+        """
+        Return the appropriate salt pool based on the position of 솔트
+        in the template.
+
+        Position rules:
+            index 0          → prefix_salts
+            last index       → suffix_salts
+            any other index  → all_salts (prefix ∪ suffix)
+        """
+        tokens    = [t.strip() for t in self._opt.template.split("+")]
+        salt_idx  = tokens.index("솔트")
+        last_idx  = len(tokens) - 1
+
+        if salt_idx == 0:
+            return self._prefix_salts
+        if salt_idx == last_idx:
+            return self._suffix_salts
+        return self._all_salts
 
     def _pick_region(self) -> str:
         """

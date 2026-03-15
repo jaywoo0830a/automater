@@ -231,23 +231,24 @@ class NaverBlogJob:
 
           "Image N"     → PostStep("image",     preview_images[N-1])
           "Thumbnail N" → PostStep("thumbnail", thumbnail_images[N-1])
-          "Paragraph N" → PostStep("paragraph", placeholder_text)
+          "Paragraph N" → PostStep("paragraph", stub or generated text)
 
         The editor executes steps in order, so the published post matches
         the layout exactly.
         """
         generated_title = TitleGenerator(title).generate()
 
-        # Generate paragraph texts — use Gemini if prompt is set, else placeholder
+        # Generate paragraph texts
+        # - paragraph_prompt 있음  → ParagraphGenerator (production=Gemini, dev/test=stub)
+        # - paragraph_prompt 없음  → ParagraphGenerator with empty prompt (stub 반환)
+        # stub은 ENV=dev|test에서 UDHR 텍스트를 반환하므로 하드코딩 플레이스홀더 불필요
         n_paragraphs = paragraph_count(content.layout)
-        if content.paragraph_prompt and n_paragraphs > 0:
-            texts = ParagraphGenerator(prompt=content.paragraph_prompt).generate(n_paragraphs)
+        if n_paragraphs > 0:
+            prompt = content.paragraph_prompt or ""
+            texts = ParagraphGenerator(prompt=prompt).generate(n_paragraphs)
             paragraphs = {i: texts[i - 1] for i in range(1, n_paragraphs + 1)}
         else:
-            paragraphs = {
-                i: f"(단락 {i} 생성 필요)"
-                for i in range(1, n_paragraphs + 1)
-            }
+            paragraphs = {}
 
         steps: list[PostStep] = []
         for alias in content.layout:
@@ -259,9 +260,10 @@ class NaverBlogJob:
             elif kind == "paragraph":
                 steps.append(PostStep("paragraph", paragraphs[n]))
 
-        # Empty layout — add a single placeholder paragraph so the post isn't blank
+        # Empty layout — generate one stub paragraph so the post isn't blank
         if not steps:
-            steps.append(PostStep("paragraph", "(본문 생성 필요)"))
+            stub_text = ParagraphGenerator(prompt="").generate(1)[0]
+            steps.append(PostStep("paragraph", stub_text))
 
         return PostContent(
             title=generated_title,

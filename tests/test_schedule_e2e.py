@@ -193,7 +193,7 @@ def test_hour_select_matches_schedule_at(editor: SmartEditorOne, page: Page):
     _set_scheduled_publish() 후 시간 select 값이 schedule_at.hour와 일치한다.
     """
     target = _future_rounded(hours=3)
-    expected_hour = str(target.hour)
+    expected_hour = f"{target.hour:02d}"
 
     _open_editor_and_publish_popover(editor)
     editor._set_scheduled_publish(target)
@@ -242,7 +242,7 @@ def test_full_schedule_state_via_publish(editor: SmartEditorOne, page: Page):
       4. 팝오버가 열린 채로 유지됨 (dry_run — confirm 미클릭)
     """
     target = _future_rounded(hours=2)
-    expected_hour   = str(target.hour)
+    expected_hour   = f"{target.hour:02d}"
     expected_minute = f"{(target.minute // 10) * 10:02d}"
 
     # publish() 전체 흐름 실행 (dry_run=True → confirm 스킵)
@@ -266,7 +266,7 @@ def test_schedule_via_job_fixed_mode(page: Page, account: AccountOption):
     dry_run=True이므로 실제 발행 없음.
     """
     target = _future_rounded(hours=2)
-    expected_hour   = str(target.hour)
+    expected_hour   = f"{target.hour:02d}"
     expected_minute = f"{(target.minute // 10) * 10:02d}"
 
     editor = SmartEditorOne(page, account.write_url, dry_run=True)
@@ -355,3 +355,4 @@ def test_schedule_via_job_random_window_mode(page: Page, account: AccountOption)
         f"resolved={resolved_dt.strftime('%H:%M')}이 "
         f"[{earliest_floored.strftime('%H:%M')}, {latest_ceiled.strftime('%H:%M')}] 범위 밖"
     )
+

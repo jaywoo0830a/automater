@@ -330,7 +330,7 @@ class SmartEditorOne(BlogEditor):
         Args:
             schedule_at: KST-aware datetime whose hour/minute are used.
         """
-        hour_str   = str(schedule_at.hour)
+        hour_str   = f"{schedule_at.hour:02d}"  # "00"–"23" (Naver select values are zero-padded)
         minute_str = self._round_minute_to_10(schedule_at.minute)
 
         # Real Frame object needed for evaluate() — FrameLocator doesn't support it.

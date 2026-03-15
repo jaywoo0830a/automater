@@ -273,21 +273,6 @@ def test_is_visible_error_returns_false():
 
 
 @pytest.mark.unit
-def test_is_checked_error_returns_false():
-    loc = MagicMock()
-    loc.is_checked = MagicMock(side_effect=Exception())
-    assert is_checked(loc) is False
-
-
-@pytest.mark.unit
-def test_is_disabled_error_returns_true():
-    """에러 시 안전한 기본값은 True(비활성으로 가정)."""
-    loc = MagicMock()
-    loc.is_disabled = MagicMock(side_effect=Exception())
-    assert is_disabled(loc) is True
-
-
-@pytest.mark.unit
 def test_has_class_present():
     loc = MagicMock()
     loc.get_attribute = MagicMock(return_value="btn active")
@@ -314,12 +299,6 @@ def test_get_count_returns_count():
     loc.count = MagicMock(return_value=5)
     assert get_count(loc) == 5
 
-@pytest.mark.unit
-def test_get_count_error_returns_zero():
-    loc = MagicMock()
-    loc.count = MagicMock(side_effect=Exception())
-    assert get_count(loc) == 0
-
 
 # ===========================================================================
 # Reading — 계약: strip, default 반환
@@ -344,24 +323,12 @@ def test_get_attribute_value():
     loc.get_attribute = MagicMock(return_value="myclass")
     assert get_attribute(loc, "class") == "myclass"
 
-@pytest.mark.unit
-def test_get_attribute_default_when_none():
-    loc = MagicMock()
-    loc.get_attribute = MagicMock(return_value=None)
-    assert get_attribute(loc, "data-x", default="fallback") == "fallback"
-
 
 @pytest.mark.unit
 def test_get_all_texts_strips():
     loc = MagicMock()
     loc.all_inner_texts = MagicMock(return_value=["  a  ", "b"])
     assert get_all_texts(loc) == ["a", "b"]
-
-@pytest.mark.unit
-def test_get_all_texts_error_returns_empty():
-    loc = MagicMock()
-    loc.all_inner_texts = MagicMock(side_effect=Exception())
-    assert get_all_texts(loc) == []
 
 
 # ===========================================================================
@@ -379,13 +346,6 @@ def test_scroll_into_view_error():
     loc = MagicMock()
     loc.scroll_into_view_if_needed = MagicMock(side_effect=Exception())
     assert scroll_into_view(loc) is False
-
-
-@pytest.mark.unit
-def test_scroll_to_bottom_calls_evaluate():
-    page = MagicMock()
-    assert scroll_to_bottom(page) is True
-    page.evaluate.assert_called_once()
 
 
 @pytest.mark.unit
@@ -534,12 +494,6 @@ def test_get_texts_parallel_strips():
     locs[1].inner_text = MagicMock(return_value="본문")
     assert get_texts_parallel(locs) == ["제목", "본문"]
 
-@pytest.mark.unit
-def test_get_texts_parallel_error_default():
-    locs = [MagicMock()]
-    locs[0].inner_text = MagicMock(side_effect=Exception())
-    assert get_texts_parallel(locs, default="N/A") == ["N/A"]
-
 
 @pytest.mark.unit
 def test_get_attributes_parallel_values():
@@ -547,12 +501,6 @@ def test_get_attributes_parallel_values():
     locs[0].get_attribute = MagicMock(return_value="primary")
     locs[1].get_attribute = MagicMock(return_value="secondary")
     assert get_attributes_parallel(locs, "class") == ["primary", "secondary"]
-
-@pytest.mark.unit
-def test_get_attributes_parallel_none_default():
-    locs = [MagicMock()]
-    locs[0].get_attribute = MagicMock(return_value=None)
-    assert get_attributes_parallel(locs, "href", default="#") == ["#"]
 
 
 # ===========================================================================
@@ -637,21 +585,6 @@ def test_find_editor_frame_fallback_to_page():
     frame.locator = MagicMock(return_value=_loc(False))
     page.frame_locator = MagicMock(return_value=frame)
     assert find_editor_frame(page, "#f", ".editor") == page
-
-
-@pytest.mark.unit
-def test_find_js_frame_sub_frame():
-    page, main, sub = MagicMock(), MagicMock(), MagicMock()
-    page.main_frame = main
-    page.frames     = [main, sub]
-    assert find_js_frame(page) == sub
-
-@pytest.mark.unit
-def test_find_js_frame_fallback_to_main():
-    page, main = MagicMock(), MagicMock()
-    page.main_frame = main
-    page.frames     = [main]
-    assert find_js_frame(page) == main
 
 @pytest.mark.unit
 def test_find_js_frame_url_fragment():

@@ -85,3 +85,42 @@ browser_settings = _load_browser_settings()
 
 # Backward-compatibility alias (old code imported `settings`)
 settings = browser_settings
+
+
+# ---------------------------------------------------------------------------
+# Application environment
+# ---------------------------------------------------------------------------
+
+from typing import Literal
+
+AppEnv = Literal["test", "dev", "production"]
+
+_VALID_ENVS: frozenset[str] = frozenset({"test", "dev", "production"})
+
+
+def get_app_env() -> AppEnv:
+    """
+    Return the current application environment from the ENV variable.
+
+    Defaults to "dev" when ENV is not set or unrecognised.
+
+    Values:
+        "test"       — CI / automated testing
+        "dev"        — local development
+        "production" — live deployment; real external API calls are made
+    """
+    raw = os.getenv("ENV", "dev").strip().lower()
+    if raw not in _VALID_ENVS:
+        import warnings
+        warnings.warn(
+            f"Unknown ENV value {raw!r}. Expected one of {sorted(_VALID_ENVS)}. "
+            f"Falling back to 'dev'.",
+            stacklevel=2,
+        )
+        return "dev"
+    return raw  # type: ignore[return-value]
+
+
+def is_production() -> bool:
+    """Return True only when ENV=production."""
+    return get_app_env() == "production"

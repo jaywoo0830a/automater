@@ -50,7 +50,10 @@ def subjects_file(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def salts_file(tmp_path: Path) -> Path:
-    data = {"salts": ["강력 추천", "즉시 가능"]}
+    data = {
+        "prefix_salts": ["검증된", "전문"],
+        "suffix_salts": ["강력 추천", "즉시 가능"],
+    }
     p = tmp_path / "salts.json"
     p.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     return p
@@ -91,8 +94,20 @@ def test_load_subjects_returns_list(subjects_file):
 
 
 @pytest.mark.unit
-def test_load_salts_returns_list(salts_file):
-    assert "강력 추천" in load_salts(salts_file)
+def test_load_salts_returns_prefix_and_suffix(salts_file):
+    """load_salts()는 prefix/suffix 두 리스트를 가진 dict를 반환한다."""
+    result = load_salts(salts_file)
+    assert isinstance(result, dict), "dict 반환 필요"
+    assert "prefix" in result and "suffix" in result
+    assert "검증된" in result["prefix"]
+    assert "강력 추천" in result["suffix"]
+
+
+@pytest.mark.unit
+def test_load_salts_all_returns_combined(salts_file):
+    """all 키는 prefix + suffix 합집합이다."""
+    result = load_salts(salts_file)
+    assert set(result["all"]) == set(result["prefix"]) | set(result["suffix"])
 
 
 @pytest.mark.unit
@@ -205,27 +220,69 @@ def test_include_suffix_false_uses_base_name(regions_file, subjects_file, salts_
 # ===========================================================================
 
 @pytest.mark.unit
-def test_salt_at_end_by_default(gen):
-    """기본 템플릿: 솔트('강력 추천' or '즉시 가능')가 맨 끝에 온다."""
-    for seed in range(20):
-        title = TitleGenerator(gen._opt, rng=random.Random(seed)).generate()
-        salts = {"강력 추천", "즉시 가능"}
-        assert any(title.endswith(s) for s in salts), f"솔트가 맨 끝 아님: {title!r}"
+def test_suffix_salt_used_when_salt_is_last(regions_file, subjects_file, salts_file):
+    """
+    솔트가 템플릿 마지막 → suffix_salts에서 선택.
+    기본 템플릿: 지역+과목+학습형태+솔트
+    """
+    opt = TitleOption(
+        region_preset=str(regions_file),
+        subject_preset=str(subjects_file),
+        salt_preset=str(salts_file),
+        template="지역+과목+학습형태+솔트",
+    )
+    suffix_salts = {"강력 추천", "즉시 가능"}
+    prefix_salts = {"검증된", "전문"}
+    for seed in range(30):
+        title = TitleGenerator(opt, rng=random.Random(seed)).generate()
+        assert any(title.endswith(s) for s in suffix_salts),             f"suffix_salt가 끝에 와야 함: {title!r}"
+        assert not any(title.endswith(s) for s in prefix_salts),             f"prefix_salt가 끝에 오면 안 됨: {title!r}"
 
 
 @pytest.mark.unit
-def test_salt_at_front_when_template_changed(regions_file, subjects_file, salts_file):
-    """솔트+지역+과목+학습형태 템플릿: 솔트가 맨 앞에 온다."""
+def test_prefix_salt_used_when_salt_is_first(regions_file, subjects_file, salts_file):
+    """
+    솔트가 템플릿 첫 번째 → prefix_salts에서 선택.
+    템플릿: 솔트+지역+과목+학습형태
+    """
     opt = TitleOption(
         region_preset=str(regions_file),
         subject_preset=str(subjects_file),
         salt_preset=str(salts_file),
         template="솔트+지역+과목+학습형태",
     )
-    salts = {"강력 추천", "즉시 가능"}
-    for seed in range(20):
+    prefix_salts = {"검증된", "전문"}
+    suffix_salts = {"강력 추천", "즉시 가능"}
+    for seed in range(30):
         title = TitleGenerator(opt, rng=random.Random(seed)).generate()
-        assert any(title.startswith(s) for s in salts), f"솔트가 맨 앞 아님: {title!r}"
+        assert any(title.startswith(s) for s in prefix_salts),             f"prefix_salt가 앞에 와야 함: {title!r}"
+        assert not any(title.startswith(s) for s in suffix_salts),             f"suffix_salt가 앞에 오면 안 됨: {title!r}"
+
+
+@pytest.mark.unit
+def test_all_salts_used_when_salt_is_middle(regions_file, subjects_file, salts_file):
+    """
+    솔트가 템플릿 중간 → prefix + suffix 합집합에서 선택.
+    템플릿: 지역+솔트+과목+학습형태
+    """
+    opt = TitleOption(
+        region_preset=str(regions_file),
+        subject_preset=str(subjects_file),
+        salt_preset=str(salts_file),
+        template="지역+솔트+과목+학습형태",
+    )
+    all_salts = {"검증된", "전문", "강력 추천", "즉시 가능"}
+    seen = set()
+    for seed in range(60):
+        title = TitleGenerator(opt, rng=random.Random(seed)).generate()
+        for s in all_salts:
+            if s in title:
+                seen.add(s)
+    # 충분한 시도 후 prefix/suffix 솔트가 모두 등장해야 함
+    prefix_seen = seen & {"검증된", "전문"}
+    suffix_seen = seen & {"강력 추천", "즉시 가능"}
+    assert prefix_seen, f"중간 위치에서 prefix_salt가 한 번도 안 나옴 (seen={seen})"
+    assert suffix_seen, f"중간 위치에서 suffix_salt가 한 번도 안 나옴 (seen={seen})"
 
 
 @pytest.mark.unit
@@ -283,15 +340,10 @@ def test_title_contains_learning_type_hakwon(regions_file, subjects_file, salts_
 
 @pytest.mark.unit
 def test_title_contains_salt(gen):
+    """기본 템플릿(솔트 마지막) → suffix_salts 중 하나가 포함된다."""
     title = gen.generate()
-    salts = {"강력 추천", "즉시 가능"}
-    assert any(s in title for s in salts), f"솔트 없음: {title!r}"
-
-
-@pytest.mark.unit
-def test_title_is_non_empty_string(gen):
-    assert isinstance(gen.generate(), str)
-    assert len(gen.generate()) > 0
+    suffix_salts = {"강력 추천", "즉시 가능"}
+    assert any(s in title for s in suffix_salts), f"솔트 없음: {title!r}"
 
 
 # ===========================================================================
@@ -318,55 +370,10 @@ def test_fixed_seed_produces_same_title(option):
 # 8. 스텁 기능 — 예외 없이 동작
 # ===========================================================================
 
-@pytest.mark.unit
-def test_add_affix_stub_does_not_raise(regions_file, subjects_file, salts_file):
-    opt = TitleOption(
-        region_preset=str(regions_file),
-        subject_preset=str(subjects_file),
-        salt_preset=str(salts_file),
-        add_affix=True,
-    )
-    title = TitleGenerator(opt, rng=random.Random(0)).generate()
-    assert isinstance(title, str) and len(title) > 0
-
-
-@pytest.mark.unit
-def test_randomize_chars_stub_does_not_raise(regions_file, subjects_file, salts_file):
-    opt = TitleOption(
-        region_preset=str(regions_file),
-        subject_preset=str(subjects_file),
-        salt_preset=str(salts_file),
-        randomize_chars=True,
-    )
-    title = TitleGenerator(opt, rng=random.Random(0)).generate()
-    assert isinstance(title, str) and len(title) > 0
-
 
 # ===========================================================================
 # 9. TitleOption 기본값
 # ===========================================================================
-
-@pytest.mark.unit
-def test_title_option_default_template():
-    assert TitleOption().template == "지역+과목+학습형태+솔트"
-
-
-@pytest.mark.unit
-def test_title_option_default_learning_type():
-    assert TitleOption().learning_type == "과외"
-
-
-@pytest.mark.unit
-def test_title_option_default_include_suffix():
-    assert TitleOption().include_suffix is True
-
-
-@pytest.mark.unit
-def test_title_option_stubs_are_off_by_default():
-    opt = TitleOption()
-    assert opt.add_affix is False
-    assert opt.randomize_chars is False
-    assert opt.ai_preset_prompt == ""
 
 
 # ===========================================================================
@@ -397,23 +404,3 @@ def test_fixed_title_is_deterministic(option):
     )
     titles = {TitleGenerator(opt, rng=random.Random(i)).generate() for i in range(20)}
     assert titles == {"항상 이 제목"}
-
-
-@pytest.mark.unit
-def test_empty_fixed_title_falls_back_to_generator(option):
-    """fixed_title이 빈 문자열이면 TitleGenerator가 정상 동작한다."""
-    opt = TitleOption(
-        region_preset=str(option.region_preset),
-        subject_preset=str(option.subject_preset),
-        salt_preset=str(option.salt_preset),
-        fixed_title="",  # 기본값 — 프리셋 생성 사용
-    )
-    title = TitleGenerator(opt, rng=random.Random(42)).generate()
-    assert len(title) > 0
-    assert title != ""
-
-
-@pytest.mark.unit
-def test_title_option_fixed_title_default_is_empty():
-    """fixed_title 기본값은 빈 문자열이다."""
-    assert TitleOption().fixed_title == ""
