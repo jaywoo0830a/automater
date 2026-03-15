@@ -221,9 +221,19 @@ def test_move_cursor_to_end_presses_ctrl_end(editor, mock_page):
 # ===========================================================================
 
 @pytest.mark.unit
-def test_publish_dry_run_does_not_click(mock_page):
-    SmartEditorOne(mock_page, WRITE_URL, dry_run=True).publish()
-    mock_page.get_by_role.return_value.click.assert_not_called()
+def test_publish_dry_run_opens_popover_but_skips_confirm(mock_page):
+    """
+    dry_run=True이면 발행 트리거(팝오버 열기)는 호출하되,
+    최종 confirm 버튼("발행하기")은 누르지 않는다.
+    """
+    editor = SmartEditorOne(mock_page, WRITE_URL, dry_run=True)
+    trigger_called = []
+    confirm_called = []
+    editor._click_publish_trigger = lambda **kw: trigger_called.append(True)
+    editor._click_publish_confirm = lambda **kw: confirm_called.append(True)
+    editor.publish()
+    assert trigger_called, "dry_run이어도 publish trigger(팝오버 열기)는 호출돼야 한다"
+    assert not confirm_called, "dry_run이면 confirm(발행하기)은 호출되면 안 된다"
 
 
 @pytest.mark.unit
@@ -357,22 +367,37 @@ def test_round_minute_to_10_floors_to_nearest_ten():
 
 
 @pytest.mark.unit
-def test_publish_dry_run_with_schedule_at_does_not_click(mock_page):
-    """dry_run=True이면 schedule_at이 있어도 클릭 없이 종료한다."""
+def test_publish_dry_run_with_schedule_at_opens_popover_and_sets_schedule(mock_page):
+    """
+    dry_run=True + schedule_at이 있으면:
+      - 팝오버는 열리고 (_click_publish_trigger 호출)
+      - 예약 UI도 설정되고 (_set_scheduled_publish 호출)
+      - confirm만 스킵된다 (_click_publish_confirm 미호출)
+    """
     target = datetime.now(tz=KST) + timedelta(hours=2)
-    SmartEditorOne(mock_page, WRITE_URL, dry_run=True).publish(schedule_at=target)
-    mock_page.get_by_role.return_value.click.assert_not_called()
-    mock_page.locator.return_value.click.assert_not_called()
+    editor = SmartEditorOne(mock_page, WRITE_URL, dry_run=True)
+    trigger_called  = []
+    schedule_called = []
+    confirm_called  = []
+    editor._click_publish_trigger  = lambda **kw: trigger_called.append(True)
+    editor._set_scheduled_publish  = lambda dt:   schedule_called.append(dt)
+    editor._click_publish_confirm  = lambda **kw: confirm_called.append(True)
+    editor.publish(schedule_at=target)
+    assert trigger_called,              "trigger(팝오버 열기)는 호출돼야 한다"
+    assert schedule_called == [target], "_set_scheduled_publish가 schedule_at으로 호출돼야 한다"
+    assert not confirm_called,          "dry_run이면 confirm은 호출되면 안 된다"
 
 
 @pytest.mark.unit
 def test_publish_with_schedule_at_calls_set_scheduled(mock_page):
     """
     schedule_at이 주어지면 publish()가 _set_scheduled_publish()를 호출해야 한다.
+    dry_run=True에서도 동일하게 호출된다 (팝오버 열기 + 설정, confirm만 스킵).
     """
     target = datetime.now(tz=KST) + timedelta(hours=2)
-    editor = SmartEditorOne(mock_page, WRITE_URL, dry_run=False)
+    editor = SmartEditorOne(mock_page, WRITE_URL, dry_run=True)
     called = []
+    editor._click_publish_trigger = lambda **kw: None
     editor._set_scheduled_publish = lambda dt: called.append(dt)
     editor.publish(schedule_at=target)
     assert called == [target], "_set_scheduled_publish must be called with schedule_at"
@@ -391,63 +416,122 @@ def test_publish_without_schedule_at_skips_set_scheduled(mock_page):
 
 
 @pytest.mark.unit
-def test_set_scheduled_publish_selects_hour_and_minute(mock_page):
+def test_set_scheduled_publish_uses_js_evaluate_for_radio(mock_page):
     """
-    _set_scheduled_publish()가 예약 라디오 클릭 → 시 선택 → 분 선택을 수행한다.
-    select_option이 hour와 rounded minute으로 호출됐는지 검증한다.
+    _set_scheduled_publish()는 예약 라디오 클릭에 frame.evaluate()를 사용한다.
+    <label>이 pointer events를 가로채므로 Playwright .click()은 항상 실패한다.
     """
-    # target: 16시 37분 → hour="16", minute="30" (floor)
     target = datetime(2026, 3, 15, 16, 37, tzinfo=KST)
     editor = SmartEditorOne(mock_page, WRITE_URL, dry_run=False)
 
-    hour_calls   = []
-    minute_calls = []
+    # find_js_frame이 반환하는 가짜 Frame 객체
+    fake_js_frame = MagicMock()
+    fake_js_frame.evaluate = MagicMock()
 
-    def fake_select_hour(locator, value, timeout_ms=5_000):
-        hour_calls.append(value)
-        return True
+    import automator.smart_editor as sm_mod
+    original_find = sm_mod.find_js_frame
+    original_select = sm_mod.select_option_by_value
+    sm_mod.find_js_frame    = lambda page, url_fragment="": fake_js_frame
+    sm_mod.select_option_by_value = lambda *a, **kw: True
+    try:
+        editor._set_scheduled_publish(target)
+    finally:
+        sm_mod.find_js_frame    = original_find
+        sm_mod.select_option_by_value = original_select
 
-    def fake_select_minute(locator, value, timeout_ms=5_000):
-        minute_calls.append(value)
-        return True
+    fake_js_frame.evaluate.assert_called_once()
+    js_code = fake_js_frame.evaluate.call_args[0][0]
+    assert 'radio_time' in js_code,  f"radio_time 셀렉터가 JS에 없음: {js_code[:100]}"
+    assert 'value="pre"' in js_code, f"value=pre가 JS에 없음: {js_code[:100]}"
+    assert '.click()' in js_code,    f".click()이 JS에 없음: {js_code[:100]}"
 
-    with patch("automator.smart_editor.click_if_visible",   return_value=True), \
-         patch("automator.smart_editor.select_option_by_value",
-               side_effect=[True, True, True]):
-        # Patch select directly on the module to capture arguments
-        import automator.smart_editor as sm_mod
-        original = sm_mod.select_option_by_value
-        calls = []
-        def capturing_select(locator, value, timeout_ms=5_000):
-            calls.append(value)
-            return True
-        sm_mod.select_option_by_value = capturing_select
-        try:
-            editor._set_scheduled_publish(target)
-        finally:
-            sm_mod.select_option_by_value = original
 
-    assert "16" in calls,  f"hour '16' must be selected, got {calls}"
-    assert "30" in calls,  f"minute '30' must be selected (floor of 37), got {calls}"
+@pytest.mark.unit
+def test_set_scheduled_publish_selects_correct_hour_and_minute(mock_page):
+    """
+    _set_scheduled_publish()가 시/분 select_option을 올바른 값으로 호출한다.
+    16:37 → hour='16', minute='30' (floor to 10)
+    """
+    target = datetime(2026, 3, 15, 16, 37, tzinfo=KST)
+    editor = SmartEditorOne(mock_page, WRITE_URL, dry_run=False)
+
+    import automator.smart_editor as sm_mod
+    original_find   = sm_mod.find_js_frame
+    original_select = sm_mod.select_option_by_value
+    select_calls    = []
+    sm_mod.find_js_frame          = lambda page, url_fragment="": MagicMock()
+    sm_mod.select_option_by_value = lambda loc, value, **kw: select_calls.append(value) or True
+    try:
+        editor._set_scheduled_publish(target)
+    finally:
+        sm_mod.find_js_frame    = original_find
+        sm_mod.select_option_by_value = original_select
+
+    assert "16" in select_calls, f"hour '16' 없음: {select_calls}"
+    assert "30" in select_calls, f"minute '30' (floor 37) 없음: {select_calls}"
+    assert len(select_calls) == 2, f"select 2회여야 함: {select_calls}"
 
 
 @pytest.mark.unit
 def test_set_scheduled_publish_rounds_minute_55_to_50(mock_page):
-    """55분은 50으로 내림된다 (분 드롭다운은 10분 단위)."""
+    """55분 → '50' (10분 단위 내림)"""
     target = datetime(2026, 3, 15, 9, 55, tzinfo=KST)
     editor = SmartEditorOne(mock_page, WRITE_URL, dry_run=False)
 
     import automator.smart_editor as sm_mod
-    calls = []
-    original = sm_mod.select_option_by_value
-    def capturing_select(locator, value, timeout_ms=5_000):
-        calls.append(value)
-        return True
-    sm_mod.select_option_by_value = capturing_select
+    original_find   = sm_mod.find_js_frame
+    original_select = sm_mod.select_option_by_value
+    select_calls    = []
+    sm_mod.find_js_frame          = lambda page, url_fragment="": MagicMock()
+    sm_mod.select_option_by_value = lambda loc, value, **kw: select_calls.append(value) or True
     try:
-        with patch("automator.smart_editor.click_if_visible", return_value=True):
-            editor._set_scheduled_publish(target)
+        editor._set_scheduled_publish(target)
     finally:
-        sm_mod.select_option_by_value = original
+        sm_mod.find_js_frame    = original_find
+        sm_mod.select_option_by_value = original_select
 
-    assert "50" in calls, f"minute '50' must be selected (floor of 55), got {calls}"
+    assert "50" in select_calls, f"minute '50' 없음: {select_calls}"
+
+
+@pytest.mark.unit
+def test_set_scheduled_publish_minute_zero_padded(mock_page):
+    """9:00 → minute='00' (zero-padded)"""
+    target = datetime(2026, 3, 15, 9, 0, tzinfo=KST)
+    editor = SmartEditorOne(mock_page, WRITE_URL, dry_run=False)
+
+    import automator.smart_editor as sm_mod
+    original_find   = sm_mod.find_js_frame
+    original_select = sm_mod.select_option_by_value
+    select_calls    = []
+    sm_mod.find_js_frame          = lambda page, url_fragment="": MagicMock()
+    sm_mod.select_option_by_value = lambda loc, value, **kw: select_calls.append(value) or True
+    try:
+        editor._set_scheduled_publish(target)
+    finally:
+        sm_mod.find_js_frame    = original_find
+        sm_mod.select_option_by_value = original_select
+
+    assert "00" in select_calls, f"minute '00' (zero-padded) 없음: {select_calls}"
+
+
+@pytest.mark.unit
+def test_set_scheduled_publish_uses_postwriteform_fragment(mock_page):
+    """find_js_frame이 'PostWriteForm' url_fragment로 호출된다."""
+    target = datetime(2026, 3, 15, 10, 0, tzinfo=KST)
+    editor = SmartEditorOne(mock_page, WRITE_URL, dry_run=False)
+
+    import automator.smart_editor as sm_mod
+    original_find   = sm_mod.find_js_frame
+    original_select = sm_mod.select_option_by_value
+    fragment_used   = []
+    sm_mod.find_js_frame = lambda page, url_fragment="": fragment_used.append(url_fragment) or MagicMock()
+    sm_mod.select_option_by_value = lambda *a, **kw: True
+    try:
+        editor._set_scheduled_publish(target)
+    finally:
+        sm_mod.find_js_frame    = original_find
+        sm_mod.select_option_by_value = original_select
+
+    assert "PostWriteForm" in fragment_used, (
+        f"find_js_frame은 'PostWriteForm' fragment로 호출돼야 함: {fragment_used}"
+    )

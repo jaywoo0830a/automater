@@ -6,9 +6,10 @@
 # Usage:
 #   bash ./run/test.sh                       # unit tests only (default, fast, no browser)
 #   bash ./run/test.sh --e2e                 # unit + e2e smoke tests (browser required)
+#   bash ./run/test.sh --schedule            # 예약 발행 UI e2e 테스트 (browser required)
 #   bash ./run/test.sh --pipeline            # all 8 pipeline scenarios (dry_run — no real post)
 #   bash ./run/test.sh --pipeline <1-8>      # single pipeline scenario by number
-#   bash ./run/test.sh --all                 # unit + e2e + all pipeline tests
+#   bash ./run/test.sh --all                 # unit + e2e + schedule + all pipeline tests
 #
 # Pipeline scenarios:
 #   1  test_pipeline_default                 기본 (과외, full layout, 이미지×3+썸네일)
@@ -43,14 +44,24 @@ _print_help() {
     echo "Usage:"
     echo "  bash ./run/test.sh                   # unit tests only (default)"
     echo "  bash ./run/test.sh --e2e             # unit + e2e smoke"
+    echo "  bash ./run/test.sh --schedule        # 예약 발행 UI e2e 테스트"
     echo "  bash ./run/test.sh --pipeline        # all 8 pipeline scenarios"
     echo "  bash ./run/test.sh --pipeline <1-8>  # single scenario by number"
-    echo "  bash ./run/test.sh --all             # unit + e2e + all pipelines"
+    echo "  bash ./run/test.sh --all             # unit + e2e + schedule + all pipelines"
     echo ""
     echo "Pipeline scenarios:"
     for i in 1 2 3 4 5 6 7 8; do
         printf "  %d  %s\n" "$i" "${PIPELINE_NAMES[$i]}"
     done
+    echo ""
+    echo "Schedule e2e tests (tests/test_schedule_e2e.py):"
+    echo "  test_popover_opens_with_now_selected_by_default"
+    echo "  test_scheduled_radio_is_selected_after_set"
+    echo "  test_hour_select_matches_schedule_at"
+    echo "  test_minute_select_matches_floored_schedule_at"
+    echo "  test_full_schedule_state_via_publish"
+    echo "  test_schedule_via_job_fixed_mode"
+    echo "  test_schedule_via_job_random_window_mode"
 }
 
 MODE="${1:---unit}"
@@ -97,13 +108,25 @@ case "${MODE}" in
     ;;
 
   --e2e)
-    echo "Mode : unit + e2e smoke tests (pipeline excluded)"
+    echo "Mode : unit + e2e smoke tests (schedule 제외)"
     echo ""
     echo "--- [1/2] Unit tests ---"
     pytest "${UNIT_TESTS[@]}" -m unit -v
     echo ""
     echo "--- [2/2] E2E smoke tests ---"
     pytest tests/test_blog_e2e.py -m "e2e and not slow" -v
+    ;;
+
+  --schedule)
+    echo "Mode : 예약 발행 UI e2e 테스트 (dry_run=True — 실제 발행 없음)"
+    echo ""
+    echo "Tests:"
+    echo "  · popover 기본값(현재) 확인"
+    echo "  · 예약 라디오 선택 확인"
+    echo "  · 시/분 select 값 확인"
+    echo "  · fixed / random_window 전체 흐름 확인"
+    echo ""
+    pytest tests/test_schedule_e2e.py -m "e2e" -v -s
     ;;
 
   --pipeline)
@@ -134,15 +157,21 @@ case "${MODE}" in
     ;;
 
   --all)
-    echo "Mode : all tests (unit + e2e + pipeline, dry_run=True — 실제 발행 없음)"
+    echo "Mode : all tests (unit + e2e + schedule + pipeline, dry_run=True)"
     echo ""
-    echo "--- [1/3] Unit tests ---"
+    echo "--- [1/4] Unit tests ---"
     pytest "${UNIT_TESTS[@]}" -m unit -v
+
     echo ""
-    echo "--- [2/3] E2E smoke tests ---"
+    echo "--- [2/4] E2E smoke tests ---"
     pytest tests/test_blog_e2e.py -m "e2e and not slow" -v
+
     echo ""
-    echo "--- [3/3] Pipeline scenarios (1–8) ---"
+    echo "--- [3/4] Schedule e2e tests ---"
+    pytest tests/test_schedule_e2e.py -m "e2e" -v -s
+
+    echo ""
+    echo "--- [4/4] Pipeline scenarios (1–8) ---"
     pytest tests/test_blog_e2e.py -m "e2e and slow" -v -s
     ;;
 

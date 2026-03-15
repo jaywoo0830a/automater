@@ -184,50 +184,48 @@
     ]
   },
   "publish_now": {
-    "description": "발행 팝오버 — 현재 발행 옵션",
+    "description": "발행 팝오버 — 현재 발행 라디오 버튼 (mainFrame 내부)",
     "locators": [
       {
+        "type": "testid",
+        "value": "nowTimeRadioBtn"
+      },
+      {
         "type": "role",
-        "value": "label",
+        "value": "radio",
         "name": "현재"
       }
     ]
   },
   "publish_scheduled": {
-    "description": "발행 팝오버 — 예약 발행 옵션",
+    "description": "발행 팝오버 — 예약 발행 라디오 버튼 (mainFrame 내부)",
     "locators": [
       {
+        "type": "testid",
+        "value": "preTimeRadioBtn"
+      },
+      {
         "type": "role",
-        "value": "label",
+        "value": "radio",
         "name": "예약"
       }
     ]
   },
   "publish_scheduled_hour": {
-    "description": "발행 팝오버 — 예약 시간 select",
+    "description": "발행 팝오버 — 예약 시간 select (mainFrame 내부)",
     "locators": [
       {
         "type": "css",
-        "value": "select.hour_option__J_heO"
-      },
-      {
-        "type": "role",
-        "value": "select",
-        "name": "시간 선택"
+        "value": "select[class*=hour_option]"
       }
     ]
   },
   "publish_scheduled_min": {
-    "description": "발행 팝오버 — 예약 분 select",
+    "description": "발행 팝오버 — 예약 분 select (mainFrame 내부)",
     "locators": [
       {
         "type": "css",
-        "value": "select.minute_option__J_heO"
-      },
-      {
-        "type": "role",
-        "value": "select",
-        "name": "분 선택"
+        "value": "select[class*=minute_option]"
       }
     ]
   },

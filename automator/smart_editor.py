@@ -249,25 +249,36 @@ class SmartEditorOne(BlogEditor):
 
     def publish(self, schedule_at: datetime | None = None) -> None:
         """
-        Open publish popover and confirm. No-op in dry_run mode.
+        Open the publish popover, configure options, and confirm.
+
+        dry_run=True behaviour
+        ----------------------
+        The popover is opened and schedule options are set normally so the
+        result can be inspected visually. Only the final "발행하기" confirm
+        button is skipped — the post is never actually published.
 
         Args:
             schedule_at: KST-aware datetime for reserved publish, or None for
                          immediate publish. When set, clicks the "예약" radio
                          and sets hour/minute before confirming.
         """
+        # Step 1: open popover — always, even in dry_run
+        self._click_publish_trigger()
+
+        # Step 2: configure reservation UI if needed — always, even in dry_run
+        if schedule_at is not None:
+            self._wait_for_popover_ready()
+            self._set_scheduled_publish(schedule_at)
+
+        # Step 3: confirm — skipped in dry_run
         if self._dry_run:
             label = schedule_at.isoformat() if schedule_at else "immediate"
             print(
-                f"[SmartEditorOne] DRY RUN — publish() skipped (schedule_at={label})",
+                f"[SmartEditorOne] DRY RUN — confirm skipped (schedule_at={label}). "
+                f"팝오버를 수동으로 닫거나 그냥 두면 됩니다.",
                 file=sys.stderr,
             )
             return
-
-        self._click_publish_trigger()
-
-        if schedule_at is not None:
-            self._set_scheduled_publish(schedule_at)
 
         self._click_publish_confirm()
 
@@ -299,42 +310,84 @@ class SmartEditorOne(BlogEditor):
         """
         Interact with Naver's reservation UI inside the publish popover.
 
+        Why JS evaluate instead of Playwright click
+        -------------------------------------------
+        The reservation radio input is covered by a <label> element that
+        intercepts pointer events. All Playwright .click() variants fail
+        with "label intercepts pointer events". The only reliable approach
+        is document.querySelector(...).click() via frame.evaluate(), which
+        bypasses the pointer-event interception entirely.
+
+        frame.evaluate() requires a real Frame object (page.frames[N]),
+        NOT a FrameLocator — find_js_frame() with url_fragment resolves it.
+
         Sequence
         --------
-        1. Click the "예약" radio label  (publish_scheduled)
-        2. Select hour value             (publish_scheduled_hour)
-        3. Select minute value           (publish_scheduled_min, floored to 10)
-
-        The publish popover is rendered at page level (outside the editor
-        iframe), so both page and frame contexts are tried for each locator,
-        mirroring the pattern used by _click_publish_trigger().
+        1. JS click "예약" radio   → input[name=radio_time][value=pre]
+        2. Select hour             → select[class*=hour_option]
+        3. Select minute           → select[class*=minute_option] (floored to 10)
 
         Args:
             schedule_at: KST-aware datetime whose hour/minute are used.
         """
-        sel        = self._sel()
         hour_str   = str(schedule_at.hour)
         minute_str = self._round_minute_to_10(schedule_at.minute)
 
-        for ctx in (self._page, self._frame()):
-            # Step 1: select "예약" radio
-            click_if_visible(sel.locator(ctx, "publish_scheduled"))
+        # Real Frame object needed for evaluate() — FrameLocator doesn't support it.
+        # PostWriteForm is the iframe that contains the publish popover.
+        js_frame = find_js_frame(self._page, url_fragment="PostWriteForm")
 
-            # Step 2: set hour
-            select_option_by_value(
-                sel.locator(ctx, "publish_scheduled_hour"), hour_str
-            )
+        # Step 1: click the "예약" radio via JS (label intercepts pointer events)
+        js_frame.evaluate(
+            """() => {
+                const el = document.querySelector(
+                    'input[name="radio_time"][value="pre"]'
+                );
+                if (el) el.click();
+            }"""
+        )
 
-            # Step 3: set minute (floored to nearest 10)
-            select_option_by_value(
-                sel.locator(ctx, "publish_scheduled_min"), minute_str
-            )
+        # Steps 2-3: select hour/minute via Playwright (selects work normally)
+        sel   = self._sel()
+        frame = self._popover_frame()
+        select_option_by_value(sel.locator(frame, "publish_scheduled_hour"), hour_str)
+        select_option_by_value(sel.locator(frame, "publish_scheduled_min"),  minute_str)
 
     def _sel(self) -> SelectorLoader:
         return SelectorLoader.load(_EDITOR_JSON)
 
     def _frame(self):
+        """Editor content frame — checks .se-content visibility (for editor actions)."""
         return find_editor_frame(self._page, _MAIN_FRAME, _EDITOR_BODY)
+
+    def _popover_frame(self):
+        """
+        Publish popover frame — always returns #mainFrame directly.
+
+        find_editor_frame() checks .se-content visibility, which fails when
+        the publish popover overlays the editor. This method bypasses that
+        check and returns the raw FrameLocator so popover elements can always
+        be found inside mainFrame.
+        """
+        return self._page.frame_locator(_MAIN_FRAME).first
+
+    def _wait_for_popover_ready(self, timeout_ms: int = 5_000) -> None:
+        """
+        Wait until the publish popover's reservation radio is attached to DOM.
+
+        Triggered after _click_publish_trigger() — the popover renders
+        asynchronously and the reservation elements may not exist yet when
+        _set_scheduled_publish() runs immediately after the trigger click.
+        """
+        frame = self._popover_frame()
+        sel   = self._sel()
+        try:
+            sel.locator(frame, "publish_scheduled").wait_for(
+                state="attached", timeout=timeout_ms
+            )
+        except Exception:
+            # Fallback: simple sleep so at least partial rendering occurs
+            time.sleep(1.0)
 
     def _click_publish_trigger(self, timeout: int = 5_000) -> None:
         sel = self._sel()
@@ -344,6 +397,6 @@ class SmartEditorOne(BlogEditor):
 
     def _click_publish_confirm(self, timeout: int = 5_000) -> None:
         sel = self._sel()
-        for ctx in (self._page, self._frame()):
+        for ctx in (self._page, self._popover_frame()):
             if click_if_visible(sel.locator(ctx, "publish_confirm"), timeout):
                 return
