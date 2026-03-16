@@ -418,10 +418,19 @@ class ImageOption:
 
     thumbnail_text:
         Text string to overlay on thumbnail images (e.g. post title).
+        Split by spaces — each word rendered on its own centered line.
         Empty string = no overlay.
 
     thumbnail_text_color:
         Hex color for the thumbnail text overlay (e.g. "#FFFFFF").
+
+    thumbnail_line_spacing:
+        Pixels between lines. Default 24px — comfortable for Korean
+        on a 1000×1000 image with ~150px font size.
+
+    thumbnail_letter_spacing:
+        Pixels between characters. Default 3px — subtle spacing for
+        Korean syllable blocks which already have internal spacing.
 
     exif_description:
         Value written to the JPEG Exif ImageDescription field.
@@ -446,8 +455,10 @@ class ImageOption:
     size_jitter_px:        int   = 2
 
     # ── Thumbnail text overlay ────────────────────────────────────────────────
-    thumbnail_text:        str   = ""
-    thumbnail_text_color:  str   = "#FFFFFF"
+    thumbnail_text:           str   = ""
+    thumbnail_text_color:     str   = "#FFFFFF"
+    thumbnail_line_spacing:   int   = 24    # px between lines
+    thumbnail_letter_spacing: int   = 3     # px between characters
 
     # ── Exif metadata ─────────────────────────────────────────────────────────
     exif_description:      str         = ""
@@ -471,4 +482,12 @@ class ImageOption:
             raise ValueError(
                 f"thumbnail_text_color must be a hex color like '#FFFFFF', "
                 f"got {self.thumbnail_text_color!r}"
+            )
+        if self.thumbnail_line_spacing < 0:
+            raise ValueError(
+                f"thumbnail_line_spacing must be ≥ 0, got {self.thumbnail_line_spacing}"
+            )
+        if self.thumbnail_letter_spacing < 0:
+            raise ValueError(
+                f"thumbnail_letter_spacing must be ≥ 0, got {self.thumbnail_letter_spacing}"
             )

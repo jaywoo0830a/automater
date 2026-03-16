@@ -185,57 +185,98 @@ class ImageProcessor:
         return img.resize((new_w, new_h), Image.LANCZOS)
 
     def _apply_text_overlay(self, img: Image.Image) -> Image.Image:
-        """Draw thumbnail_text over the image."""
+        """
+        Draw thumbnail_text over the image.
+
+        Text is split by spaces into chunks, each rendered on its own line
+        and horizontally centered. Font size scales to fill ~60% of the image
+        width based on the longest chunk.
+        """
         text = self._opt.thumbnail_text
         if not text:
             return img
 
-        draw    = ImageDraw.Draw(img)
-        w, h    = img.size
-        color   = self._opt.thumbnail_text_color
+        draw   = ImageDraw.Draw(img)
+        w, h   = img.size
+        color  = self._opt.thumbnail_text_color
+        chunks = text.split()          # ["강남", "수학", "과외"]
 
-        # Font size: ~6% of image width, minimum 14px
-        font_size = max(14, int(w * 0.06))
+        # ── Load font ────────────────────────────────────────────────────────
+        fonts_dir = Path(__file__).parent.parent / "assets" / "fonts"
+        font_candidates = [
+            (str(fonts_dir / "NotoSansKR.ttf"), 0),
+            (str(fonts_dir / "NotoSansKR.otf"), 0),
+            ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 1),
+            ("/usr/share/fonts/opentype/noto/NotoSansCJK-Medium.ttc",  1),
+            ("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc", 1),
+            ("/System/Library/Fonts/AppleSDGothicNeo.ttc",             0),
+            ("/Library/Fonts/AppleGothic.ttf",                         0),
+            ("/usr/share/fonts/truetype/nanum/NanumGothic.ttf",        0),
+        ]
 
-        try:
-            # Korean-capable fonts in priority order.
-            # .ttc (TrueType Collection) files contain multiple language subsets —
-            # index=1 selects the Korean (KR) face inside the CJK collection.
-            font_candidates = [
-                # Linux — opentype/noto (Ubuntu, Debian)
-                ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",    1),
-                ("/usr/share/fonts/opentype/noto/NotoSansCJK-Medium.ttc",     1),
-                # Linux — truetype/noto (some distros)
-                ("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",    1),
-                # macOS
-                ("/System/Library/Fonts/AppleSDGothicNeo.ttc",                0),
-                ("/Library/Fonts/AppleGothic.ttf",                            0),
-                # Nanum (if installed via fonts-nanum)
-                ("/usr/share/fonts/truetype/nanum/NanumGothic.ttf",           0),
-            ]
-            font = None
-            for font_path, index in font_candidates:
-                if Path(font_path).exists():
-                    font = ImageFont.truetype(font_path, font_size, index=index)
-                    break
-            if font is None:
-                # Last resort — ASCII only, Korean will appear as boxes
-                font = ImageFont.load_default()
-        except Exception:
-            font = ImageFont.load_default()
+        # ── Auto-size font to fill ~60% of image width ───────────────────────
+        # Start large and shrink until the longest chunk fits within target width
+        target_w   = int(w * 0.60)
+        longest    = max(chunks, key=len)
+        font_size  = max(20, int(h * 0.20))   # start at 20% of height
+        font       = None
 
-        # Center the text
-        bbox   = draw.textbbox((0, 0), text, font=font)
-        text_w = bbox[2] - bbox[0]
-        text_h = bbox[3] - bbox[1]
-        x      = (w - text_w) // 2
-        y      = (h - text_h) // 2
+        def _load_font(size: int):
+            for fp, idx in font_candidates:
+                if Path(fp).exists():
+                    try:
+                        return ImageFont.truetype(fp, size, index=idx)
+                    except Exception:
+                        continue
+            return ImageFont.load_default()
 
-        # Thin shadow for readability
-        shadow_offset = max(1, font_size // 20)
+        font = _load_font(font_size)
+
+        # Shrink until longest chunk fits
+        while font_size > 14:
+            bbox = draw.textbbox((0, 0), longest, font=font)
+            if (bbox[2] - bbox[0]) <= target_w:
+                break
+            font_size -= 2
+            font = _load_font(font_size)
+
+        # ── Spacing from ImageOption (fixed pixels) ───────────────────────────
+        letter_spacing = self._opt.thumbnail_letter_spacing
+        line_gap       = self._opt.thumbnail_line_spacing
+
+        def _chunk_width(chunk: str) -> int:
+            total = 0
+            for ch in chunk:
+                bbox = draw.textbbox((0, 0), ch, font=font)
+                total += (bbox[2] - bbox[0]) + letter_spacing
+            return max(0, total - letter_spacing)  # no trailing gap
+
+        def _chunk_height(chunk: str) -> int:
+            bbox = draw.textbbox((0, 0), chunk, font=font)
+            return bbox[3] - bbox[1]
+
+        line_widths  = [_chunk_width(c)  for c in chunks]
+        line_heights = [_chunk_height(c) for c in chunks]
+
+        total_h  = sum(line_heights) + line_gap * (len(chunks) - 1)
+        start_y  = (h - total_h) // 2
+
+        # ── Shadow ────────────────────────────────────────────────────────────
+        shadow_offset = max(1, font_size // 18)
         shadow_color  = "#000000" if color.upper() in ("#FFFFFF", "#FFF") else "#FFFFFF"
-        draw.text((x + shadow_offset, y + shadow_offset), text, font=font, fill=shadow_color)
-        draw.text((x, y), text, font=font, fill=color)
+
+        # ── Draw each chunk char-by-char, centered ────────────────────────────
+        y = start_y
+        for i, chunk in enumerate(chunks):
+            x = (w - line_widths[i]) // 2
+            for ch in chunk:
+                ch_bbox = draw.textbbox((0, 0), ch, font=font)
+                ch_w    = ch_bbox[2] - ch_bbox[0]
+                draw.text((x + shadow_offset, y + shadow_offset), ch,
+                          font=font, fill=shadow_color)
+                draw.text((x, y), ch, font=font, fill=color)
+                x += ch_w + letter_spacing
+            y += line_heights[i] + line_gap
 
         return img
 
