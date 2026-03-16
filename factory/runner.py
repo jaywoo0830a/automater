@@ -56,16 +56,25 @@ _FETCH_CLAIMED_BATCH_SQL = """
 
 _FETCH_BATCH_ITEMS_SQL = """
     SELECT bi.id, bi.combination_id,
-           c.region_id, c.subject, c.learning_type, c.has_space, c.has_suffix,
-           r.base_name, r.full_name,
+           c.spacing_rule_id, c.config      AS combo_config,
+           camp.title_template,
            a.naver_id, a.naver_pw, a.blog_id, a.session_path, a.proxy
-    FROM   batch_items bi
-    JOIN   combinations c ON c.id = bi.combination_id
-    JOIN   regions      r ON r.id = c.region_id
-    JOIN   batches      b ON b.id = bi.batch_id
-    JOIN   accounts     a ON a.id = b.account_id
+    FROM   batch_items  bi
+    JOIN   combinations c    ON c.id    = bi.combination_id
+    JOIN   campaigns    camp ON camp.id = c.campaign_id
+    JOIN   batches      b    ON b.id    = bi.batch_id
+    JOIN   accounts     a    ON a.id    = b.account_id
     WHERE  bi.batch_id = %s
       AND  bi.status   = 'pending'
+"""
+
+_FETCH_DIM_VALUES_SQL = """
+    SELECT d.slug, dv.value, dv.display_value
+    FROM   combination_values cv
+    JOIN   dimension_values   dv ON dv.id = cv.dimension_value_id
+    JOIN   dimensions         d  ON d.id  = dv.dimension_id
+    WHERE  cv.combination_id = %s
+    ORDER BY d.sort_order
 """
 
 _MARK_ITEM_DONE_SQL = """
@@ -191,8 +200,11 @@ def _worker(args: dict) -> dict:
                         dry_run=dry_run,
                     )
                     try:
-                        title_opt   = _build_title_option(item)
-                        content_opt = _build_content_option(item)
+                        dim_values  = db.fetch_all(
+                            _FETCH_DIM_VALUES_SQL, (item["combination_id"],)
+                        )
+                        title_opt   = _build_title_option(item, dim_values)
+                        content_opt = _build_content_option(item, dim_values)
                         meta_opt    = MetaOption(
                             schedule_mode = "fixed",
                             schedule_at   = scheduled_at.replace(tzinfo=KST)
@@ -239,32 +251,49 @@ def _worker(args: dict) -> dict:
     return result
 
 
-def _build_title_option(item: dict):
+def _build_values(item: dict, dim_values: list[dict]) -> dict[str, str]:
+    """
+    Build slug → value dict from combination's dimension values.
+
+    has_suffix (stored in combinations.config JSON) determines whether
+    to use value (with suffix, e.g. "대치동") or display_value
+    (without suffix, e.g. "대치").
+    """
+    import json as _json
+    combo_config = _json.loads(item["combo_config"] or "{}")
+    has_suffix   = bool(combo_config.get("has_suffix", 1))
+
+    values = {}
+    for dv in dim_values:
+        slug        = dv["slug"]
+        full_val    = dv["value"]
+        display_val = dv["display_value"]
+        # has_suffix=True  → full value  (대치동)
+        # has_suffix=False → display_value if set, else full value (대치)
+        values[slug] = full_val if (has_suffix or not display_val) else display_val
+    return values
+
+
+def _build_title_option(item: dict, dim_values: list[dict]):
     from automator.options import TitleOption
-    region        = item["full_name"] if item["has_suffix"] else item["base_name"]
-    subject       = item["subject"]
-    learning_type = item["learning_type"]
-
-    sep_r = " " if item["space_after_region"]  else ""
-    sep_s = " " if item["space_after_subject"] else ""
-    fixed = f"{region}{sep_r}{subject}{sep_s}{learning_type}"
-
-    return TitleOption(fixed_title=fixed)
+    return TitleOption(
+        template = item["title_template"],
+        values   = _build_values(item, dim_values),
+    )
 
 
-def _build_content_option(item: dict):
+def _build_content_option(item: dict, dim_values: list[dict]):
     from automator.options import ContentOption
-    region        = item["full_name"] if item["has_suffix"] else item["base_name"]
-    subject       = item["subject"]
-    learning_type = item["learning_type"]
+    values = _build_values(item, dim_values)
+    # Human-readable keyword phrase for prompt
+    keyword = " ".join(values[slug] for slug in sorted(values, key=lambda s: s))
     prompt = (
-        f"{region} {subject} {learning_type}을(를) 홍보하는 "
-        f"학부모 대상 블로그 글을 작성해주세요. "
-        f"신뢰감 있는 톤으로 성적 향상 경험을 자연스럽게 서술해주세요."
+        f"{keyword}을(를) 홍보하는 블로그 글을 작성해주세요. "
+        f"신뢰감 있는 톤으로 자연스럽게 서술해주세요."
     )
     return ContentOption(
-        layout=["Paragraph 1", "Paragraph 2", "Paragraph 3"],
-        paragraph_prompt=prompt,
+        layout           = ["Paragraph 1", "Paragraph 2", "Paragraph 3"],
+        paragraph_prompt = prompt,
     )
 
 

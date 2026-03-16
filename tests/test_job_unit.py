@@ -61,7 +61,7 @@ def full_job(account) -> NaverBlogJob:
     return (
         NaverBlogJob
         .for_account(account)
-        .with_title(TitleOption())
+        .with_title(TitleOption(fixed_title="테스트 포스트"))
         .with_content(ContentOption())
         .with_meta(MetaOption())
         .with_setting(RunSetting())
@@ -73,7 +73,7 @@ def job_with_images(account) -> NaverBlogJob:
     return (
         NaverBlogJob
         .for_account(account)
-        .with_title(TitleOption())
+        .with_title(TitleOption(fixed_title="테스트 포스트"))
         .with_content(ContentOption(
             preview_images=["a.jpg", "b.jpg"],
             thumbnail_images=["thumb.jpg"],
@@ -95,13 +95,13 @@ def test_for_account_returns_job(account):
 
 @pytest.mark.unit
 def test_builder_is_immutable(base_job):
-    new_job = base_job.with_title(TitleOption())
+    new_job = base_job.with_title(TitleOption(fixed_title="테스트 포스트"))
     assert new_job is not base_job
 
 
 @pytest.mark.unit
 def test_builder_chaining_preserves_account(account):
-    job = NaverBlogJob.for_account(account).with_title(TitleOption()).with_content(ContentOption())
+    job = NaverBlogJob.for_account(account).with_title(TitleOption(fixed_title="테스트 포스트")).with_content(ContentOption())
     assert job._account is account
 
 
@@ -114,12 +114,12 @@ def test_branch_does_not_pollute_base(base_job):
 
 @pytest.mark.unit
 def test_two_branches_are_independent(account):
-    """두 브랜치의 TitleOption이 서로 독립적임을 검증한다."""
+    """두 브랜치의 TitleOption 이 서로 독립적임을 검증한다."""
     base  = NaverBlogJob.for_account(account)
-    job_a = base.with_title(TitleOption(learning_type="과외"))
-    job_b = base.with_title(TitleOption(learning_type="학원"))
-    assert job_a._title.learning_type == "과외"
-    assert job_b._title.learning_type == "학원"
+    job_a = base.with_title(TitleOption(fixed_title="테스트 과외"))
+    job_b = base.with_title(TitleOption(fixed_title="테스트 학원"))
+    assert job_a._title.fixed_title == "테스트 과외"
+    assert job_b._title.fixed_title == "테스트 학원"
 
 
 @pytest.mark.unit
@@ -172,9 +172,9 @@ def test_validate_raises_on_invalid_template(account):
     잘못된 template(토큰 누락)은 validate() 시점에 ValueError를 발생시킨다.
     (구버전의 min_length/max_length 검사를 대체한다 — TitleOption에 해당 필드 없음)
     """
-    with pytest.raises(ValueError, match="missing"):
+    with pytest.raises(ValueError):
         NaverBlogJob.for_account(account).with_title(
-            TitleOption(template="지역+과목+솔트")  # 학습형태 누락
+            TitleOption(template="no braces at all")  # 토큰 없음
         ).validate()
 
 
@@ -281,7 +281,7 @@ def test_run_title_is_generated(account, editor):
     (구버전 test_run_title_from_extra_prompt 대체 —
      extra_prompt로 제목을 직접 지정하는 방식은 삭제됨)
     """
-    job = NaverBlogJob.for_account(account).with_title(TitleOption())
+    job = NaverBlogJob.for_account(account).with_title(TitleOption(fixed_title="테스트 포스트"))
     job.run(editor)
     title_calls = [a for a in editor.actions if a[0] == "write_title"]
     assert len(title_calls) == 1
@@ -396,7 +396,7 @@ def test_no_rep_image_without_thumbnail(account, editor):
     job = (
         NaverBlogJob
         .for_account(account)
-        .with_title(TitleOption())
+        .with_title(TitleOption(fixed_title="테스트 포스트"))
         .with_content(ContentOption(
             preview_images=["a.jpg"],
             layout=["Image 1", "Paragraph 1"],

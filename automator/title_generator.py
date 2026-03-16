@@ -3,53 +3,48 @@ automator/title_generator.py
 -----------------------------
 TitleGenerator: TitleOption → 제목 문자열
 
-책임
-----
-- presets/title/{regions,subjects,salts}.json 에서 프리셋 로드
-- TitleOption.template 에 따라 토큰을 조합해 제목 반환
-- include_suffix 플래그에 따라 지역명 선택 (full_name or base_name)
-- 스텁 기능(has_space, add_affix, randomize_chars, ai_preset_prompt)은
-  현재 아무것도 하지 않으며, 호출되면 원문 그대로 반환한다.
-
 Template 형식
 -------------
-    "지역+과목+학습형태+솔트"   → 기본 (솔트 맨 끝)
-    "솔트+지역+과목+학습형태"   → 솔트 맨 앞
-    "지역+솔트+과목+학습형태"   → 솔트 중간
+Python str.format() 스타일 {slug} 토큰.
 
-    유효 토큰: 지역, 과목, 학습형태, 솔트 (네 개 모두 정확히 한 번씩 포함 필수)
-    유효하지 않은 템플릿은 TitleGenerator 생성 시 ValueError를 발생시킨다.
+    "{region} {subject} {learning_type} {salt}"  → "강남 수학 과외 강력 추천"
+    "{salt} {region} {subject} {learning_type}"  → "검증된 강남 수학 과외"
+    "{region} {target_audience} {subject} {salt}"→ "원주 성인 영어회화 추천"
+
+{salt} 는 특수 토큰 — 위치에 따라 pool 이 결정된다:
+    첫 번째 토큰 → prefix_salts
+    마지막 토큰  → suffix_salts
+    중간 토큰   → all_salts (prefix ∪ suffix)
 
 Usage:
-    from automator.title_generator import TitleGenerator
-    from automator.options import TitleOption
-
-    gen   = TitleGenerator(TitleOption(include_suffix=True))
-    title = gen.generate()   # e.g. "대치동 영어 과외 강력 추천"
+    gen = TitleGenerator(TitleOption(
+        template = "{region} {subject} {learning_type} {salt}",
+        values   = {"region": "강남", "subject": "수학", "learning_type": "과외"},
+    ))
+    title = gen.generate()  # e.g. "강남 수학 과외 강력 추천"
 """
 
 from __future__ import annotations
 
 import json
 import random
+import re
 from pathlib import Path
 from typing import Any
 
-from automator.options import TitleOption, TITLE_TOKENS
+from automator.options import TitleOption
 
 # ---------------------------------------------------------------------------
-# Default preset paths
+# Defaults
 # ---------------------------------------------------------------------------
 
-_PRESET_DIR = Path(__file__).parent.parent / "presets" / "title"
-
-_DEFAULT_REGION_PRESET  = _PRESET_DIR / "regions.json"
-_DEFAULT_SUBJECT_PRESET = _PRESET_DIR / "subjects.json"
-_DEFAULT_SALT_PRESET    = _PRESET_DIR / "salts.json"
+_PRESET_DIR          = Path(__file__).parent.parent / "presets" / "title"
+_DEFAULT_SALT_PRESET = _PRESET_DIR / "salts.json"
+_TOKEN_RE            = re.compile(r"\{(\w*)\}")
 
 
 # ---------------------------------------------------------------------------
-# Preset loaders
+# Loader
 # ---------------------------------------------------------------------------
 
 def _load_json(path: Path) -> Any:
@@ -58,35 +53,11 @@ def _load_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def load_regions(path: str | Path = "") -> list[dict]:
-    """
-    Load region entries from a regions.json file.
-
-    Each entry: {"base_name": str, "full_name": str, "tier": str}
-    """
-    p = Path(path) if path else _DEFAULT_REGION_PRESET
-    return _load_json(p)["regions"]
-
-
-def load_subjects(path: str | Path = "") -> list[str]:
-    """Load subject strings from a subjects.json file."""
-    p = Path(path) if path else _DEFAULT_SUBJECT_PRESET
-    return _load_json(p)["subjects"]
-
-
 def load_salts(path: str | Path = "") -> dict[str, list[str]]:
     """
-    Load salt strings from a salts.json file.
+    Load salt strings from salts.json.
 
-    Returns a dict with three keys:
-        "prefix" — salts that read naturally at the start of a title.
-                   e.g. "검증된 대치동 수학 과외"
-        "suffix" — salts that read naturally at the end of a title.
-                   e.g. "대치동 수학 과외 강력 추천"
-        "all"    — union of prefix and suffix (used when 솔트 is in the middle).
-
-    Raises:
-        KeyError: If the file is missing "prefix_salts" or "suffix_salts".
+    Returns dict with keys "prefix", "suffix", "all".
     """
     p      = Path(path) if path else _DEFAULT_SALT_PRESET
     raw    = _load_json(p)
@@ -95,7 +66,7 @@ def load_salts(path: str | Path = "") -> dict[str, list[str]]:
     return {
         "prefix": prefix,
         "suffix": suffix,
-        "all":    list(dict.fromkeys(prefix + suffix)),  # order-preserving union
+        "all":    list(dict.fromkeys(prefix + suffix)),
     }
 
 
@@ -105,44 +76,41 @@ def load_salts(path: str | Path = "") -> dict[str, list[str]]:
 
 def validate_template(template: str) -> None:
     """
-    Raise ValueError if the template is not a valid token sequence.
+    Raise ValueError if template is invalid.
 
     Rules:
-      - Tokens are separated by '+'.
-      - Must contain exactly the four tokens in TITLE_TOKENS.
-      - Each token must appear exactly once.
-      - Unknown tokens are rejected.
-
-    Examples:
-      ✅  "지역+과목+학습형태+솔트"
-      ✅  "솔트+지역+과목+학습형태"
-      ❌  "지역+과목+솔트"            (학습형태 누락)
-      ❌  "지역+과목+학습형태+솔트+솔트" (솔트 중복)
-      ❌  "지역+과목+학습형태+unknown"  (알 수 없는 토큰)
+      - Not empty / whitespace-only.
+      - At least one {slug} token.
+      - All tokens are valid Python identifiers.
+      - No empty braces {}.
+      - No duplicate tokens.
     """
     if not template or not template.strip():
         raise ValueError("template must not be empty")
 
-    tokens = [t.strip() for t in template.split("+")]
+    raw_tokens = _TOKEN_RE.findall(template)
 
-    unknown = set(tokens) - TITLE_TOKENS
-    if unknown:
+    if not raw_tokens:
         raise ValueError(
-            f"Unknown token(s) in template: {unknown}. "
-            f"Valid tokens: {TITLE_TOKENS}"
+            "template contains no {slug} tokens — "
+            "use e.g. \"{region} {subject} {salt}\""
         )
 
-    missing = TITLE_TOKENS - set(tokens)
-    if missing:
-        raise ValueError(
-            f"Template is missing required token(s): {missing}"
-        )
+    for tok in raw_tokens:
+        if not tok:
+            raise ValueError(
+                "template contains empty braces {} — "
+                "every token must have a slug name"
+            )
+        if not tok.isidentifier():
+            raise ValueError(
+                f"token {{{tok!r}}} is not a valid identifier — "
+                "use lowercase letters, digits, and underscores only"
+            )
 
-    duplicates = {t for t in tokens if tokens.count(t) > 1}
+    duplicates = {t for t in raw_tokens if raw_tokens.count(t) > 1}
     if duplicates:
-        raise ValueError(
-            f"Template contains duplicate token(s): {duplicates}"
-        )
+        raise ValueError(f"template contains duplicate token(s): {duplicates}")
 
 
 # ---------------------------------------------------------------------------
@@ -151,18 +119,11 @@ def validate_template(template: str) -> None:
 
 class TitleGenerator:
     """
-    Generates a single blog post title from a TitleOption.
-
-    Presets are loaded once on construction. generate() picks one entry
-    from each preset at random and assembles them according to the template.
+    Generates a blog post title from a TitleOption.
 
     Args:
-        option: TitleOption describing assembly rules and preset paths.
+        option: TitleOption with template, values, and optional salt_preset.
         rng:    Optional random.Random for deterministic tests.
-
-    Raises:
-        ValueError: If the template is invalid (on construction).
-        FileNotFoundError: If a preset file is missing (on construction).
     """
 
     def __init__(
@@ -170,132 +131,66 @@ class TitleGenerator:
         option: TitleOption,
         rng: random.Random | None = None,
     ) -> None:
-        validate_template(option.template)
+        self._opt = option
+        self._rng = rng or random.Random(option.seed)
 
-        self._opt      = option
-        self._rng      = rng or random.Random()
-        self._regions  = load_regions(option.region_preset)
-        self._subjects = load_subjects(option.subject_preset)
-
-        salt_preset      = load_salts(option.salt_preset)
-        self._prefix_salts = salt_preset["prefix"]
-        self._suffix_salts = salt_preset["suffix"]
-        self._all_salts    = salt_preset["all"]
-
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
+        if not option.fixed_title:
+            if not option.template or not option.template.strip():
+                # salt_preset 이 지정됐다면 template 을 쓰려는 의도 → 에러
+                if option.salt_preset:
+                    raise ValueError(
+                        "template must not be empty when salt_preset is set. "
+                        "Use fixed_title for a literal title, or provide a template."
+                    )
+                # salt_preset 도 없으면 TitleOption() 기본값 — 제목 없음으로 처리
+                self._prefix_salts = []
+                self._suffix_salts = []
+                self._all_salts    = []
+            else:
+                validate_template(option.template)
+                salt_data          = load_salts(option.salt_preset)
+                self._prefix_salts = salt_data["prefix"]
+                self._suffix_salts = salt_data["suffix"]
+                self._all_salts    = salt_data["all"]
 
     def generate(self) -> str:
         """
         Return the post title.
 
-        If TitleOption.fixed_title is set, return it as-is without any
-        preset lookup or assembly — useful for tests and one-off posts.
-
-        Otherwise, pick one region, subject, and salt from presets and
-        assemble them according to the template.
-
-        Salt pool selection by template position
-        -----------------------------------------
-        솔트 is the first token  → prefix_salts
-            e.g. "솔트+지역+과목+학습형태" → "검증된 대치동 수학 과외"
-        솔트 is the last token   → suffix_salts
-            e.g. "지역+과목+학습형태+솔트" → "대치동 수학 과외 강력 추천"
-        솔트 is a middle token   → all_salts (prefix ∪ suffix)
-            e.g. "지역+솔트+과목+학습형태" → either pool
+        fixed_title → return as-is.
+        Otherwise substitute {slug} tokens from values dict,
+        pick a random salt for {salt}.
         """
         if self._opt.fixed_title:
             return self._opt.fixed_title
 
-        region  = self._pick_region()
-        subject = self._rng.choice(self._subjects)
-        salt    = self._rng.choice(self._pick_salt_pool())
-        return self._assemble(region, subject, salt)
+        if not self._opt.template:
+            return ""
+
+        tokens = _TOKEN_RE.findall(self._opt.template)
+        sub    = dict(self._opt.values)
+
+        if "salt" in tokens:
+            sub["salt"] = self._rng.choice(self._pick_salt_pool(tokens))
+
+        return self._opt.template.format(**sub)
 
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _pick_salt_pool(self) -> list[str]:
+    def _pick_salt_pool(self, tokens: list[str]) -> list[str]:
         """
-        Return the appropriate salt pool based on the position of 솔트
-        in the template.
+        Select salt pool based on {salt} position in token list.
 
-        Position rules:
-            index 0          → prefix_salts
-            last index       → suffix_salts
-            any other index  → all_salts (prefix ∪ suffix)
+            index 0      → prefix_salts
+            last index   → suffix_salts
+            middle index → all_salts
         """
-        tokens    = [t.strip() for t in self._opt.template.split("+")]
-        salt_idx  = tokens.index("솔트")
-        last_idx  = len(tokens) - 1
-
-        if salt_idx == 0:
+        idx      = tokens.index("salt")
+        last_idx = len(tokens) - 1
+        if idx == 0:
             return self._prefix_salts
-        if salt_idx == last_idx:
+        if idx == last_idx:
             return self._suffix_salts
         return self._all_salts
-
-    def _pick_region(self) -> str:
-        """
-        Pick a random region name respecting include_suffix.
-
-        True  → full_name ("대치동") — 행정구역 단위 포함
-        False → base_name ("대치")  — 행정구역 단위 제외
-        """
-        entry = self._rng.choice(self._regions)
-        return entry["full_name"] if self._opt.include_suffix else entry["base_name"]
-
-    def _assemble(self, region: str, subject: str, salt: str) -> str:
-        """
-        Map tokens to values and join in template order.
-
-        Token map:
-          지역       → region
-          과목       → subject
-          학습형태   → learning_type
-          솔트       → salt
-        """
-        token_map = {
-            "지역":     region,
-            "과목":     subject,
-            "학습형태": self._opt.learning_type,
-            "솔트":     salt,
-        }
-
-        keys   = [t.strip() for t in self._opt.template.split("+")]
-        tokens = [token_map[k] for k in keys]
-
-        # has_space stub — currently always True
-        sep   = " " if self._opt.has_space else ""
-        title = sep.join(tokens)
-
-        title = self._apply_affix(title)
-        title = self._apply_randomize(title)
-        return title
-
-    # ------------------------------------------------------------------
-    # Stub methods
-    # ------------------------------------------------------------------
-
-    def _apply_affix(self, title: str) -> str:
-        """
-        Stub: prepend/append a random Korean particle.
-        add_affix=True would produce e.g. "대치동에서 영어 과외 강력 추천".
-        Currently a no-op.
-        """
-        if not self._opt.add_affix:
-            return title
-        # TODO: implement Korean particle attachment
-        return title
-
-    def _apply_randomize(self, title: str) -> str:
-        """
-        Stub: substitute characters with visually similar lookalikes.
-        Currently a no-op.
-        """
-        if not self._opt.randomize_chars:
-            return title
-        # TODO: implement lookalike character substitution
-        return title

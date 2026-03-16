@@ -209,9 +209,8 @@ def test_pipeline_all_options(
         NaverBlogJob
         .for_account(account)
         .with_title(TitleOption(
-            template="지역+과목+학습형태+솔트",
-            learning_type="과외",
-            include_suffix=True,
+            template="{region} {subject} {learning_type} {salt}",
+            values={"region": "강남", "subject": "수학", "learning_type": "과외"},
         ))
         .with_content(content_opt)
         .with_seo(SEOOption(
@@ -297,9 +296,8 @@ def test_pipeline_real_publish(
         NaverBlogJob
         .for_account(account)
         .with_title(TitleOption(
-            template="지역+과목+학습형태+솔트",
-            learning_type="과외",
-            include_suffix=True,
+            template="{region} {subject} {learning_type} {salt}",
+            values={"region": "강남", "subject": "수학", "learning_type": "과외"},
         ))
         .with_content(loader.to_content_option(layout=[
             "Image 1",

@@ -52,7 +52,7 @@ _FETCH_ACCOUNTS_SQL = """
 """
 
 _FETCH_PENDING_COMBOS_SQL = """
-    SELECT id, region_id, subject, learning_type, has_space, has_suffix
+    SELECT id, campaign_id, spacing_rule_id, config
     FROM   combinations
     WHERE  used_at IS NULL
     ORDER  BY id ASC

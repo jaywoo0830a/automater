@@ -15,9 +15,10 @@ INSERT IGNORE INTO platforms (id, name, slug, base_url) VALUES
 -- ------------------------------------------------------------
 -- 2. campaign
 -- ------------------------------------------------------------
-INSERT IGNORE INTO campaigns (id, platform_id, name, description, config) VALUES
+INSERT IGNORE INTO campaigns (id, platform_id, name, description, title_template, config) VALUES
 (1, 1, '서울·경기남부 학원·과외 마케팅',
  '서울 25구 + 경기남부 19시군 × 국영수 × 과외/학원',
+ '{region} {subject} {learning_type} {salt}',
  JSON_OBJECT(
      'batch_size',       40,
      'paragraph_count',  3,

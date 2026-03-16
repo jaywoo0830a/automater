@@ -63,71 +63,58 @@ class AccountOption:
 # TitleOption
 # ---------------------------------------------------------------------------
 
-# Valid token names that can appear in a template string
-TITLE_TOKENS = frozenset({"지역", "과목", "학습형태", "솔트"})
-
-LearningType = Literal["과외", "학원"]
-
 
 @dataclass(frozen=True)
 class TitleOption:
     """
-    Rules for generating a blog post title for SEO keyword targeting.
+    Rules for generating a blog post title from a template and values.
 
-    목적: "대치동 영어 과외 강력 추천" 같은 검색 키워드 기반 제목을 생성한다.
+    Template format
+    ---------------
+    Python str.format()-style with {slug} tokens.
+    {salt} is a special token — replaced with a random salt from salts.json.
+    All other {slug} tokens must exist in the values dict.
 
-    Preset files (JSON)
-    -------------------
-    세 가지 프리셋을 JSON 파일로 관리한다. 경로를 비워두면
-    TitleGenerator가 presets/title/ 의 기본 파일을 사용한다.
+    Examples:
+        "{region} {subject} {learning_type} {salt}"  → "강남 수학 과외 강력 추천"
+        "{salt} {region} {subject} {learning_type}"  → "검증된 강남 수학 과외"
+        "{region} {target_audience} {subject} {salt}"→ "원주 성인 영어회화 추천"
+        "{region} {school} {grade} {subject} {learning_type} {salt}"
 
-    region_preset:  regions.json  — [{base_name, full_name, tier}, ...]
-    subject_preset: subjects.json — [과목명, ...]
-    salt_preset:    salts.json    — [솔트 텍스트, ...]
-
-    Assembly rules
-    --------------
+    Fields
+    ------
     template:
-        '+' 로 구분된 토큰 순서 문자열. 유효 토큰: 지역, 과목, 학습형태, 솔트.
-        네 토큰 모두 반드시 포함해야 한다.
+        {slug} token string. {salt} is replaced randomly from salts.json.
+        Required unless fixed_title is set.
 
-        기본값:  "지역+과목+학습형태+솔트"  → "대치동 영어 과외 강력 추천"
-        솔트 앞: "솔트+지역+과목+학습형태"  → "강력 추천 대치동 영어 과외"
-        트렌드에 따라 자유롭게 순서를 변경할 수 있다.
+    values:
+        Dict of slug → value for template substitution.
+        e.g. {"region": "강남", "subject": "수학", "learning_type": "과외"}
+        Populated by FactoryRunner from DB combo, or set explicitly for
+        standalone use.
 
-    learning_type:
-        "과외" or "학원". 항상 포함. 트렌드에 따라 변경 가능.
+    salt_preset:
+        Path to salts.json. Empty = use default presets/title/salts.json.
 
-    include_suffix:
-        True  → full_name 사용 ("대치동", "강남구") — 행정구역 단위 포함
-        False → base_name 사용 ("대치", "강남")     — 단위 제외
-
-    Stub features (구현 예정 — 현재는 무시됨)
-    ------------------------------------------
-    has_space:        토큰 사이 공백 삽입 여부.
-    add_affix:        제목 앞뒤에 랜덤 조사/어미 추가 여부.
-    randomize_chars:  유사 문자 치환 여부 (스팸 필터 우회용).
-    ai_preset_prompt: Gemini API로 추가 프리셋을 생성할 때 쓸 프롬프트.
+    fixed_title:
+        When set, returned as-is. Skips template/values entirely.
     """
-    # Preset file paths (empty string → TitleGenerator uses built-in default)
-    region_preset:  str = ""
-    subject_preset: str = ""
-    salt_preset:    str = ""
+    # Template and values
+    template:    str  = ""
+    values:      dict = field(default_factory=dict)
 
-    # Assembly rules
-    template:       str          = "지역+과목+학습형태+솔트"
-    learning_type:  LearningType = "과외"
-    include_suffix: bool         = True   # True=대치동, False=대치
+    # Salt preset path (salts.json)
+    salt_preset: str  = ""
 
-    # Direct override — skips TitleGenerator entirely when set
-    fixed_title: str = ""           # non-empty → use this string as-is
+    # Direct override — skips everything when set
+    fixed_title: str  = ""
 
-    # Stub features
-    has_space:        bool = True   # stub: always True for now
-    add_affix:        bool = False  # stub: not yet implemented
-    randomize_chars:  bool = False  # stub: not yet implemented
-    ai_preset_prompt: str  = ""     # stub: Gemini API preset generation
-
+    # Stub features (not yet implemented)
+    has_space:        bool = True
+    add_affix:        bool = False
+    randomize_chars:  bool = False
+    ai_preset_prompt: str  = ""
+    seed:             int | None = None
 
 # ---------------------------------------------------------------------------
 # ContentOption

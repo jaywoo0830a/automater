@@ -172,7 +172,7 @@ def test_job_uses_generator_when_prompt_set():
     (
         NaverBlogJob
         .for_account(AccountOption(naver_id="id", naver_pw="pw", blog_id="blog"))
-        .with_title(TitleOption())
+        .with_title(TitleOption(fixed_title="테스트 포스트"))
         .with_content(ContentOption(
             layout=["Paragraph 1", "Paragraph 2"],
             paragraph_prompt="테스트 프롬프트",
@@ -202,7 +202,7 @@ def test_job_uses_stub_when_no_prompt():
     (
         NaverBlogJob
         .for_account(AccountOption(naver_id="id", naver_pw="pw", blog_id="blog"))
-        .with_title(TitleOption())
+        .with_title(TitleOption(fixed_title="테스트 포스트"))
         .with_content(ContentOption(layout=["Paragraph 1"]))
         .run(editor)
     )

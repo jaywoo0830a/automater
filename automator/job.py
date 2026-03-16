@@ -170,8 +170,9 @@ class NaverBlogJob:
         if not self._account.blog_id.strip():
             raise ValueError("AccountOption.blog_id must not be empty")
 
-        if self._title is not None:
-            validate_template(self._title.template)
+        if self._title is not None and not self._title.fixed_title:
+            if self._title.template:
+                validate_template(self._title.template)
 
         if self._content is not None:
             validate_layout(self._content)

@@ -58,13 +58,14 @@ CREATE TABLE IF NOT EXISTS accounts (
 -- 예: {"batch_size":40,"paragraph_count":3}
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS campaigns (
-    id          INT UNSIGNED    NOT NULL AUTO_INCREMENT,
-    platform_id INT UNSIGNED    NOT NULL,
-    name        VARCHAR(128)    NOT NULL,
-    description TEXT                     DEFAULT NULL,
-    config      JSON                     DEFAULT NULL,
-    status      VARCHAR(16)     NOT NULL DEFAULT 'active',
-    created_at  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id             INT UNSIGNED    NOT NULL AUTO_INCREMENT,
+    platform_id    INT UNSIGNED    NOT NULL,
+    name           VARCHAR(128)    NOT NULL,
+    description    TEXT                     DEFAULT NULL,
+    title_template VARCHAR(256)    NOT NULL DEFAULT '',
+    config         JSON                     DEFAULT NULL,
+    status         VARCHAR(16)     NOT NULL DEFAULT 'active',
+    created_at     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id),
     KEY idx_platform (platform_id),
