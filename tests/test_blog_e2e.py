@@ -257,5 +257,90 @@ def test_pipeline_all_options(
 
 
 # ===========================================================================
+# Real publish — --real-run 플래그로만 실행
+# ===========================================================================
+
+@pytest.mark.e2e
+@pytest.mark.slow
+def test_pipeline_real_publish(
+    page: Page,
+    account: AccountOption,
+    real_run: bool,
+):
+    """
+    실제 발행 테스트 — --real-run 플래그 없으면 skip.
+
+    실행 조건:
+      - pytest --real-run
+      - ENV=production  (Gemini 실제 호출)
+      - GEMINI_API_KEY  (.env 설정)
+      - assets/images/, assets/thumbnails/ 에 파일 존재
+
+    발행 방식: 예약 발행 (+2시간, 10분 단위 내림)
+    """
+    if not real_run:
+        pytest.skip("--real-run 플래그 없음 — 실제 발행 건너뜀")
+
+    from automator.options import SEOOption, ImageOption, KST
+    from datetime import datetime, timedelta
+
+    now    = datetime.now(tz=KST)
+    target = (
+        now.replace(minute=(now.minute // 10) * 10, second=0, microsecond=0)
+        + timedelta(hours=2)
+    )
+
+    loader = AssetLoader()
+    editor = SmartEditorOne(page, account.write_url, dry_run=False)
+
+    job = (
+        NaverBlogJob
+        .for_account(account)
+        .with_title(TitleOption(
+            template="지역+과목+학습형태+솔트",
+            learning_type="과외",
+            include_suffix=True,
+        ))
+        .with_content(loader.to_content_option(layout=[
+            "Image 1",
+            "Paragraph 1",
+            "Image 2",
+            "Paragraph 2",
+            "Thumbnail 1",
+            "Paragraph 3",
+        ]))
+        .with_seo(SEOOption(
+            keyword            = "강남 수학 과외",
+            keyword_count_first= 3,
+            keyword_count_last = 2,
+            tone               = "review_style",
+            include_question   = True,
+            include_cta        = True,
+        ))
+        .with_image(ImageOption(
+            pixel_jitter                 = True,
+            size_jitter_px               = 2,
+            exif_description             = "강남 수학 과외",
+            exif_gps_lat                 = 37.4942,
+            exif_gps_lng                 = 127.0617,
+            filename_keyword             = "강남-수학-과외",
+            preview_saturation_jitter    = 0.03,
+            thumbnail_saturation_shift   = 0.30,
+            thumbnail_text               = ["강남", "수학 과외"],
+            thumbnail_text_color         = "#FFFFFF",
+            thumbnail_line_spacing       = 24,
+            thumbnail_letter_spacing     = 3,
+            upload_delay_ms              = 1500,
+        ))
+        .with_meta(MetaOption(
+            schedule_mode = "fixed",
+            schedule_at   = target,
+        ))
+        .with_setting(RunSetting())
+    )
+    job.run(editor)
+
+
+# ===========================================================================
 # Diagnostic: overlay, upload, representative image 단계별 진단
 # ===========================================================================

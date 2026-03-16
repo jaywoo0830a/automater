@@ -136,3 +136,20 @@ def editor(page: Page, account: AccountOption) -> SmartEditorOne:
     return SmartEditorOne(page, account.write_url, dry_run=True)
 
 
+# ---------------------------------------------------------------------------
+# --real-run 커스텀 옵션
+# ---------------------------------------------------------------------------
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--real-run",
+        action="store_true",
+        default=False,
+        help="실제 발행 테스트 활성화 (dry_run=False). ENV=production + GEMINI_API_KEY 필요.",
+    )
+
+
+@pytest.fixture
+def real_run(request) -> bool:
+    """--real-run 플래그 여부를 테스트에 전달."""
+    return request.config.getoption("--real-run")

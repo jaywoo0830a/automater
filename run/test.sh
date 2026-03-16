@@ -77,6 +77,14 @@ case "${MODE}" in
     pytest tests/test_blog_e2e.py::test_pipeline_all_options -m "e2e and slow" -v -s
     ;;
 
+  --real-run)
+    echo "── real publish — test_pipeline_real_publish ─"
+    echo "  ⚠️  실제 발행됩니다. ENV=production + GEMINI_API_KEY 확인하세요."
+    echo ""
+    pytest tests/test_blog_e2e.py::test_pipeline_real_publish \
+      -m "e2e and slow" -v -s --real-run
+    ;;
+
   --all)
     echo "── [1/5] unit ───────────────────────────"
     pytest "${UNIT_TESTS[@]}" -m unit -v
@@ -104,7 +112,8 @@ case "${MODE}" in
     echo "  bash ./run/test.sh --factory        # factory unit"
     echo "  bash ./run/test.sh --e2e            # unit + factory + e2e smoke"
     echo "  bash ./run/test.sh --schedule       # 예약 발행 e2e"
-    echo "  bash ./run/test.sh --pipeline       # 파이프라인 통합 (모든 옵션)"
+    echo "  bash ./run/test.sh --pipeline       # 파이프라인 통합 (모든 옵션)
+  bash ./run/test.sh --real-run       # 실제 발행 (ENV=production 필요)"
     echo "  bash ./run/test.sh --all            # 전체"
     echo ""
     ;;
