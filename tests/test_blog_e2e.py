@@ -173,7 +173,14 @@ def test_pipeline_all_options(
     with_title   — template 기반 제목 생성
     with_content — AssetLoader 자동 감지 (이미지 없으면 텍스트 전용으로 fallback)
     with_seo     — 키워드·글자수·톤 지정
-    with_image   — 픽셀 변형·썸네일 텍스트·Exif·업로드 딜레이
+    with_image   — 아래 항목 전체:
+                   · pixel_jitter / size_jitter      공통 해시 변경
+                   · Exif description + GPS          공통 메타데이터 SEO
+                   · preview_saturation_jitter        미세 채도 변형 (체감 안 됨)
+                   · thumbnail_saturation_shift       극적 채도 변형 (컬러 톤 변경)
+                   · thumbnail_text (list)            제목 줄별 오버레이
+                   · thumbnail_line/letter_spacing    행간·자간 픽셀 지정
+                   · filename_keyword                 파일명 키워드
     with_meta    — 예약 발행 (fixed, +2시간)
     with_setting — 기본 런타임 설정
 
@@ -189,11 +196,14 @@ def test_pipeline_all_options(
     )
 
     loader = AssetLoader()
-    if loader.images:
-        content_opt = loader.to_content_option(paragraphs=3)
-    else:
-        # 이미지 없으면 텍스트 전용으로 실행
-        content_opt = ContentOption(layout=["Paragraph 1", "Paragraph 2", "Paragraph 3"])
+    content_opt = loader.to_content_option(layout=[
+        "Image 1",
+        "Paragraph 1",
+        "Image 2",
+        "Paragraph 2",
+        "Thumbnail 1",
+        "Paragraph 3",
+    ])
 
     job = (
         NaverBlogJob
@@ -205,23 +215,37 @@ def test_pipeline_all_options(
         ))
         .with_content(content_opt)
         .with_seo(SEOOption(
-            keyword            = "강남 수학 과외",
-            keyword_count_first= 3,
-            keyword_count_last = 2,
-            first_para_min     = 200,
-            first_para_max     = 350,
-            total_min          = 600,
-            total_max          = 1000,
-            tone               = "review_style",
-            include_question   = True,
-            include_cta        = True,
+            keyword             = "강남 수학 과외",
+            keyword_count_first = 3,
+            keyword_count_last  = 2,
+            first_para_min      = 200,
+            first_para_max      = 350,
+            total_min           = 600,
+            total_max           = 1000,
+            tone                = "review_style",
+            include_question    = True,
+            include_cta         = True,
         ))
         .with_image(ImageOption(
-            pixel_jitter      = True,
-            size_jitter_px    = 2,
-            thumbnail_text    = "강남 수학 과외",
-            exif_description  = "강남 수학 과외",
-            upload_delay_ms   = 0,   # dry_run 이므로 딜레이 없음
+            # 공통 — 해시 변경
+            pixel_jitter              = True,
+            size_jitter_px            = 2,
+            # 공통 — Exif SEO
+            exif_description          = "강남 수학 과외",
+            exif_gps_lat              = 37.4942,
+            exif_gps_lng              = 127.0617,
+            filename_keyword          = "강남-수학-과외",
+            # preview — 미세 채도 변형 (체감 안 됨)
+            preview_saturation_jitter = 0.03,
+            # thumbnail — 극적 채도 변형 (컬러 톤 변경)
+            thumbnail_saturation_shift    = 0.30,
+            # thumbnail — 텍스트 오버레이
+            thumbnail_text                = ["강남", "수학 과외"],
+            thumbnail_text_color          = "#FFFFFF",
+            thumbnail_line_spacing        = 24,
+            thumbnail_letter_spacing      = 3,
+            # 업로드 딜레이 — dry_run 이므로 0
+            upload_delay_ms           = 0,
         ))
         .with_meta(MetaOption(
             schedule_mode = "fixed",

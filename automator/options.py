@@ -416,10 +416,23 @@ class ImageOption:
         Randomly resize the image by ±N pixels in each dimension.
         0 = no resize. Works together with pixel_jitter.
 
+    preview_saturation_jitter:
+        Randomly shift saturation of preview images by ±value (0.0–1.0).
+        Keep small — imperceptible colour shift, changes hash only.
+        Default 0.03 (±3%).
+
+    thumbnail_saturation_shift:
+        Randomly shift saturation of thumbnail images by ±value (0.0–1.0).
+        Keep larger — visible colour tone change per posting.
+        Default 0.30 (±30%).
+
     thumbnail_text:
-        Text string to overlay on thumbnail images (e.g. post title).
-        Split by spaces — each word rendered on its own centered line.
-        Empty string = no overlay.
+        Text to overlay on thumbnail images. Accepts:
+          str  — split by spaces, each word on its own line.
+                 e.g. "강남 수학 과외"  →  3 lines
+          list[str]  — each element is one line.
+                 e.g. ["강남", "수학 과외"]  →  2 lines
+        Empty string or empty list = no overlay.
 
     thumbnail_text_color:
         Hex color for the thumbnail text overlay (e.g. "#FFFFFF").
@@ -451,11 +464,13 @@ class ImageOption:
     upload_delay_ms:       int   = 1500
 
     # ── Pixel / size variation ────────────────────────────────────────────────
-    pixel_jitter:          bool  = True
-    size_jitter_px:        int   = 2
+    pixel_jitter:             bool  = True
+    size_jitter_px:           int   = 2
+    preview_saturation_jitter:    float = 0.03   # ±3%  — imperceptible
+    thumbnail_saturation_shift:   float = 0.30   # ±30% — visible tone change
 
     # ── Thumbnail text overlay ────────────────────────────────────────────────
-    thumbnail_text:           str   = ""
+    thumbnail_text:           str | list = ""
     thumbnail_text_color:     str   = "#FFFFFF"
     thumbnail_line_spacing:   int   = 24    # px between lines
     thumbnail_letter_spacing: int   = 3     # px between characters
@@ -476,6 +491,16 @@ class ImageOption:
         if self.size_jitter_px < 0:
             raise ValueError(
                 f"size_jitter_px must be ≥ 0, got {self.size_jitter_px}"
+            )
+        if not (0.0 <= self.preview_saturation_jitter <= 1.0):
+            raise ValueError(
+                f"preview_saturation_jitter must be 0.0–1.0, "
+                f"got {self.preview_saturation_jitter}"
+            )
+        if not (0.0 <= self.thumbnail_saturation_shift <= 1.0):
+            raise ValueError(
+                f"thumbnail_saturation_shift must be 0.0–1.0, "
+                f"got {self.thumbnail_saturation_shift}"
             )
         if not self.thumbnail_text_color.startswith("#") or \
                 len(self.thumbnail_text_color) not in (4, 7):

@@ -24,25 +24,20 @@ Usage
 -----
     from automator.asset_loader import AssetLoader
 
-    loader = AssetLoader()                     # assets/ 를 현재 디렉토리 기준으로 탐색
-    loader = AssetLoader(root="my_project/")   # 루트 지정
+    loader = AssetLoader()
 
     # 감지된 파일 확인
     print(loader.images)     # ['assets/images/1.jpg', ...]
     print(loader.thumbnails) # ['assets/thumbnails/1.jpg']
 
-    # 레이아웃만 얻기
-    layout = loader.build_layout(paragraphs=3)
-    # → ['Image 1', 'Paragraph 1', 'Image 2', 'Paragraph 2', 'Image 3', 'Paragraph 3',
-    #    'Thumbnail 1']
-
-    # ContentOption 으로 바로 변환
-    content = loader.to_content_option(paragraphs=3)
-    # → ContentOption(
-    #       preview_images=['assets/images/1.jpg', ...],
-    #       thumbnail_images=['assets/thumbnails/1.jpg'],
-    #       layout=[...],
-    #   )
+    # 레이아웃을 직접 지정해서 ContentOption 생성
+    content = loader.to_content_option(layout=[
+        "Thumbnail 1",
+        "Paragraph 1",
+        "Paragraph 2",
+        "Image 1",
+        "Paragraph 3",
+    ])
 """
 
 from __future__ import annotations
@@ -52,8 +47,8 @@ from pathlib import Path
 from automator.options import ContentOption
 
 _SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
-_IMAGES_SUBDIR       = "images"
-_THUMBNAILS_SUBDIR   = "thumbnails"
+_IMAGES_SUBDIR        = "images"
+_THUMBNAILS_SUBDIR    = "thumbnails"
 
 
 def _sort_key(path: Path) -> tuple[int, int, str]:
@@ -96,10 +91,6 @@ class AssetLoader:
         self._images     = _scan(self._assets_dir / _IMAGES_SUBDIR)
         self._thumbnails = _scan(self._assets_dir / _THUMBNAILS_SUBDIR)
 
-    # ------------------------------------------------------------------
-    # Properties
-    # ------------------------------------------------------------------
-
     @property
     def images(self) -> list[str]:
         """Sorted list of preview image paths."""
@@ -110,69 +101,38 @@ class AssetLoader:
         """Sorted list of thumbnail image paths."""
         return list(self._thumbnails)
 
-    # ------------------------------------------------------------------
-    # Layout generation
-    # ------------------------------------------------------------------
-
-    def build_layout(self, paragraphs: int = 0) -> list[str]:
+    def to_content_option(self, layout: list[str], **kwargs) -> ContentOption:
         """
-        Build a layout alias list from detected images.
-
-        Layout pattern (paragraphs > 0):
-            Image 1, Paragraph 1, Image 2, Paragraph 2, ..., Thumbnail 1
-
-        If paragraphs > images, remaining paragraphs are appended at the end
-        (before thumbnails).
+        Build a ContentOption from detected assets with an explicit layout.
 
         Args:
-            paragraphs: Number of "Paragraph N" aliases to interleave.
-                        0 = images only, no paragraph aliases.
+            layout:   Alias list controlling order and composition.
+                      e.g. ["Image 1", "Paragraph 1", "Thumbnail 1", "Paragraph 2"]
+            **kwargs: Additional keyword arguments forwarded to ContentOption
+                      (e.g. paragraph_prompt, paragraph_newlines).
 
         Returns:
-            List of alias strings compatible with ContentOption.layout.
-        """
-        layout: list[str] = []
+            ContentOption with preview_images, thumbnail_images, and layout populated.
 
-        n_images    = len(self._images)
-        para_cursor = 0
+        Examples:
+            loader.to_content_option(layout=[
+                "Image 1",
+                "Paragraph 1",
+                "Image 2",
+                "Paragraph 2",
+                "Thumbnail 1",
+            ])
 
-        for i in range(n_images):
-            layout.append(f"Image {i + 1}")
-            if paragraphs > 0 and para_cursor < paragraphs:
-                para_cursor += 1
-                layout.append(f"Paragraph {para_cursor}")
-
-        # Remaining paragraphs (more paragraphs than images)
-        while para_cursor < paragraphs:
-            para_cursor += 1
-            layout.append(f"Paragraph {para_cursor}")
-
-        # Thumbnails always last
-        for i in range(len(self._thumbnails)):
-            layout.append(f"Thumbnail {i + 1}")
-
-        return layout
-
-    # ------------------------------------------------------------------
-    # ContentOption factory
-    # ------------------------------------------------------------------
-
-    def to_content_option(self, paragraphs: int = 0, **kwargs) -> ContentOption:
-        """
-        Build a ContentOption from detected assets.
-
-        Args:
-            paragraphs: Number of paragraph aliases to interleave in the layout.
-            **kwargs:   Additional keyword arguments forwarded to ContentOption
-                        (e.g. paragraph_prompt, paragraph_newlines).
-
-        Returns:
-            ContentOption with preview_images, thumbnail_images, and layout
-            populated from the detected files.
+            loader.to_content_option(layout=[
+                "Thumbnail 1",
+                "Paragraph 1",
+                "Paragraph 2",
+                "Paragraph 3",
+            ])
         """
         return ContentOption(
             preview_images   = self.images,
             thumbnail_images = self.thumbnails,
-            layout           = self.build_layout(paragraphs=paragraphs),
+            layout           = layout,
             **kwargs,
         )

@@ -95,34 +95,28 @@ class ImageProcessor:
 
     def process_preview(self, src: bytes, keyword: str) -> bytes:
         """
-        Apply pixel/size jitter and Exif metadata to a preview image.
+        Apply transformations to a preview (body) image.
 
-        Args:
-            src:     Raw image bytes (JPEG or PNG).
-            keyword: Target keyword for Exif description fallback.
-
-        Returns:
-            Processed JPEG bytes.
+        Pipeline:
+            size_jitter → pixel_jitter → saturation_jitter (subtle) → exif
         """
         img = Image.open(io.BytesIO(src)).convert("RGB")
         img = self._apply_size_jitter(img)
         img = self._apply_pixel_jitter(img)
+        img = self._apply_saturation(img, self._opt.preview_saturation_jitter)
         return self._encode_with_exif(img, keyword)
 
     def process_thumbnail(self, src: bytes, keyword: str) -> bytes:
         """
-        Apply pixel/size jitter, text overlay, and Exif to a thumbnail image.
+        Apply transformations to a thumbnail image.
 
-        Args:
-            src:     Raw image bytes (JPEG or PNG).
-            keyword: Target keyword for Exif description fallback.
-
-        Returns:
-            Processed JPEG bytes.
+        Pipeline:
+            size_jitter → pixel_jitter → saturation_shift (visible) → text_overlay → exif
         """
         img = Image.open(io.BytesIO(src)).convert("RGB")
         img = self._apply_size_jitter(img)
         img = self._apply_pixel_jitter(img)
+        img = self._apply_saturation(img, self._opt.thumbnail_saturation_shift)
         img = self._apply_text_overlay(img)
         return self._encode_with_exif(img, keyword)
 
@@ -184,6 +178,25 @@ class ImageProcessor:
 
         return img.resize((new_w, new_h), Image.LANCZOS)
 
+    def _apply_saturation(self, img: Image.Image, jitter: float) -> Image.Image:
+        """
+        Randomly shift image saturation by ±jitter using PIL ImageEnhance.
+
+        Args:
+            img:    Source image.
+            jitter: Maximum shift magnitude (0.0–1.0).
+                    Preview  → small value (e.g. 0.03) — hash change only.
+                    Thumbnail → larger value (e.g. 0.30) — visible tone change.
+
+        Enhancement factor: 1.0 = original, > 1.0 = more saturated, < 1.0 = less.
+        """
+        if jitter <= 0.0:
+            return img
+        from PIL import ImageEnhance
+        delta  = random.uniform(-jitter, jitter)
+        factor = max(0.0, 1.0 + delta)
+        return ImageEnhance.Color(img).enhance(factor)
+
     def _apply_text_overlay(self, img: Image.Image) -> Image.Image:
         """
         Draw thumbnail_text over the image.
@@ -199,7 +212,17 @@ class ImageProcessor:
         draw   = ImageDraw.Draw(img)
         w, h   = img.size
         color  = self._opt.thumbnail_text_color
-        chunks = text.split()          # ["강남", "수학", "과외"]
+
+        # Normalise to list[str] regardless of input type:
+        #   str       → split by spaces  ("강남 수학 과외" → ["강남","수학","과외"])
+        #   list[str] → used as-is       (["강남", "수학 과외"] → 2 lines)
+        if isinstance(text, str):
+            chunks = text.split()
+        else:
+            chunks = [str(c) for c in text if c]
+
+        if not chunks:
+            return img
 
         # ── Load font ────────────────────────────────────────────────────────
         fonts_dir = Path(__file__).parent.parent / "assets" / "fonts"
