@@ -5,12 +5,8 @@ Naver Blog automation package.
 
 Quick start
 -----------
-    from automator import (
-        NaverBlogJob,
-        AccountOption, TitleOption, ContentOption, MetaOption, RunSetting,
-        BlogEditor, PostContent, PostStep,
-        SmartEditorOne,
-    )
+    from automator import NaverBlogJob, AccountOption, TitleOption, ContentOption, MetaOption
+    from automator import SmartEditorOne, SEOOption
 
     job = (
         NaverBlogJob
@@ -19,32 +15,24 @@ Quick start
             naver_pw="my_pw",
             blog_id="my_blog",
         ))
-        .with_title(TitleOption(
-            template="지역+과목+학습형태+솔트",
-            learning_type="과외",
-            include_suffix=True,
+        .with_title(TitleOption(fixed_title="강남 수학 과외"))
+        .with_content(AssetLoader().to_content_option(paragraphs=3))
+        .with_seo(SEOOption(
+            keyword="강남 수학 과외",
+            tone="review_style",
         ))
-        .with_content(ContentOption(
-            preview_images=["images/preview_1.jpg", "images/preview_2.jpg"],
-            thumbnail_images=["images/thumbnail.jpg"],
-            layout=[
-                "Image 1",
-                "Image 2",
-                "Paragraph 1",
-                "Thumbnail 1",
-                "Paragraph 2",
-                "Paragraph 3",
-            ],
+        .with_image(ImageOption(
+            pixel_jitter     = True,
+            thumbnail_text   = "강남 수학 과외",
+            exif_description = "강남 수학 과외",
+            upload_delay_ms  = 1500,
         ))
-        .with_meta(MetaOption(min_tags=10, max_tags=15))
-        .with_setting(RunSetting(post_interval=30))
+        .with_meta(MetaOption())
     )
 
     # editor requires a live Playwright Page:
-    # Dry run (default — no publish):
-    # success = job.run(SmartEditorOne(page, job._account.write_url))
-    # Live publish (explicit):
-    # success = job.run(SmartEditorOne(page, job._account.write_url, dry_run=False))
+    with SmartEditorOne(page, job._account.write_url) as editor:
+        job.run(editor)
 """
 
 from automator.paragraph_generator import ParagraphGenerator
@@ -54,6 +42,8 @@ from automator.options import (
     ContentOption,
     MetaOption,
     RunSetting,
+    SEOOption,
+    ImageOption,
 )
 from automator.editor import BlogEditor, PostContent, PostStep
 from automator.browser_actions import (
@@ -63,6 +53,8 @@ from automator.browser_actions import (
 )
 from automator.smart_editor import SmartEditorOne
 from automator.job import NaverBlogJob
+from automator.image_processor import ImageProcessor
+from automator.asset_loader import AssetLoader
 
 __all__ = [
     "AccountOption",
@@ -70,9 +62,13 @@ __all__ = [
     "ContentOption",
     "MetaOption",
     "RunSetting",
+    "SEOOption",
+    "ImageOption",
     "BlogEditor",
     "PostContent",
     "PostStep",
     "SmartEditorOne",
     "NaverBlogJob",
+    "ImageProcessor",
+    "AssetLoader",
 ]

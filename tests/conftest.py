@@ -7,7 +7,7 @@ tests/conftest.py
 ----------
 Unit fixtures  : mock_paragraph_generator (autouse)
 E2E fixtures   : account → browser_instance → auth_context → page → editor
-                 post_images (이미지 경로)
+                 post_images (이미지 경로) — AssetLoader 로 대체됨
 
 E2E fixture 사용 조건
 ----------------------
@@ -38,10 +38,6 @@ NAVER_PW      = os.getenv("NAVER_PW",      "")
 NAVER_BLOG_ID = os.getenv("NAVER_BLOG_ID", "")
 SESSION_PATH  = os.getenv("SESSION_PATH",  "session_state.json")
 
-TEST_PREVIEW_1   = os.getenv("TEST_PREVIEW_1",  "")
-TEST_PREVIEW_2   = os.getenv("TEST_PREVIEW_2",  "")
-TEST_PREVIEW_3   = os.getenv("TEST_PREVIEW_3",  "")
-TEST_THUMBNAIL_1 = os.getenv("TEST_THUMBNAIL_1","")
 
 _LOGIN_SEL = SelectorLoader.load("selectors/naver/login.json")
 
@@ -140,17 +136,3 @@ def editor(page: Page, account: AccountOption) -> SmartEditorOne:
     return SmartEditorOne(page, account.write_url, dry_run=True)
 
 
-@pytest.fixture(scope="session")
-def post_images() -> tuple:
-    """
-    .env 의 TEST_PREVIEW_1~3, TEST_THUMBNAIL_1 경로를 반환.
-    파일이 없으면 skip.
-    """
-    paths   = (TEST_PREVIEW_1, TEST_PREVIEW_2, TEST_PREVIEW_3, TEST_THUMBNAIL_1)
-    missing = [p for p in paths if not p or not os.path.exists(p)]
-    if missing:
-        pytest.skip(
-            f"이미지 파일 필요 — .env 에 TEST_PREVIEW_1~3 / TEST_THUMBNAIL_1 설정. "
-            f"없는 파일: {missing}"
-        )
-    return paths

@@ -167,12 +167,6 @@ def test_validate_raises_on_empty_blog_id(account):
 
 
 @pytest.mark.unit
-def test_validate_raises_on_zero_post_count(account):
-    with pytest.raises(ValueError, match="post_count"):
-        NaverBlogJob.for_account(replace(account, post_count=0)).validate()
-
-
-@pytest.mark.unit
 def test_validate_raises_on_invalid_template(account):
     """
     잘못된 template(토큰 누락)은 validate() 시점에 ValueError를 발생시킨다.

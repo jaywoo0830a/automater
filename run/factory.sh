@@ -95,8 +95,14 @@ case "${CMD}" in
   seed)
     _require_venv
     _require_db
-    echo "조합 생성: 지역 × 과목 × 학습형태 × 띄어쓰기 × 접미사"
+    echo "조합 생성: 선택된 값들의 카테시안 곱 → combinations 테이블"
     python -m factory.main seed "$@"
+    ;;
+
+  select)
+    _require_venv
+    _require_db
+    python -m factory.main select "$@"
     ;;
 
   dispatch)
@@ -140,6 +146,10 @@ case "${CMD}" in
     bash ./run/factory.sh db-logs           # MySQL 로그
 
   파이프라인:
+    bash ./run/factory.sh select --list
+    bash ./run/factory.sh select --dimension region --values "강남구,수원시"
+    bash ./run/factory.sh select --dimension subject --values "수학"
+    bash ./run/factory.sh select --dimension learning_type --values "과외"
     bash ./run/factory.sh seed
     bash ./run/factory.sh dispatch [--schedule-at "YYYY-MM-DD HH:MM"]
     bash ./run/factory.sh run [--workers N] [--dry-run]

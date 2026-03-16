@@ -40,7 +40,6 @@ class AccountOption:
         naver_id:     Naver login ID.
         naver_pw:     Naver login password.
         blog_id:      Blog ID used to construct the write URL.
-        post_count:   Number of posts to publish with this account.
         proxies:      Proxy addresses ("ip:port") to cycle through.
         session_path: Path to Playwright storage-state JSON.
                       Defaults to "<naver_id>_session.json".
@@ -48,7 +47,6 @@ class AccountOption:
     naver_id:     str
     naver_pw:     str
     blog_id:      str
-    post_count:   int       = 1
     proxies:      list[str] = field(default_factory=list)
     session_path: str       = ""
 
@@ -243,7 +241,6 @@ class RunSetting:
     post_interval:     int       = 60
     max_daily_posts:   int       = 10
     on_failure:        OnFailure = "stop"
-    rotate_user_agent: bool      = True
     headless:          bool      = True
     slow_mo:           int       = 0
 
@@ -391,3 +388,87 @@ class SEOOption:
             val = getattr(self, field_name)
             if val < 0:
                 raise ValueError(f"keyword_count fields must be ≥ 0, got {field_name}={val}")
+
+
+# ---------------------------------------------------------------------------
+# ImageOption
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ImageOption:
+    """
+    Controls image processing before upload.
+
+    Each image goes through: pixel_jitter → size_jitter → exif → save.
+    Thumbnails additionally go through: thumbnail_text overlay.
+
+    Fields
+    ------
+    upload_delay_ms:
+        Milliseconds to wait after each file upload.
+        Prevents Naver editor from failing on rapid sequential uploads.
+
+    pixel_jitter:
+        If True, randomly alter 1–3 pixels so the image hash differs
+        from the source. Prevents duplicate-content detection.
+
+    size_jitter_px:
+        Randomly resize the image by ±N pixels in each dimension.
+        0 = no resize. Works together with pixel_jitter.
+
+    thumbnail_text:
+        Text string to overlay on thumbnail images (e.g. post title).
+        Empty string = no overlay.
+
+    thumbnail_text_color:
+        Hex color for the thumbnail text overlay (e.g. "#FFFFFF").
+
+    exif_description:
+        Value written to the JPEG Exif ImageDescription field.
+        Naver's image crawler reads this. Typically the target keyword.
+
+    exif_gps_lat / exif_gps_lng:
+        GPS coordinates embedded in Exif GPS IFD.
+        Boosts local search relevance when set to the region's coordinates.
+        None = no GPS data.
+
+    filename_keyword:
+        Keyword string used when building the upload filename.
+        e.g. "강남-수학-과외" → "강남-수학-과외-01.jpg"
+        Empty = generic fallback name.
+    """
+
+    # ── Upload timing ─────────────────────────────────────────────────────────
+    upload_delay_ms:       int   = 1500
+
+    # ── Pixel / size variation ────────────────────────────────────────────────
+    pixel_jitter:          bool  = True
+    size_jitter_px:        int   = 2
+
+    # ── Thumbnail text overlay ────────────────────────────────────────────────
+    thumbnail_text:        str   = ""
+    thumbnail_text_color:  str   = "#FFFFFF"
+
+    # ── Exif metadata ─────────────────────────────────────────────────────────
+    exif_description:      str         = ""
+    exif_gps_lat:          float | None = None
+    exif_gps_lng:          float | None = None
+
+    # ── Filename ──────────────────────────────────────────────────────────────
+    filename_keyword:      str   = ""
+
+    def __post_init__(self) -> None:
+        if self.upload_delay_ms < 0:
+            raise ValueError(
+                f"upload_delay_ms must be ≥ 0, got {self.upload_delay_ms}"
+            )
+        if self.size_jitter_px < 0:
+            raise ValueError(
+                f"size_jitter_px must be ≥ 0, got {self.size_jitter_px}"
+            )
+        if not self.thumbnail_text_color.startswith("#") or \
+                len(self.thumbnail_text_color) not in (4, 7):
+            raise ValueError(
+                f"thumbnail_text_color must be a hex color like '#FFFFFF', "
+                f"got {self.thumbnail_text_color!r}"
+            )

@@ -45,11 +45,53 @@ def _db_config() -> dict:
 def cmd_seed(_args) -> None:
     from factory.db import Database
     from factory.combo_generator import ComboGenerator
+    from factory.selection import CampaignSelector
 
+    campaign_id = int(os.environ.get("CAMPAIGN_ID", "1"))
     with Database.from_config(**_db_config()) as db:
-        gen      = ComboGenerator(db=db)
-        inserted = gen.run()
+        selector  = CampaignSelector(db=db, campaign_id=campaign_id)
+        selection = selector.get_selected_value_ids()
+        gen       = ComboGenerator(db=db, campaign_id=campaign_id, selection=selection)
+        inserted  = gen.run()
+
+    active = {k: v for k, v in selector.list_selections().items() if v}
+    if active:
+        print(f"  선택 필터: {active}")
+    else:
+        print(f"  선택 필터: 없음 (전체)")
     print(f"✅ seed: {inserted}개 조합 추가")
+
+
+def cmd_select(args) -> None:
+    from factory.db import Database
+    from factory.selection import CampaignSelector
+
+    campaign_id = int(os.environ.get("CAMPAIGN_ID", "1"))
+    with Database.from_config(**_db_config()) as db:
+        sel = CampaignSelector(db=db, campaign_id=campaign_id)
+
+        if args.list:
+            result = sel.list_selections()
+            print(f"\n  캠페인 {campaign_id} 현재 선택:")
+            for dim_slug, values in result.items():
+                if values:
+                    print(f"    {dim_slug:15s}: {', '.join(values)}")
+                else:
+                    print(f"    {dim_slug:15s}: (전체 사용)")
+            return
+
+        if not args.dimension or args.values is None:
+            print("❌ --dimension 과 --values 를 함께 지정하세요.")
+            print("   예) --dimension region --values '강남구,수원시'")
+            return
+
+        values = [v.strip() for v in args.values.split(",")] if args.values else []
+        count  = sel.select(dimension_slug=args.dimension, values=values)
+
+        if values:
+            print(f"✅ '{args.dimension}' → {values} ({count}개) 선택 완료")
+        else:
+            print(f"✅ '{args.dimension}' 선택 초기화 (전체 사용)")
 
 
 def cmd_dispatch(args) -> None:
@@ -109,15 +151,23 @@ def cmd_status(_args) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="factory")
-    parser.add_argument("command", choices=["seed", "dispatch", "run", "status"])
+    parser.add_argument("command", choices=["seed", "select", "dispatch", "run", "status"])
     parser.add_argument("--workers",     type=int,  default=5)
     parser.add_argument("--dry-run",     action="store_true")
     parser.add_argument("--schedule-at", type=str,  default=None,
                         help='KST datetime e.g. "2026-03-20 14:00"')
+    # select 옵션
+    parser.add_argument("--dimension",   type=str,  default=None,
+                        help="dimension slug (e.g. region, subject, learning_type)")
+    parser.add_argument("--values",      type=str,  default=None,
+                        help="콤마 구분 값 목록 (e.g. '강남구,수원시'). 빈 문자열=전체 사용")
+    parser.add_argument("--list",        action="store_true",
+                        help="현재 선택 목록 출력")
 
     args = parser.parse_args()
     {
         "seed":     cmd_seed,
+        "select":   cmd_select,
         "dispatch": cmd_dispatch,
         "run":      cmd_run,
         "status":   cmd_status,

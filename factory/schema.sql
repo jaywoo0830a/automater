@@ -143,6 +143,29 @@ CREATE TABLE IF NOT EXISTS spacing_rules (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
+-- campaign_selections
+-- 캠페인별 선택된 dimension_values 목록.
+-- seed 시 이 목록에 있는 값들만 카테시안 곱에 포함된다.
+-- dimension 별로 덮어쓰기 방식 — select 명령 실행 시 해당 dimension 의
+-- 기존 선택을 DELETE 후 INSERT 한다.
+-- 비어있는 dimension 은 해당 차원의 전체 값을 사용한다.
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS campaign_selections (
+    id                 INT UNSIGNED    NOT NULL AUTO_INCREMENT,
+    campaign_id        INT UNSIGNED    NOT NULL,
+    dimension_id       INT UNSIGNED    NOT NULL,
+    dimension_value_id INT UNSIGNED    NOT NULL,
+    created_at         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_selection (campaign_id, dimension_value_id),
+    KEY idx_campaign_dim (campaign_id, dimension_id),
+    CONSTRAINT fk_sel_campaign FOREIGN KEY (campaign_id)        REFERENCES campaigns        (id),
+    CONSTRAINT fk_sel_dim      FOREIGN KEY (dimension_id)       REFERENCES dimensions       (id),
+    CONSTRAINT fk_sel_dv       FOREIGN KEY (dimension_value_id) REFERENCES dimension_values (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------------
 -- combinations
 -- 카테시안 곱의 결과 하나.
 -- 어떤 dimension_values 조합을 어떤 spacing_rule 로 쓸지.

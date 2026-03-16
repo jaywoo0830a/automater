@@ -31,6 +31,7 @@ _LOGIN_SEL  = SelectorLoader.load("selectors/naver/login.json")
 _EDITOR_SEL = SelectorLoader.load("selectors/naver/editor.json")
 from automator.smart_editor import SmartEditorOne
 from automator.job import NaverBlogJob
+from automator.asset_loader import AssetLoader
 
 load_dotenv()
 
@@ -38,17 +39,7 @@ NAVER_ID      = os.getenv("NAVER_ID", "")
 NAVER_PW      = os.getenv("NAVER_PW", "")
 NAVER_BLOG_ID = os.getenv("NAVER_BLOG_ID", "")
 SESSION_PATH  = os.getenv("SESSION_PATH", "session_state.json")
-IMAGE_PATH    = os.getenv("TEST_IMAGE_PATH", "images/preview_1.png")
 
-# Images for test_full_post_sequence
-# Set these in .env to use real images in the publish test.
-# e.g. TEST_PREVIEW_1=images/math_1.jpg
-#      TEST_PREVIEW_2=images/math_2.jpg
-#      TEST_THUMBNAIL_1=images/thumb_base.jpg
-TEST_PREVIEW_1    = os.getenv("TEST_PREVIEW_1", "")
-TEST_PREVIEW_2    = os.getenv("TEST_PREVIEW_2", "")
-TEST_PREVIEW_3    = os.getenv("TEST_PREVIEW_3", "")
-TEST_THUMBNAIL_1  = os.getenv("TEST_THUMBNAIL_1", "")
 
 
 # ---------------------------------------------------------------------------
@@ -69,10 +60,12 @@ def test_editor_iframe_is_visible(page: Page, account: AccountOption):
 
 @pytest.mark.e2e
 def test_image_upload_inserts_image_in_editor(editor: SmartEditorOne, page: Page):
-    if not os.path.exists(IMAGE_PATH):
-        pytest.skip(f"Test image not found: {IMAGE_PATH!r}")
+    loader = AssetLoader()
+    if not loader.images:
+        pytest.skip("assets/images/ 에 이미지가 없습니다.")
+    image_path = loader.images[0]
     editor.open()
-    editor.upload_image(IMAGE_PATH)
+    editor.upload_image(image_path)
     assert page.frame_locator(_MAIN_FRAME).first.locator(_EDITOR_SEL.css("editor_image")).first.is_visible()
 
 
@@ -81,10 +74,14 @@ def test_image_upload_inserts_image_in_editor(editor: SmartEditorOne, page: Page
 # ---------------------------------------------------------------------------
 
 def _upload_three(editor, page):
+    loader = AssetLoader()
+    if not loader.images:
+        pytest.skip("assets/images/ 에 이미지가 없습니다.")
+    image_path = loader.images[0]
     editor.open()
     for i in range(3):
         if i > 0: editor.move_cursor_to_end()
-        editor.upload_image(IMAGE_PATH)
+        editor.upload_image(image_path)
     page.frame_locator(_MAIN_FRAME).first \
         .locator(_EDITOR_SEL.css("editor_image")).nth(2) \
         .wait_for(state="visible", timeout=15_000)
@@ -103,7 +100,6 @@ def _assert_selected(page, index, total):
 
 @pytest.mark.e2e
 def test_set_first_image_as_representative(editor, page):
-    if not os.path.exists(IMAGE_PATH): pytest.skip()
     _upload_three(editor, page)
     editor.set_representative_image(0)
     _assert_selected(page, 0, 3)
@@ -111,7 +107,6 @@ def test_set_first_image_as_representative(editor, page):
 
 @pytest.mark.e2e
 def test_set_second_image_as_representative(editor, page):
-    if not os.path.exists(IMAGE_PATH): pytest.skip()
     _upload_three(editor, page)
     editor.set_representative_image(1)
     _assert_selected(page, 1, 3)
@@ -119,7 +114,6 @@ def test_set_second_image_as_representative(editor, page):
 
 @pytest.mark.e2e
 def test_set_third_image_as_representative(editor, page):
-    if not os.path.exists(IMAGE_PATH): pytest.skip()
     _upload_three(editor, page)
     editor.set_representative_image(2)
     _assert_selected(page, 2, 3)
@@ -132,7 +126,7 @@ def test_set_third_image_as_representative(editor, page):
 # 실행되므로 실제 발행은 일어나지 않습니다.
 #
 # 시나리오 구성:
-#   [이미지 필요] TEST_PREVIEW_1~3, TEST_THUMBNAIL_1 (.env 설정 필요)
+#   [이미지 필요] assets/images/ 에 이미지 파일 필요 (AssetLoader 자동 감지)
 #   [이미지 불필요] 텍스트 전용 / 예약 발행 검증용
 #
 # Run all pipeline tests:
@@ -147,11 +141,11 @@ def _run_job(job, editor) -> None:
     """
     Run a NaverBlogJob and assert success.
 
+    job.run() returns None on success and raises on failure.
     ParagraphGenerator is always mocked with UDHR stub paragraphs in pipeline tests
     (see conftest.py) — no real Gemini API calls are made here.
     """
-    ok = job.run(editor)
-    assert ok is True, "job.run() returned False — 브라우저/에디터 오류 확인 필요" 
+    job.run(editor)  # raises on failure, returns None on success
 
 
 # ---------------------------------------------------------------------------
@@ -172,13 +166,14 @@ def _run_job(job, editor) -> None:
 def test_pipeline_full_layout(
     editor: SmartEditorOne,
     account: AccountOption,
-    post_images: tuple,
 ):
     """
     이미지 업로드 + 썸네일 + 단락이 섞인 전체 레이아웃 흐름.
-    Image×3 → Paragraph 1 → Thumbnail → Paragraph 2, 3
+    assets/images/ + assets/thumbnails/ 에서 자동 감지.
     """
-    preview_1, preview_2, preview_3, thumbnail_1 = post_images
+    loader = AssetLoader()
+    if not loader.images:
+        pytest.skip("assets/images/ 에 이미지가 없습니다.")
 
     job = (
         NaverBlogJob
@@ -188,18 +183,8 @@ def test_pipeline_full_layout(
             learning_type="과외",
             include_suffix=True,
         ))
-        .with_content(ContentOption(
-            preview_images=[preview_1, preview_2, preview_3],
-            thumbnail_images=[thumbnail_1],
-            layout=[
-                "Image 1",
-                "Image 2",
-                "Image 3",
-                "Paragraph 1",
-                "Thumbnail 1",
-                "Paragraph 2",
-                "Paragraph 3",
-            ],
+        .with_content(loader.to_content_option(
+            paragraphs=3,
             paragraph_prompt="대치동 수학 과외를 홍보하는 학부모 대상 블로그 글.",
         ))
         .with_meta(MetaOption())

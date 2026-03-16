@@ -25,6 +25,8 @@ from __future__ import annotations
 
 import random
 import sys
+import tempfile
+import time
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -41,6 +43,7 @@ from automator.options import (
     MetaOption,
     RunSetting,
     SEOOption,
+    ImageOption,
     KST,
 )
 
@@ -70,6 +73,7 @@ class NaverBlogJob:
     _meta:    MetaOption    | None = field(default=None, repr=False)
     _setting: RunSetting    | None = field(default=None, repr=False)
     _seo:     SEOOption     | None = field(default=None, repr=False)
+    _image:   ImageOption   | None = field(default=None, repr=False)
 
     # ------------------------------------------------------------------
     # Builder
@@ -104,6 +108,18 @@ class NaverBlogJob:
         Takes priority over ContentOption.paragraph_prompt.
         """
         return replace(self, _seo=seo)
+
+    def with_image(self, image: ImageOption) -> "NaverBlogJob":
+        """Return a new job with the given image processing option.
+
+        When set, preview and thumbnail images are transformed by
+        ImageProcessor before upload:
+          - pixel_jitter / size_jitter  — unique hash per upload
+          - thumbnail_text overlay      — keyword branding
+          - Exif metadata               — SEO description + GPS
+          - upload_delay_ms             — wait between uploads
+        """
+        return replace(self, _image=image)
 
     # ------------------------------------------------------------------
     # Execution
@@ -153,8 +169,6 @@ class NaverBlogJob:
             raise ValueError("AccountOption.naver_pw must not be empty")
         if not self._account.blog_id.strip():
             raise ValueError("AccountOption.blog_id must not be empty")
-        if self._account.post_count < 1:
-            raise ValueError("AccountOption.post_count must be >= 1")
 
         if self._title is not None:
             validate_template(self._title.template)
@@ -340,20 +354,71 @@ class NaverBlogJob:
         # Track uploaded image count to compute the representative index
         image_upload_count = 0
         rep_index: int | None = None
+        image_opt = self._image
 
-        for i, step in enumerate(post.steps):
-            # Move cursor to end before every step except the very first
-            if i > 0:
-                editor.move_cursor_to_end()
+        # Prepare ImageProcessor if ImageOption is set
+        processor = None
+        if image_opt is not None:
+            from automator.image_processor import ImageProcessor
+            processor = ImageProcessor(image_opt)
 
-            if step.kind == "paragraph":
-                editor.write_paragraph(step.value, newlines=post.paragraph_newlines)
+        # Temporary files created during this run — cleaned up at the end
+        tmp_files: list[str] = []
 
-            elif step.kind in ("image", "thumbnail"):
-                editor.upload_image(step.value)
-                if step.kind == "thumbnail":
-                    rep_index = image_upload_count
-                image_upload_count += 1
+        try:
+            for i, step in enumerate(post.steps):
+                # Move cursor to end before every step except the very first
+                if i > 0:
+                    editor.move_cursor_to_end()
+
+                if step.kind == "paragraph":
+                    editor.write_paragraph(step.value, newlines=post.paragraph_newlines)
+
+                elif step.kind in ("image", "thumbnail"):
+                    upload_path = step.value
+
+                    if processor is not None:
+                        # Read source, process, write to a temp file
+                        src_bytes = Path(step.value).read_bytes()
+                        if step.kind == "thumbnail":
+                            processed = processor.process_thumbnail(
+                                src_bytes,
+                                keyword=image_opt.exif_description,
+                            )
+                        else:
+                            processed = processor.process_preview(
+                                src_bytes,
+                                keyword=image_opt.exif_description,
+                            )
+                        # Build keyword-rich filename
+                        role  = "thumbnail" if step.kind == "thumbnail" else "preview"
+                        fname = processor.build_filename(role, image_upload_count + 1)
+                        tmp   = tempfile.NamedTemporaryFile(
+                            suffix=".jpg", prefix=fname.replace(".jpg", "_"),
+                            delete=False,
+                        )
+                        tmp.write(processed)
+                        tmp.close()
+                        tmp_files.append(tmp.name)
+                        upload_path = tmp.name
+
+                    editor.upload_image(upload_path)
+
+                    if step.kind == "thumbnail":
+                        rep_index = image_upload_count
+                    image_upload_count += 1
+
+                    # Mandatory delay between uploads
+                    if image_opt is not None and image_opt.upload_delay_ms > 0:
+                        time.sleep(image_opt.upload_delay_ms / 1000)
+
+        finally:
+            # Clean up temp files regardless of success or failure
+            for tmp_path in tmp_files:
+                try:
+                    Path(tmp_path).unlink(missing_ok=True)
+                except OSError:
+                    pass
 
         if rep_index is not None:
             editor.set_representative_image(rep_index)
