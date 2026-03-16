@@ -246,3 +246,148 @@ class RunSetting:
     rotate_user_agent: bool      = True
     headless:          bool      = True
     slow_mo:           int       = 0
+
+
+# ---------------------------------------------------------------------------
+# SEOOption
+# ---------------------------------------------------------------------------
+
+VALID_KEYWORD_POSITIONS = ("first_sentence", "early", "anywhere")
+VALID_TONES             = ("formal", "informal_friendly", "review_style")
+
+
+@dataclass
+class SEOOption:
+    """
+    Controls how Gemini generates paragraph text for SEO purposes.
+
+    Passed to seo_prompt.to_prompt(seo, paragraph_index, total_paragraphs)
+    which converts it into a structured instruction string for the Gemini API.
+
+    Keyword
+    -------
+    keyword:
+        Primary target keyword (e.g. "강남 수학 과외").
+    keyword_count_first:
+        How many times the keyword appears in the first paragraph. (2–3 is safe)
+    keyword_count_others:
+        Per-paragraph keyword count for middle paragraphs.
+    keyword_count_last:
+        Keyword count for the last paragraph. Naver weights first/last paragraphs heavily.
+    keyword_position:
+        Where in the first paragraph the keyword first appears.
+        "first_sentence" / "early" (first 30%) / "anywhere"
+    allow_variants:
+        If True, Gemini may mix spacing variants ("강남수학과외" / "강남 수학 과외").
+        Reduces spam-detection risk.
+    related_keywords:
+        Supporting keywords to weave in naturally (e.g. ["대치동", "내신"]).
+        Boosts topic-relevance score.
+    repeat_title_keyword:
+        If True, the post title keyword should appear verbatim in the body.
+        Improves title-body keyword match score.
+
+    Character count
+    ---------------
+    first_para_min / first_para_max:
+        Character range for the first paragraph.
+    other_para_min / other_para_max:
+        Character range for each middle paragraph.
+    total_min / total_max:
+        Combined character range across all paragraphs.
+    sentences_per_para_min / sentences_per_para_max:
+        Sentence count range per paragraph.
+    sentence_max_chars:
+        Maximum characters per sentence. Keep ≤60 for mobile readability.
+    sentence_variety:
+        If True, mix short (~20 chars) and long (~60 chars) sentences for rhythm.
+
+    Sentence structure
+    ------------------
+    first_sentence_max:
+        Maximum characters for the very first sentence (shown in search preview).
+    include_question:
+        Insert one question-form sentence in the first paragraph.
+        Boosts reader engagement and dwell time.
+    tone:
+        "formal" / "informal_friendly" / "review_style"
+        review_style = first-person experience narrative — highest trust for parent audience.
+    include_numbers:
+        Include concrete figures (e.g. "성적 30% 향상", "3개월 만에").
+        Numbers increase credibility and CTR.
+    include_empathy:
+        Add empathy phrases (e.g. "많이 고민하셨죠?").
+        Effective for parent-targeted content.
+    include_cta:
+        Append a call-to-action sentence to the last paragraph
+        ("댓글로 물어보세요", "저장해두세요").
+        Comments / scraps / likes are direct Naver quality signals.
+    use_connectors:
+        Use transition words between paragraphs ("그런데", "특히", "그래서").
+        Smooth flow reduces bounce rate.
+    """
+
+    # ── Keyword ──────────────────────────────────────────────────────────────
+    keyword:               str       = ""
+    keyword_count_first:   int       = 3
+    keyword_count_others:  int       = 1
+    keyword_count_last:    int       = 2
+    keyword_position:      str       = "first_sentence"
+    allow_variants:        bool      = True
+    related_keywords:      list[str] = field(default_factory=list)
+    repeat_title_keyword:  bool      = True
+
+    # ── Character count ───────────────────────────────────────────────────────
+    first_para_min:        int       = 250
+    first_para_max:        int       = 400
+    other_para_min:        int       = 150
+    other_para_max:        int       = 350
+    total_min:             int       = 800
+    total_max:             int       = 1200
+    sentences_per_para_min: int      = 3
+    sentences_per_para_max: int      = 7
+    sentence_max_chars:    int       = 60
+    sentence_variety:      bool      = True
+
+    # ── Sentence structure ────────────────────────────────────────────────────
+    first_sentence_max:    int       = 40
+    include_question:      bool      = True
+    tone:                  str       = "review_style"
+    include_numbers:       bool      = True
+    include_empathy:       bool      = True
+    include_cta:           bool      = True
+    use_connectors:        bool      = True
+
+    def __post_init__(self) -> None:
+        if self.keyword_position not in VALID_KEYWORD_POSITIONS:
+            raise ValueError(
+                f"keyword_position must be one of {VALID_KEYWORD_POSITIONS}, "
+                f"got {self.keyword_position!r}"
+            )
+        if self.tone not in VALID_TONES:
+            raise ValueError(
+                f"tone must be one of {VALID_TONES}, got {self.tone!r}"
+            )
+        if self.first_para_min > self.first_para_max:
+            raise ValueError(
+                f"first_para_min ({self.first_para_min}) must be ≤ "
+                f"first_para_max ({self.first_para_max})"
+            )
+        if self.other_para_min > self.other_para_max:
+            raise ValueError(
+                f"other_para_min ({self.other_para_min}) must be ≤ "
+                f"other_para_max ({self.other_para_max})"
+            )
+        if self.total_min > self.total_max:
+            raise ValueError(
+                f"total_min ({self.total_min}) must be ≤ total_max ({self.total_max})"
+            )
+        if self.sentences_per_para_min > self.sentences_per_para_max:
+            raise ValueError(
+                f"sentences_per_para_min ({self.sentences_per_para_min}) must be ≤ "
+                f"sentences_per_para_max ({self.sentences_per_para_max})"
+            )
+        for field_name in ("keyword_count_first", "keyword_count_others", "keyword_count_last"):
+            val = getattr(self, field_name)
+            if val < 0:
+                raise ValueError(f"keyword_count fields must be ≥ 0, got {field_name}={val}")

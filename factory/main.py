@@ -24,8 +24,10 @@ import sys
 from datetime import datetime, timedelta, timezone
 
 from dotenv import load_dotenv
+from factory.logging_config import setup as setup_logging
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
+setup_logging()
 
 KST = timezone(timedelta(hours=9))
 

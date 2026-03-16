@@ -262,8 +262,8 @@ def test_validate_does_not_call_editor_on_failure(editor):
 # ===========================================================================
 
 @pytest.mark.unit
-def test_run_returns_true_on_success(full_job, editor):
-    assert full_job.run(editor) is True
+def test_run_returns_none_on_success(full_job, editor):
+    assert full_job.run(editor) is None
 
 
 @pytest.mark.unit
@@ -309,8 +309,10 @@ def test_run_body_is_generated(account, editor):
 
 
 @pytest.mark.unit
-def test_run_returns_false_when_editor_raises(account):
-    assert NaverBlogJob.for_account(account).run(MockEditor(fail_on="open")) is False
+def test_run_raises_when_editor_raises(account):
+    """editor 에러는 삼키지 않고 그대로 전파된다."""
+    with pytest.raises(Exception):
+        NaverBlogJob.for_account(account).run(MockEditor(fail_on="open"))
 
 
 # ===========================================================================

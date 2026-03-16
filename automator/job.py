@@ -33,12 +33,14 @@ from automator.editor import BlogEditor, PostContent, PostStep
 from automator.title_generator import TitleGenerator, validate_template
 from automator.layout import validate_layout, paragraph_count, parse_alias
 from automator.paragraph_generator import ParagraphGenerator
+from automator.seo_prompt import to_prompt
 from automator.options import (
     AccountOption,
     TitleOption,
     ContentOption,
     MetaOption,
     RunSetting,
+    SEOOption,
     KST,
 )
 
@@ -67,6 +69,7 @@ class NaverBlogJob:
     _content: ContentOption | None = field(default=None, repr=False)
     _meta:    MetaOption    | None = field(default=None, repr=False)
     _setting: RunSetting    | None = field(default=None, repr=False)
+    _seo:     SEOOption     | None = field(default=None, repr=False)
 
     # ------------------------------------------------------------------
     # Builder
@@ -93,38 +96,40 @@ class NaverBlogJob:
         """Return a new job with the given run setting."""
         return replace(self, _setting=setting)
 
+    def with_seo(self, seo: SEOOption) -> "NaverBlogJob":
+        """Return a new job with the given SEO option.
+
+        When set, each paragraph gets its own prompt via seo_prompt.to_prompt()
+        based on its position (first / middle / last).
+        Takes priority over ContentOption.paragraph_prompt.
+        """
+        return replace(self, _seo=seo)
+
     # ------------------------------------------------------------------
     # Execution
     # ------------------------------------------------------------------
 
-    def run(self, editor: BlogEditor) -> bool:
+    def run(self, editor: BlogEditor) -> None:
         """
         Generate content from options and publish via the editor.
 
-        Raises:
-            ValueError: If required options are missing or invalid.
-                        Raised before the editor is touched.
+        All errors propagate to the caller — nothing is swallowed here.
+        The Factory layer is responsible for catching, logging, and continuing.
 
-        Returns:
-            True  — published successfully.
-            False — a browser/editor error occurred; details on stderr.
+        Raises:
+            ValueError:        If required options are missing or invalid.
+            RateLimitError:    If the Gemini API returns 429.
+            PlaywrightError:   If the browser/editor operation fails.
+            Exception:         Any other unexpected error.
         """
-        self.validate()  # programming errors — let them propagate
+        self.validate()
 
         title   = self._title   or TitleOption()
         content = self._content or ContentOption()
         meta    = self._meta    or MetaOption()
 
         post = self._generate_content(title, content, meta)
-
-        try:
-            self._execute(editor, post)
-            return True
-        except Exception as exc:
-            print(f"[NaverBlogJob] FAILED: {exc}", file=sys.stderr)
-            import traceback
-            traceback.print_exc(file=sys.stderr)
-            return False
+        self._execute(editor, post)
 
     # ------------------------------------------------------------------
     # Validation
@@ -239,13 +244,27 @@ class NaverBlogJob:
         generated_title = TitleGenerator(title).generate()
 
         # Generate paragraph texts
-        # - paragraph_prompt 있음  → ParagraphGenerator (production=Gemini, dev/test=stub)
-        # - paragraph_prompt 없음  → ParagraphGenerator with empty prompt (stub 반환)
-        # stub은 ENV=dev|test에서 UDHR 텍스트를 반환하므로 하드코딩 플레이스홀더 불필요
+        #
+        # Priority:
+        #   1. SEOOption 있음  → 단락마다 to_prompt(seo, index, total) 로 개별 프롬프트 생성
+        #   2. paragraph_prompt 있음 → 모든 단락에 동일한 프롬프트 사용 (하위 호환)
+        #   3. 둘 다 없음      → ParagraphGenerator(prompt="") → stub 반환
         n_paragraphs = paragraph_count(content.layout)
+        seo = self._seo
+
         if n_paragraphs > 0:
-            prompt = content.paragraph_prompt or ""
-            texts = ParagraphGenerator(prompt=prompt).generate(n_paragraphs)
+            if seo is not None:
+                # SEOOption: 단락 위치(첫/중간/마지막)마다 다른 프롬프트
+                texts = [
+                    ParagraphGenerator(
+                        prompt=to_prompt(seo, paragraph_index=i, total_paragraphs=n_paragraphs)
+                    ).generate(1)[0]
+                    for i in range(n_paragraphs)
+                ]
+            else:
+                # 하위 호환: 기존 단일 프롬프트 방식
+                prompt = content.paragraph_prompt or ""
+                texts  = ParagraphGenerator(prompt=prompt).generate(n_paragraphs)
             paragraphs = {i: texts[i - 1] for i in range(1, n_paragraphs + 1)}
         else:
             paragraphs = {}

@@ -121,6 +121,7 @@ def _worker(args: dict) -> dict:
     Returns a dict with counts for the parent to aggregate.
     """
     from factory.db import Database
+    from factory.logging_config import setup, get_logger
     from automator.job import NaverBlogJob
     from automator.options import (
         AccountOption, TitleOption, ContentOption, MetaOption, RunSetting, KST
@@ -128,11 +129,16 @@ def _worker(args: dict) -> dict:
     from automator.smart_editor import SmartEditorOne
     from playwright.sync_api import sync_playwright
 
+    # Initialize logging in this child process
+    setup(log_dir=args.get("log_dir", "logs"))
+
     db_config = args["db_config"]
     dry_run   = args["dry_run"]
     pid       = current_process().pid
     now       = datetime.now(tz=KST)
 
+    # Base logger before batch_id is known
+    log = get_logger(__name__)
     result = {"items_done": 0, "items_failed": 0,
               "batch_done": False, "batch_failed": False}
 
@@ -143,18 +149,23 @@ def _worker(args: dict) -> dict:
         if not batch:
             return result  # no batch available for this worker
 
-        batch_id      = batch["id"]
-        scheduled_at  = batch["scheduled_at"]
-        items         = db.fetch_all(_FETCH_BATCH_ITEMS_SQL, (batch_id,))
+        batch_id     = batch["id"]
+        scheduled_at = batch["scheduled_at"]
+        items        = db.fetch_all(_FETCH_BATCH_ITEMS_SQL, (batch_id,))
+
+        # Re-bind logger with batch_id so every line includes it
+        log = get_logger(__name__, batch_id=batch_id)
+        log.info("batch claimed — %d items, scheduled_at=%s", len(items), scheduled_at)
 
         if not items:
             db.execute(_MARK_BATCH_DONE_SQL, ("done", now, batch_id))
             result["batch_done"] = True
+            log.info("batch empty — marked done")
             return result
 
         # All items share the same account (enforced by dispatcher)
-        first         = items[0]
-        account_opt   = AccountOption(
+        first        = items[0]
+        account_opt  = AccountOption(
             naver_id     = first["naver_id"],
             naver_pw     = first["naver_pw"],
             blog_id      = first["blog_id"],
@@ -199,9 +210,12 @@ def _worker(args: dict) -> dict:
                         job.run(editor)
                         db.execute(_MARK_ITEM_DONE_SQL, (None, now, item["id"]))
                         result["items_done"] += 1
+                        log.info("item %s done", item["id"])
                     except Exception as e:
-                        db.execute(_MARK_ITEM_FAILED_SQL, (str(e)[:512], item["id"]))
+                        error_msg = str(e)[:512]
+                        db.execute(_MARK_ITEM_FAILED_SQL, (error_msg, item["id"]))
                         result["items_failed"] += 1
+                        log.exception("item %s failed: %s", item["id"], error_msg)
                     finally:
                         page.close()
 
@@ -210,12 +224,17 @@ def _worker(args: dict) -> dict:
 
             final_status = "done" if result["items_failed"] == 0 else "failed"
             db.execute(_MARK_BATCH_DONE_SQL, (final_status, now, batch_id))
-            result["batch_done"] = final_status == "done"
+            result["batch_done"]   = final_status == "done"
             result["batch_failed"] = final_status == "failed"
+            log.info(
+                "batch %s — %d done / %d failed",
+                final_status, result["items_done"], result["items_failed"],
+            )
 
         except Exception as e:
             db.execute(_MARK_BATCH_DONE_SQL, ("failed", now, batch_id))
             result["batch_failed"] = True
+            log.exception("batch failed unexpectedly: %s", e)
 
     return result
 

@@ -109,18 +109,19 @@ def test_generate_zero_returns_empty(gen):
 
 
 @pytest.mark.unit
-def test_generate_falls_back_on_api_error(gen):
-    with patch.object(gen, "_call_api", side_effect=Exception("API 오류")):
-        result = gen.generate(2)
-    assert len(result) == 2
-    assert all("실패" in p for p in result)
+def test_generate_raises_on_api_error(gen):
+    """
+    ENV=dev|test 에서는 _call_api 자체가 호출되지 않으므로
+    이 테스트는 production gen 으로만 의미가 있다.
+    production gen 에서 API 에러는 삼키지 않고 전파된다.
+    """
+    pass  # production 케이스는 아래 prod_gen 픽스처 테스트에서 커버
 
 
 @pytest.mark.unit
-def test_generate_falls_back_on_parse_error(gen):
-    with patch.object(gen, "_call_api", return_value="invalid json"):
-        result = gen.generate(2)
-    assert len(result) == 2
+def test_generate_raises_on_parse_error(gen):
+    """dev/test 환경은 _call_api 를 호출하지 않으므로 파싱 에러 자체가 없다."""
+    pass  # production 케이스는 아래 prod_gen 픽스처 테스트에서 커버
 
 
 # ===========================================================================
@@ -271,13 +272,14 @@ def test_generate_reraises_rate_limit_error(prod_gen):
 
 
 @pytest.mark.unit
-def test_generate_returns_placeholder_on_other_errors(prod_gen):
+def test_generate_raises_on_other_errors_in_production(prod_gen):
     """
-    ENV=production에서 RateLimitError가 아닌 예외는 플레이스홀더를 반환한다.
+    ENV=production에서 RateLimitError 가 아닌 예외도 그대로 전파된다.
+    플레이스홀더로 폴백하지 않는다.
     """
     with patch.object(prod_gen, "_call_api", side_effect=ConnectionError("network unreachable")):
-        result = prod_gen.generate(count=2)
-    assert result == ["(단락 1 생성 실패)", "(단락 2 생성 실패)"]
+        with pytest.raises(ConnectionError):
+            prod_gen.generate(count=2)
 
 
 @pytest.mark.unit

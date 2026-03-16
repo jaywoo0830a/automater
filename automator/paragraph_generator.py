@@ -152,8 +152,7 @@ class ParagraphGenerator:
         """
         Generate ``count`` paragraphs and return them as a list of strings.
 
-        ENV=production  → calls Gemini API; falls back to placeholders on error.
-                          RateLimitError is re-raised so callers can handle it.
+        ENV=production  → calls Gemini API; all errors propagate to caller.
         ENV=dev | test  → returns stub paragraphs (UDHR Korean), no API call.
 
         Args:
@@ -161,6 +160,10 @@ class ParagraphGenerator:
 
         Returns:
             List of ``count`` paragraph strings.
+
+        Raises:
+            RateLimitError: When the API returns 429 RESOURCE_EXHAUSTED.
+            Exception:      Any other API or parsing error — not swallowed.
         """
         if count <= 0:
             return []
@@ -169,18 +172,9 @@ class ParagraphGenerator:
         if not self._production:
             return _stub_generate(count)
 
-        # Production: call real Gemini API
-        try:
-            raw = self._call_api(count)
-            return self._parse(raw, count)
-        except RateLimitError:
-            raise
-        except Exception as exc:
-            print(
-                f"[ParagraphGenerator] API error — falling back to placeholders: {exc}",
-                file=sys.stderr,
-            )
-            return [f"(단락 {i} 생성 실패)" for i in range(1, count + 1)]
+        # Production: call real Gemini API — all errors propagate
+        raw = self._call_api(count)
+        return self._parse(raw, count)
 
     # ------------------------------------------------------------------
     # Private helpers
