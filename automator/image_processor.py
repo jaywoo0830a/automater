@@ -198,16 +198,28 @@ class ImageProcessor:
         font_size = max(14, int(w * 0.06))
 
         try:
-            # Try system fonts common on Linux/Mac
-            for font_path in (
-                "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
-                "/System/Library/Fonts/AppleSDGothicNeo.ttc",
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-            ):
+            # Korean-capable fonts in priority order.
+            # .ttc (TrueType Collection) files contain multiple language subsets —
+            # index=1 selects the Korean (KR) face inside the CJK collection.
+            font_candidates = [
+                # Linux — opentype/noto (Ubuntu, Debian)
+                ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",    1),
+                ("/usr/share/fonts/opentype/noto/NotoSansCJK-Medium.ttc",     1),
+                # Linux — truetype/noto (some distros)
+                ("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",    1),
+                # macOS
+                ("/System/Library/Fonts/AppleSDGothicNeo.ttc",                0),
+                ("/Library/Fonts/AppleGothic.ttf",                            0),
+                # Nanum (if installed via fonts-nanum)
+                ("/usr/share/fonts/truetype/nanum/NanumGothic.ttf",           0),
+            ]
+            font = None
+            for font_path, index in font_candidates:
                 if Path(font_path).exists():
-                    font = ImageFont.truetype(font_path, font_size)
+                    font = ImageFont.truetype(font_path, font_size, index=index)
                     break
-            else:
+            if font is None:
+                # Last resort — ASCII only, Korean will appear as boxes
                 font = ImageFont.load_default()
         except Exception:
             font = ImageFont.load_default()

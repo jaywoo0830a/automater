@@ -5,7 +5,7 @@
 #   --factory          factory 단위 테스트
 #   --e2e              unit + factory + e2e smoke
 #   --schedule         예약 발행 UI e2e
-#   --pipeline [1-4]   파이프라인 시나리오 (번호 생략 시 전체)
+#   --pipeline         파이프라인 통합 테스트 (모든 옵션)
 #   --all              전체
 set -euo pipefail
 
@@ -23,19 +23,15 @@ UNIT_TESTS=(
     tests/test_paragraph_generator.py
     tests/test_seo_option.py
     tests/test_seo_job_integration.py
+    tests/test_image_processor.py
+    tests/test_image_job_integration.py
+    tests/test_asset_loader.py
 )
 
 FACTORY_TESTS=(
     factory/tests/test_combo_generator.py
     factory/tests/test_dispatcher.py
-)
-
-PIPELINE_NAMES=(
-    ""
-    "test_pipeline_full_layout"
-    "test_pipeline_text_only"
-    "test_pipeline_minimal"
-    "test_pipeline_scheduled"
+    factory/tests/test_selection.py
 )
 
 cd "${PROJECT_ROOT}"
@@ -47,7 +43,6 @@ fi
 source "${VENV_DIR}/bin/activate"
 
 MODE="${1:---unit}"
-ARG2="${2:-}"
 
 case "${MODE}" in
 
@@ -72,27 +67,14 @@ case "${MODE}" in
     pytest tests/test_blog_e2e.py -m "e2e and not slow" -v
     ;;
 
-
   --schedule)
     echo "── schedule e2e (dry_run=True) ──────────"
     pytest tests/test_schedule_e2e.py -m "e2e" -v -s
     ;;
 
   --pipeline)
-    if [ -n "${ARG2}" ]; then
-        if ! [[ "${ARG2}" =~ ^[1-4]$ ]]; then
-            echo "❌ 1–4 사이 숫자를 입력하세요"
-            for i in 1 2 3 4; do printf "   %d  %s\n" "$i" "${PIPELINE_NAMES[$i]}"; done
-            exit 1
-        fi
-        echo "── pipeline ${ARG2}/4 — ${PIPELINE_NAMES[$ARG2]} ─"
-        pytest "tests/test_blog_e2e.py::${PIPELINE_NAMES[$ARG2]}" -m "e2e and slow" -v -s
-    else
-        echo "── pipeline 전체 (1–4) ──────────────────"
-        for i in 1 2 3 4; do printf "   %d  %s\n" "$i" "${PIPELINE_NAMES[$i]}"; done
-        echo ""
-        pytest tests/test_blog_e2e.py -m "e2e and slow" -v -s
-    fi
+    echo "── pipeline — test_pipeline_all_options ─"
+    pytest tests/test_blog_e2e.py::test_pipeline_all_options -m "e2e and slow" -v -s
     ;;
 
   --all)
@@ -112,8 +94,8 @@ case "${MODE}" in
     pytest tests/test_schedule_e2e.py -m "e2e" -v -s
 
     echo ""
-    echo "── [5/5] pipeline (1–4) ─────────────────"
-    pytest tests/test_blog_e2e.py -m "e2e and slow" -v -s
+    echo "── [5/5] pipeline ───────────────────────"
+    pytest tests/test_blog_e2e.py::test_pipeline_all_options -m "e2e and slow" -v -s
     ;;
 
   --help|-h)
@@ -121,10 +103,8 @@ case "${MODE}" in
     echo "  bash ./run/test.sh                  # unit"
     echo "  bash ./run/test.sh --factory        # factory unit"
     echo "  bash ./run/test.sh --e2e            # unit + factory + e2e smoke"
-    echo "  bash ./run/test.sh --schedule       # 예약 발행 e2e
-  bash ./run/test.sh --debug-se       # .se-content TimeoutError 디버그"
-    echo "  bash ./run/test.sh --pipeline       # 파이프라인 전체"
-    echo "  bash ./run/test.sh --pipeline 1     # 파이프라인 1번"
+    echo "  bash ./run/test.sh --schedule       # 예약 발행 e2e"
+    echo "  bash ./run/test.sh --pipeline       # 파이프라인 통합 (모든 옵션)"
     echo "  bash ./run/test.sh --all            # 전체"
     echo ""
     ;;

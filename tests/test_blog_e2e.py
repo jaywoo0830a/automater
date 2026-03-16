@@ -163,108 +163,69 @@ def _run_job(job, editor) -> None:
 
 @pytest.mark.e2e
 @pytest.mark.slow
-def test_pipeline_full_layout(
+def test_pipeline_all_options(
     editor: SmartEditorOne,
     account: AccountOption,
 ):
     """
-    이미지 업로드 + 썸네일 + 단락이 섞인 전체 레이아웃 흐름.
-    assets/images/ + assets/thumbnails/ 에서 자동 감지.
-    """
-    loader = AssetLoader()
-    if not loader.images:
-        pytest.skip("assets/images/ 에 이미지가 없습니다.")
+    빌더의 모든 옵션을 지정한 통합 파이프라인 테스트.
 
-    job = (
-        NaverBlogJob
-        .for_account(account)
-        .with_title(TitleOption(
-            template="지역+과목+학습형태+솔트",
-            learning_type="과외",
-            include_suffix=True,
-        ))
-        .with_content(loader.to_content_option(
-            paragraphs=3,
-            paragraph_prompt="대치동 수학 과외를 홍보하는 학부모 대상 블로그 글.",
-        ))
-        .with_meta(MetaOption())
-        .with_setting(RunSetting())
-    )
-    _run_job(job, editor)
+    with_title   — template 기반 제목 생성
+    with_content — AssetLoader 자동 감지 (이미지 없으면 텍스트 전용으로 fallback)
+    with_seo     — 키워드·글자수·톤 지정
+    with_image   — 픽셀 변형·썸네일 텍스트·Exif·업로드 딜레이
+    with_meta    — 예약 발행 (fixed, +2시간)
+    with_setting — 기본 런타임 설정
 
-
-@pytest.mark.e2e
-@pytest.mark.slow
-def test_pipeline_text_only(
-    editor: SmartEditorOne,
-    account: AccountOption,
-):
-    """
-    이미지 없이 단락만 있는 흐름.
-    이미지 fixture 없이도 실행 가능.
-    """
-    job = (
-        NaverBlogJob
-        .for_account(account)
-        .with_title(TitleOption(
-            template="지역+과목+학습형태+솔트",
-            learning_type="과외",
-            include_suffix=True,
-        ))
-        .with_content(ContentOption(
-            layout=["Paragraph 1", "Paragraph 2", "Paragraph 3"],
-            paragraph_prompt="송파구 국어 과외를 홍보하는 블로그 글.",
-        ))
-        .with_meta(MetaOption())
-        .with_setting(RunSetting())
-    )
-    _run_job(job, editor)
-
-
-@pytest.mark.e2e
-@pytest.mark.slow
-def test_pipeline_minimal(
-    editor: SmartEditorOne,
-    account: AccountOption,
-):
-    """
-    빈 레이아웃 — open → write_title → publish 최소 경로.
-    """
-    job = (
-        NaverBlogJob
-        .for_account(account)
-        .with_title(TitleOption(fixed_title="테스트 포스트"))
-        .with_content(ContentOption())
-        .with_meta(MetaOption())
-        .with_setting(RunSetting())
-    )
-    _run_job(job, editor)
-
-
-@pytest.mark.e2e
-@pytest.mark.slow
-def test_pipeline_scheduled(
-    editor: SmartEditorOne,
-    account: AccountOption,
-):
-    """
-    예약 발행(fixed) 전체 잡 흐름.
-    시/분 select 설정 후 dry_run으로 종료.
+    dry_run=True (editor fixture 기본값) — 팝오버 열림 후 발행 버튼 미클릭.
     """
     from datetime import datetime, timedelta
-    from automator.options import KST
+    from automator.options import KST, SEOOption, ImageOption
 
     now    = datetime.now(tz=KST)
-    target = now.replace(minute=(now.minute // 10) * 10, second=0, microsecond=0) + timedelta(hours=2)
+    target = (
+        now.replace(minute=(now.minute // 10) * 10, second=0, microsecond=0)
+        + timedelta(hours=2)
+    )
+
+    loader = AssetLoader()
+    if loader.images:
+        content_opt = loader.to_content_option(paragraphs=3)
+    else:
+        # 이미지 없으면 텍스트 전용으로 실행
+        content_opt = ContentOption(layout=["Paragraph 1", "Paragraph 2", "Paragraph 3"])
 
     job = (
         NaverBlogJob
         .for_account(account)
-        .with_title(TitleOption(fixed_title="예약 발행 테스트"))
-        .with_content(ContentOption(layout=["Paragraph 1"]))
+        .with_title(TitleOption(
+            template="지역+과목+학습형태+솔트",
+            learning_type="과외",
+            include_suffix=True,
+        ))
+        .with_content(content_opt)
+        .with_seo(SEOOption(
+            keyword            = "강남 수학 과외",
+            keyword_count_first= 3,
+            keyword_count_last = 2,
+            first_para_min     = 200,
+            first_para_max     = 350,
+            total_min          = 600,
+            total_max          = 1000,
+            tone               = "review_style",
+            include_question   = True,
+            include_cta        = True,
+        ))
+        .with_image(ImageOption(
+            pixel_jitter      = True,
+            size_jitter_px    = 2,
+            thumbnail_text    = "강남 수학 과외",
+            exif_description  = "강남 수학 과외",
+            upload_delay_ms   = 0,   # dry_run 이므로 딜레이 없음
+        ))
         .with_meta(MetaOption(
-            schedule_mode="fixed",
-            schedule_at=target,
+            schedule_mode = "fixed",
+            schedule_at   = target,
         ))
         .with_setting(RunSetting())
     )
