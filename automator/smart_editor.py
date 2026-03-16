@@ -77,9 +77,19 @@ class SmartEditorOne(BlogEditor):
 
         Three overlays are polled unconditionally — all treated as
         unpredictably timed. Each is silently skipped when absent.
+
+        If a publish popover is currently open it will block .se-content
+        from becoming visible. We force-reload the page before checking,
+        which dismisses any open overlay without side effects.
         """
         self._page.goto(self._write_url)
         self._page.wait_for_load_state("domcontentloaded")
+
+        # If already on the write URL (e.g. popover was open from a previous
+        # call), goto() may not actually reload the page. Force a reload to
+        # dismiss any overlay so .se-content becomes visible again.
+        if self._write_url.split("?")[0] in self._page.url:
+            self._page.reload(wait_until="domcontentloaded")
 
         if "nid.naver.com" in self._page.url or "login" in self._page.url.lower():
             raise RuntimeError(
@@ -87,10 +97,15 @@ class SmartEditorOne(BlogEditor):
                 f"Current URL: {self._page.url}"
             )
 
-        frame = self._frame()
-        frame.locator(_EDITOR_BODY).wait_for(state="visible", timeout=30_000)
+        # Wait for .se-content directly inside #mainFrame with the full timeout.
+        # Do NOT go through _frame() here — its internal 1-second probe fires
+        # before the iframe finishes loading and falls back to the page object,
+        # causing the subsequent wait_for to look outside the iframe.
+        self._page.frame_locator(_MAIN_FRAME).locator(_EDITOR_BODY).wait_for(
+            state="visible", timeout=30_000
+        )
 
-        self._wait_for_editor_ready(frame, self._sel())
+        self._wait_for_editor_ready(self._frame(), self._sel())
 
     def _wait_for_editor_ready(
         self,

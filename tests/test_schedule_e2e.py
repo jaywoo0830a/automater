@@ -26,7 +26,7 @@ from datetime import datetime, timedelta
 
 import pytest
 from dotenv import load_dotenv
-from playwright.sync_api import sync_playwright, Browser, BrowserContext, Page
+from playwright.sync_api import Page
 
 from automator.options import AccountOption, MetaOption, TitleOption, ContentOption, RunSetting, KST
 from automator.selector_loader import SelectorLoader
@@ -44,64 +44,6 @@ _MAIN_FRAME = "#mainFrame"
 _LOGIN_SEL  = SelectorLoader.load("selectors/naver/login.json")
 
 
-# ---------------------------------------------------------------------------
-# Fixtures — session-scoped browser/context, function-scoped page
-# ---------------------------------------------------------------------------
-
-@pytest.fixture(scope="session")
-def account() -> AccountOption:
-    if not NAVER_BLOG_ID:
-        if not os.path.exists(SESSION_PATH):
-            pytest.skip("Set NAVER_ID / NAVER_PW / NAVER_BLOG_ID in .env or provide session_state.json")
-    return AccountOption(
-        naver_id=NAVER_ID,
-        naver_pw=NAVER_PW,
-        blog_id=NAVER_BLOG_ID,
-        session_path=SESSION_PATH,
-    )
-
-
-@pytest.fixture(scope="session")
-def browser_instance():
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False, slow_mo=300)
-        yield browser
-        browser.close()
-
-
-@pytest.fixture(scope="session")
-def auth_context(browser_instance: Browser, account: AccountOption):
-    if os.path.exists(account.resolved_session_path):
-        ctx = browser_instance.new_context(
-            storage_state=account.resolved_session_path,
-            locale="ko-KR",
-            timezone_id="Asia/Seoul",
-        )
-    else:
-        ctx  = browser_instance.new_context(locale="ko-KR", timezone_id="Asia/Seoul")
-        page = ctx.new_page()
-        page.goto("https://nid.naver.com/nidlogin.login")
-        _LOGIN_SEL.locator(page, "naver_login_id").fill(account.naver_id)
-        _LOGIN_SEL.locator(page, "naver_login_pw").fill(account.naver_pw)
-        _LOGIN_SEL.locator(page, "naver_login_submit").click()
-        page.wait_for_url(lambda url: "nidlogin" not in url, timeout=15_000)
-        ctx.storage_state(path=account.resolved_session_path)
-        page.close()
-    yield ctx
-    ctx.close()
-
-
-@pytest.fixture
-def page(auth_context: BrowserContext):
-    p = auth_context.new_page()
-    yield p
-    p.close()
-
-
-@pytest.fixture
-def editor(page: Page, account: AccountOption) -> SmartEditorOne:
-    """dry_run=True — 팝오버는 열리지만 실제 발행하기 버튼은 누르지 않는다."""
-    return SmartEditorOne(page, account.write_url, dry_run=True)
 
 
 # ---------------------------------------------------------------------------
@@ -282,7 +224,7 @@ def test_schedule_via_job_fixed_mode(page: Page, account: AccountOption):
         ))
         .with_setting(RunSetting())
     )
-    assert job.run(editor) is True
+    job.run(editor)  # run() returns None — errors propagate as exceptions
 
     state = _read_popover_state(page)
     assert state["radio_value"]  == "pre",          f"radio: {state['radio_value']!r}"
@@ -319,7 +261,7 @@ def test_schedule_via_job_random_window_mode(page: Page, account: AccountOption)
         ))
         .with_setting(RunSetting())
     )
-    assert job.run(editor) is True
+    job.run(editor)  # run() returns None — errors propagate as exceptions
 
     state = _read_popover_state(page)
 

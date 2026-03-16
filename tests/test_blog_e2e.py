@@ -16,7 +16,7 @@ import os
 import pytest
 
 from dotenv import load_dotenv
-from playwright.sync_api import sync_playwright, Browser, BrowserContext, Page
+from playwright.sync_api import Page
 
 from automator.config import browser_settings
 from automator.options import AccountOption, TitleOption, ContentOption, MetaOption, RunSetting
@@ -54,74 +54,6 @@ TEST_THUMBNAIL_1  = os.getenv("TEST_THUMBNAIL_1", "")
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-
-@pytest.fixture(scope="session")
-def account() -> AccountOption:
-    if not NAVER_BLOG_ID:
-        if not os.path.exists(SESSION_PATH):
-            pytest.skip("Set NAVER_ID / NAVER_PW / NAVER_BLOG_ID in .env")
-    return AccountOption(
-        naver_id=NAVER_ID,
-        naver_pw=NAVER_PW,
-        blog_id=NAVER_BLOG_ID,
-        session_path=SESSION_PATH,
-    )
-
-
-@pytest.fixture(scope="session")
-def browser_instance():
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False, slow_mo=300)
-        yield browser
-        browser.close()
-
-
-@pytest.fixture(scope="session")
-def auth_context(browser_instance: Browser, account: AccountOption):
-    if os.path.exists(account.resolved_session_path):
-        ctx = browser_instance.new_context(storage_state=account.resolved_session_path)
-    else:
-        ctx  = browser_instance.new_context()
-        page = ctx.new_page()
-        page.goto("https://nid.naver.com/nidlogin.login")
-        _LOGIN_SEL.locator(page, "naver_login_id").fill(account.naver_id)
-        _LOGIN_SEL.locator(page, "naver_login_pw").fill(account.naver_pw)
-        _LOGIN_SEL.locator(page, "naver_login_submit").click()
-        page.wait_for_url(lambda url: "nidlogin" not in url, timeout=15_000)
-        ctx.storage_state(path=account.resolved_session_path)
-        page.close()
-
-    yield ctx
-    ctx.close()
-
-
-@pytest.fixture
-def page(auth_context: BrowserContext):
-    p = auth_context.new_page()
-    yield p
-    p.close()
-
-
-@pytest.fixture
-def editor(page: Page, account: AccountOption) -> SmartEditorOne:
-    # dry_run=True is the SmartEditorOne default — publish() is always a no-op in tests.
-    return SmartEditorOne(page, account.write_url)
-
-
-@pytest.fixture(scope="session")
-def post_images() -> tuple:
-    """
-    .env의 TEST_PREVIEW_1~3, TEST_THUMBNAIL_1 경로를 반환.
-    미설정 또는 파일 없으면 테스트를 skip한다.
-    """
-    paths = (TEST_PREVIEW_1, TEST_PREVIEW_2, TEST_PREVIEW_3, TEST_THUMBNAIL_1)
-    missing = [p for p in paths if not p or not os.path.exists(p)]
-    if missing:
-        pytest.skip(
-            f"test_full_post_sequence requires TEST_PREVIEW_1~3 and "
-            f"TEST_THUMBNAIL_1 in .env. Missing: {missing}"
-        )
-    return paths
 
 
 # ---------------------------------------------------------------------------

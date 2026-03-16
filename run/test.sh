@@ -72,6 +72,16 @@ case "${MODE}" in
     pytest tests/test_blog_e2e.py -m "e2e and not slow" -v
     ;;
 
+  --debug-se)
+    echo "── debug: .se-content TimeoutError 원인 추적 ──"
+    echo "  가설 A: 팝오버 열린 채 재진입"
+    echo "  가설 B: 세션 만료"
+    echo "  가설 C: .se-content 로드 시간 초과"
+    echo "  가설 D: 연속 open() 호출"
+    echo ""
+    pytest tests/debug_se_content_timeout.py -v -s
+    ;;
+
   --schedule)
     echo "── schedule e2e (dry_run=True) ──────────"
     pytest tests/test_schedule_e2e.py -m "e2e" -v -s
@@ -120,7 +130,8 @@ case "${MODE}" in
     echo "  bash ./run/test.sh                  # unit"
     echo "  bash ./run/test.sh --factory        # factory unit"
     echo "  bash ./run/test.sh --e2e            # unit + factory + e2e smoke"
-    echo "  bash ./run/test.sh --schedule       # 예약 발행 e2e"
+    echo "  bash ./run/test.sh --schedule       # 예약 발행 e2e
+  bash ./run/test.sh --debug-se       # .se-content TimeoutError 디버그"
     echo "  bash ./run/test.sh --pipeline       # 파이프라인 전체"
     echo "  bash ./run/test.sh --pipeline 1     # 파이프라인 1번"
     echo "  bash ./run/test.sh --all            # 전체"
