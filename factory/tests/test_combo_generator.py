@@ -127,7 +127,7 @@ class TestComboGeneratorRun:
         gen.run()
         # dimension_values 조회가 dimensions 수만큼 호출
         dv_calls = [c for c in db.fetch_all.call_args_list
-                    if "dimension_values" in c.args[0].lower()]
+                    if "keywords" in c.args[0].lower()]
         assert len(dv_calls) == len(_dims())
         for call_ in dv_calls:
             assert "active = 1" in call_.args[0]
@@ -147,16 +147,16 @@ class TestComboGeneratorRun:
         gen.run()
         combo_inserts = [c for c in db.execute.call_args_list
                          if "combinations" in c.args[0].lower()
-                         and "combination_values" not in c.args[0].lower()]
+                         and "combination_keywords" not in c.args[0].lower()]
         assert combo_inserts
         assert "INSERT IGNORE" in combo_inserts[0].args[0].upper()
 
-    def test_uses_insert_ignore_for_combination_values(self):
+    def test_uses_insert_ignore_for_combination_keywords(self):
         db  = _mock_db(_dims(), _dv_map(), _spacing())
         gen = ComboGenerator(db=db, campaign_id=1)
         gen.run()
         cv_inserts = [c for c in db.execute_many.call_args_list
-                      if "combination_values" in c.args[0].lower()]
+                      if "combination_keywords" in c.args[0].lower()]
         assert cv_inserts
         assert "INSERT IGNORE" in cv_inserts[0].args[0].upper()
 
@@ -184,7 +184,7 @@ class TestComboGeneratorRun:
         gen.run()
         combo_inserts = [c for c in db.execute.call_args_list
                          if "combinations" in c.args[0].lower()
-                         and "combination_values" not in c.args[0].lower()]
+                         and "combination_keywords" not in c.args[0].lower()]
         assert combo_inserts
         # config 컬럼 (3번째 파라미터)이 JSON 형식이어야 함
         for call_ in combo_inserts:

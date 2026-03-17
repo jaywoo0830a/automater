@@ -56,7 +56,7 @@ _FETCH_CLAIMED_BATCH_SQL = """
 
 _FETCH_BATCH_ITEMS_SQL = """
     SELECT bi.id, bi.combination_id,
-           c.spacing_rule_id, c.config      AS combo_config,
+           c.spacing_rule_id, c.config  AS combo_config,
            camp.title_template,
            a.naver_id, a.naver_pw, a.blog_id, a.session_path, a.proxy
     FROM   batch_items  bi
@@ -68,13 +68,13 @@ _FETCH_BATCH_ITEMS_SQL = """
       AND  bi.status   = 'pending'
 """
 
-_FETCH_DIM_VALUES_SQL = """
-    SELECT d.slug, dv.value, dv.display_value
-    FROM   combination_values cv
-    JOIN   dimension_values   dv ON dv.id = cv.dimension_value_id
-    JOIN   dimensions         d  ON d.id  = dv.dimension_id
-    WHERE  cv.combination_id = %s
-    ORDER BY d.sort_order
+_FETCH_COMBO_KEYWORDS_SQL = """
+    SELECT kc.slug, kc.sort_order, k.value, k.display_value
+    FROM   combination_keywords ck
+    JOIN   keywords             k  ON k.id  = ck.keyword_id
+    JOIN   keyword_categories   kc ON kc.id = k.category_id
+    WHERE  ck.combination_id = %s
+    ORDER BY kc.sort_order
 """
 
 _MARK_ITEM_DONE_SQL = """
@@ -201,7 +201,7 @@ def _worker(args: dict) -> dict:
                     )
                     try:
                         dim_values  = db.fetch_all(
-                            _FETCH_DIM_VALUES_SQL, (item["combination_id"],)
+                            _FETCH_COMBO_KEYWORDS_SQL, (item["combination_id"],)
                         )
                         title_opt   = _build_title_option(item, dim_values)
                         content_opt = _build_content_option(item, dim_values)
@@ -251,43 +251,39 @@ def _worker(args: dict) -> dict:
     return result
 
 
-def _build_values(item: dict, dim_values: list[dict]) -> dict[str, str]:
+def _build_values(item: dict, combo_keywords: list[dict]) -> dict[str, str]:
     """
-    Build slug → value dict from combination's dimension values.
+    Build slug → value dict from combination's keywords.
 
     has_suffix (stored in combinations.config JSON) determines whether
-    to use value (with suffix, e.g. "대치동") or display_value
-    (without suffix, e.g. "대치").
+    to use value ('강남구') or display_value ('강남').
     """
     import json as _json
     combo_config = _json.loads(item["combo_config"] or "{}")
     has_suffix   = bool(combo_config.get("has_suffix", 1))
 
     values = {}
-    for dv in dim_values:
-        slug        = dv["slug"]
-        full_val    = dv["value"]
-        display_val = dv["display_value"]
-        # has_suffix=True  → full value  (대치동)
-        # has_suffix=False → display_value if set, else full value (대치)
+    for kw in combo_keywords:
+        slug        = kw["slug"]
+        full_val    = kw["value"]
+        display_val = kw["display_value"]
         values[slug] = full_val if (has_suffix or not display_val) else display_val
     return values
 
 
-def _build_title_option(item: dict, dim_values: list[dict]):
+def _build_title_option(item: dict, combo_keywords: list[dict]):
     from automator.options import TitleOption
     return TitleOption(
         template = item["title_template"],
-        values   = _build_values(item, dim_values),
+        values   = _build_values(item, combo_keywords),
     )
 
 
-def _build_content_option(item: dict, dim_values: list[dict]):
+def _build_content_option(item: dict, combo_keywords: list[dict]):
     from automator.options import ContentOption
-    values = _build_values(item, dim_values)
-    # Human-readable keyword phrase for prompt
-    keyword = " ".join(values[slug] for slug in sorted(values, key=lambda s: s))
-    prompt = (
+    values  = _build_values(item, combo_keywords)
+    keyword = " ".join(values[slug] for slug in sorted(values))
+    prompt  = (
         f"{keyword}을(를) 홍보하는 블로그 글을 작성해주세요. "
         f"신뢰감 있는 톤으로 자연스럽게 서술해주세요."
     )

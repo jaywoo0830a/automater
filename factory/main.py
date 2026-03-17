@@ -45,16 +45,16 @@ def _db_config() -> dict:
 def cmd_seed(_args) -> None:
     from factory.db import Database
     from factory.combo_generator import ComboGenerator
-    from factory.selection import CampaignSelector
+    from factory.keyword_picker import CampaignKeywordPicker
 
     campaign_id = int(os.environ.get("CAMPAIGN_ID", "1"))
     with Database.from_config(**_db_config()) as db:
-        selector  = CampaignSelector(db=db, campaign_id=campaign_id)
-        selection = selector.get_selected_value_ids()
-        gen       = ComboGenerator(db=db, campaign_id=campaign_id, selection=selection)
+        selector  = CampaignKeywordPicker(db=db, campaign_id=campaign_id)
+        picks = selector.get_picked_keyword_ids()
+        gen   = ComboGenerator(db=db, campaign_id=campaign_id, picks=picks)
         inserted  = gen.run()
 
-    active = {k: v for k, v in selector.list_selections().items() if v}
+    active = {k: v for k, v in selector.list_picks().items() if v}
     if active:
         print(f"  선택 필터: {active}")
     else:
@@ -64,14 +64,14 @@ def cmd_seed(_args) -> None:
 
 def cmd_select(args) -> None:
     from factory.db import Database
-    from factory.selection import CampaignSelector
+    from factory.keyword_picker import CampaignKeywordPicker
 
     campaign_id = int(os.environ.get("CAMPAIGN_ID", "1"))
     with Database.from_config(**_db_config()) as db:
-        sel = CampaignSelector(db=db, campaign_id=campaign_id)
+        sel = CampaignKeywordPicker(db=db, campaign_id=campaign_id)
 
         if args.list:
-            result = sel.list_selections()
+            result = sel.list_picks()
             print(f"\n  캠페인 {campaign_id} 현재 선택:")
             for dim_slug, values in result.items():
                 if values:
@@ -86,7 +86,7 @@ def cmd_select(args) -> None:
             return
 
         values = [v.strip() for v in args.values.split(",")] if args.values else []
-        count  = sel.select(dimension_slug=args.dimension, values=values)
+        count  = sel.pick(category_slug=args.dimension, values=values)
 
         if values:
             print(f"✅ '{args.dimension}' → {values} ({count}개) 선택 완료")
@@ -158,7 +158,7 @@ def main() -> None:
                         help='KST datetime e.g. "2026-03-20 14:00"')
     # select 옵션
     parser.add_argument("--dimension",   type=str,  default=None,
-                        help="dimension slug (e.g. region, subject, learning_type)")
+                        help="category slug (e.g. region, subject, learning_type)")
     parser.add_argument("--values",      type=str,  default=None,
                         help="콤마 구분 값 목록 (e.g. '강남구,수원시'). 빈 문자열=전체 사용")
     parser.add_argument("--list",        action="store_true",
