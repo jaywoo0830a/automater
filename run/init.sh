@@ -38,7 +38,7 @@ echo "  [4/4] Playwright Chromium 설치 중..."
 playwright install chromium
 echo "        ✅ 완료"
 
-# 로그 디렉토리 생성
+# 로그 디렉토리
 mkdir -p logs
 
 echo ""
@@ -47,7 +47,8 @@ echo "  설정 완료"
 echo "========================================"
 echo ""
 echo "  다음 단계:"
-echo "    cp .env.example .env              # 환경 파일 설정 (NAVER_*, GEMINI_API_KEY, KAKAO_REST_API_KEY)"
+echo "    cp .env.example .env              # 환경 파일 설정"
+echo "                                      # NAVER_*, GEMINI_API_KEY, KAKAO_REST_API_KEY"
 echo "    bash ./run/download_fonts.sh      # 한글 폰트 다운로드 (썸네일용)"
 echo "    bash ./run/dev.sh --session       # 네이버 세션 저장"
 echo "    bash ./run/seed.sh                # DB 초기화 + 지역 시딩 (서울·경기)"

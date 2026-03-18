@@ -14,7 +14,7 @@ import struct
 import pytest
 from PIL import Image
 from automator.image_processor import ImageProcessor
-from automator.options import ImageOption
+from automator.options import MediaOption
 
 
 # ---------------------------------------------------------------------------
@@ -48,31 +48,31 @@ def _img_size(data: bytes):
 class TestImageOptionDefaults:
 
     def test_upload_delay_ms_default(self):
-        assert ImageOption().upload_delay_ms == 1500
+        assert MediaOption().upload_delay_ms == 1500
 
     def test_pixel_jitter_default(self):
-        assert ImageOption().pixel_jitter is True
+        assert MediaOption().pixel_jitter is True
 
     def test_size_jitter_px_default(self):
-        assert ImageOption().size_jitter_px == 2
+        assert MediaOption().size_jitter_px == 2
 
-    def test_thumbnail_text_default_empty(self):
-        assert ImageOption().thumbnail_text == ""
+    def test_featured_overlay_text_default_empty(self):
+        assert MediaOption().featured_overlay_text == ""
 
-    def test_thumbnail_text_color_default(self):
-        assert ImageOption().thumbnail_text_color == "#FFFFFF"
+    def test_featured_overlay_text_color_default(self):
+        assert MediaOption().featured_overlay_text_color == "#FFFFFF"
 
     def test_exif_description_default_empty(self):
-        assert ImageOption().exif_description == ""
+        assert MediaOption().exif_description == ""
 
     def test_exif_gps_lat_default_none(self):
-        assert ImageOption().exif_gps_lat is None
+        assert MediaOption().exif_gps_lat is None
 
     def test_exif_gps_lng_default_none(self):
-        assert ImageOption().exif_gps_lng is None
+        assert MediaOption().exif_gps_lng is None
 
     def test_filename_keyword_default_empty(self):
-        assert ImageOption().filename_keyword == ""
+        assert MediaOption().filename_keyword == ""
 
 
 # ---------------------------------------------------------------------------
@@ -83,19 +83,19 @@ class TestImageOptionValidation:
 
     def test_upload_delay_ms_negative_raises(self):
         with pytest.raises(ValueError, match="upload_delay_ms"):
-            ImageOption(upload_delay_ms=-1)
+            MediaOption(upload_delay_ms=-1)
 
     def test_size_jitter_px_negative_raises(self):
         with pytest.raises(ValueError, match="size_jitter_px"):
-            ImageOption(size_jitter_px=-1)
+            MediaOption(size_jitter_px=-1)
 
     def test_invalid_hex_color_raises(self):
-        with pytest.raises(ValueError, match="thumbnail_text_color"):
-            ImageOption(thumbnail_text_color="red")
+        with pytest.raises(ValueError, match="featured_overlay_text_color"):
+            MediaOption(featured_overlay_text_color="red")
 
     def test_valid_hex_color_passes(self):
-        ImageOption(thumbnail_text_color="#FF0000")
-        ImageOption(thumbnail_text_color="#000000")
+        MediaOption(featured_overlay_text_color="#FF0000")
+        MediaOption(featured_overlay_text_color="#000000")
 
 
 # ---------------------------------------------------------------------------
@@ -106,21 +106,21 @@ class TestPixelJitter:
 
     def test_output_is_valid_jpeg(self, tmp_path):
         src = _solid_image()
-        proc = ImageProcessor(ImageOption(pixel_jitter=True, size_jitter_px=0))
+        proc = ImageProcessor(MediaOption(pixel_jitter=True, size_jitter_px=0))
         result = proc.process_preview(src, keyword="test")
         img = Image.open(io.BytesIO(result))
         assert img.format == "JPEG"
 
     def test_hash_differs_from_original(self, tmp_path):
         src = _solid_image()
-        proc = ImageProcessor(ImageOption(pixel_jitter=True, size_jitter_px=0))
+        proc = ImageProcessor(MediaOption(pixel_jitter=True, size_jitter_px=0))
         result = proc.process_preview(src, keyword="test")
         assert result != src
 
     def test_disabled_jitter_preserves_content(self):
         """jitter 비활성화 + Exif 없음 → 변환 없이 원본 반환."""
         src = _solid_image()
-        proc = ImageProcessor(ImageOption(
+        proc = ImageProcessor(MediaOption(
             pixel_jitter=False, size_jitter_px=0,
             exif_description="", exif_gps_lat=None, exif_gps_lng=None,
         ))
@@ -137,7 +137,7 @@ class TestSizeJitter:
 
     def test_size_changes_within_range(self):
         src = _solid_image(100, 100)
-        proc = ImageProcessor(ImageOption(pixel_jitter=False, size_jitter_px=3))
+        proc = ImageProcessor(MediaOption(pixel_jitter=False, size_jitter_px=3))
         result = proc.process_preview(src, keyword="test")
         w, h = _img_size(result)
         assert 97 <= w <= 103
@@ -145,45 +145,45 @@ class TestSizeJitter:
 
     def test_size_jitter_zero_keeps_original_size(self):
         src = _solid_image(100, 100)
-        proc = ImageProcessor(ImageOption(pixel_jitter=False, size_jitter_px=0))
+        proc = ImageProcessor(MediaOption(pixel_jitter=False, size_jitter_px=0))
         result = proc.process_preview(src, keyword="test")
         assert _img_size(result) == (100, 100)
 
 
 # ---------------------------------------------------------------------------
-# thumbnail_text — 썸네일 텍스트 삽입
+# featured_overlay_text — 썸네일 텍스트 삽입
 # ---------------------------------------------------------------------------
 
 class TestThumbnailText:
 
-    def test_thumbnail_text_returns_jpeg(self):
+    def test_featured_overlay_text_returns_jpeg(self):
         src = _solid_image(400, 300)
-        proc = ImageProcessor(ImageOption(
-            thumbnail_text="강남 수학 과외",
-            thumbnail_text_color="#FFFFFF",
+        proc = ImageProcessor(MediaOption(
+            featured_overlay_text="강남 수학 과외",
+            featured_overlay_text_color="#FFFFFF",
             pixel_jitter=False, size_jitter_px=0,
         ))
-        result = proc.process_thumbnail(src, keyword="")
+        result = proc.process_featured(src, keyword="")
         img = Image.open(io.BytesIO(result))
         assert img.format == "JPEG"
 
     def test_thumbnail_without_text_returns_processed(self):
         src = _solid_image(400, 300)
-        proc = ImageProcessor(ImageOption(
-            thumbnail_text="",
+        proc = ImageProcessor(MediaOption(
+            featured_overlay_text="",
             pixel_jitter=False, size_jitter_px=0,
         ))
-        result = proc.process_thumbnail(src, keyword="")
+        result = proc.process_featured(src, keyword="")
         assert Image.open(io.BytesIO(result)).format == "JPEG"
 
     def test_thumbnail_differs_from_original(self):
         src = _solid_image(400, 300)
-        proc = ImageProcessor(ImageOption(
-            thumbnail_text="테스트 텍스트",
-            thumbnail_text_color="#FF0000",
+        proc = ImageProcessor(MediaOption(
+            featured_overlay_text="테스트 텍스트",
+            featured_overlay_text_color="#FF0000",
             pixel_jitter=False, size_jitter_px=0,
         ))
-        result = proc.process_thumbnail(src, keyword="")
+        result = proc.process_featured(src, keyword="")
         assert result != src
 
 
@@ -199,7 +199,7 @@ class TestExif:
     def test_exif_description_embedded(self):
         """ImageDescription Exif 필드에 keyword 가 포함된다."""
         src = _solid_image()
-        proc = ImageProcessor(ImageOption(
+        proc = ImageProcessor(MediaOption(
             exif_description="강남 수학 과외",
             pixel_jitter=False, size_jitter_px=0,
         ))
@@ -212,7 +212,7 @@ class TestExif:
     def test_exif_gps_embedded(self):
         """GPS IFD 에 위경도가 삽입된다."""
         src = _solid_image()
-        proc = ImageProcessor(ImageOption(
+        proc = ImageProcessor(MediaOption(
             exif_gps_lat=37.4942,
             exif_gps_lng=127.0617,
             pixel_jitter=False, size_jitter_px=0,
@@ -227,7 +227,7 @@ class TestExif:
     def test_no_exif_when_fields_empty(self):
         """exif_description 이 비어있고 GPS 없으면 Exif 필드 없음."""
         src = _solid_image()
-        proc = ImageProcessor(ImageOption(
+        proc = ImageProcessor(MediaOption(
             exif_description="",
             exif_gps_lat=None,
             exif_gps_lng=None,
@@ -250,20 +250,20 @@ class TestExif:
 class TestFilenameKeyword:
 
     def test_build_filename_includes_keyword(self):
-        proc = ImageProcessor(ImageOption(filename_keyword="강남-수학-과외"))
+        proc = ImageProcessor(MediaOption(filename_keyword="강남-수학-과외"))
         name = proc.build_filename("preview", index=1)
         assert "강남-수학-과외" in name
 
     def test_build_filename_includes_index(self):
-        proc = ImageProcessor(ImageOption(filename_keyword="test"))
+        proc = ImageProcessor(MediaOption(filename_keyword="test"))
         name = proc.build_filename("preview", index=2)
         assert "2" in name or "02" in name
 
     def test_build_filename_no_keyword_uses_fallback(self):
-        proc = ImageProcessor(ImageOption(filename_keyword=""))
+        proc = ImageProcessor(MediaOption(filename_keyword=""))
         name = proc.build_filename("preview", index=1)
         assert "preview" in name.lower()
 
     def test_build_filename_ends_with_jpg(self):
-        proc = ImageProcessor(ImageOption(filename_keyword="test"))
+        proc = ImageProcessor(MediaOption(filename_keyword="test"))
         assert proc.build_filename("preview", 1).endswith(".jpg")

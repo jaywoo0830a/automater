@@ -29,7 +29,10 @@ from pathlib import Path
 
 from playwright.sync_api import Page
 
-from automator.editor import BlogEditor
+from automator.editor import (
+    BlogEditor,
+    ParagraphStep, ImageStep, ThumbnailStep, PostStep,
+)
 from automator.selector_loader import SelectorLoader
 from automator.browser_actions import (  # noqa: E402 (after path setup)
     click_if_visible,
@@ -58,7 +61,7 @@ class SmartEditorOne(BlogEditor):
 
     Args:
         page:      An authenticated Playwright Page.
-        write_url: Blog write page URL (from AccountOption.write_url).
+        write_url: Blog write page URL (e.g. from account.meta['blog_id']).
         dry_run:   If True (default), publish() is a no-op.
     """
 
@@ -165,7 +168,7 @@ class SmartEditorOne(BlogEditor):
         el.click()
         self._page.keyboard.type(title)
 
-    def write_paragraph(self, text: str, newlines: int = 2) -> None:
+    def _write_paragraph(self, text: str, newlines: int = 2) -> None:
         """
         Click the last paragraph container and type text.
 
@@ -182,7 +185,7 @@ class SmartEditorOne(BlogEditor):
         for _ in range(max(newlines, 1)):
             self._page.keyboard.press("Enter")
 
-    def upload_image(self, image_path: str) -> None:
+    def _upload_image(self, image_path: str) -> None:
         """
         Upload image via toolbar button.
 
@@ -249,6 +252,20 @@ class SmartEditorOne(BlogEditor):
             sel.locator(frame, "editor_image_rep_selected").first,
             timeout_ms=5_000,
         )
+
+    def execute(self, step: PostStep) -> None:
+        """
+        PostStep 을 에디터에 실행한다.
+
+        ParagraphStep → _write_paragraph()
+        ImageStep     → _upload_image()
+        ThumbnailStep → _upload_image()
+        그 외 타입은 silently skip.
+        """
+        if isinstance(step, ParagraphStep):
+            self._write_paragraph(step.text, newlines=step.newlines)
+        elif isinstance(step, (ImageStep, ThumbnailStep)):
+            self._upload_image(step.path)
 
     def move_cursor_to_end(self) -> None:
         """

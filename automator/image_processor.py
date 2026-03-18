@@ -11,21 +11,21 @@ Pipeline per image
         exif          → embed description + GPS
         → JPEG bytes
 
-    process_thumbnail(src_bytes, keyword)
+    process_featured(src_bytes, keyword)
         pixel_jitter  → same as above
         size_jitter   → same as above
-        text_overlay  → draw thumbnail_text on the image
+        text_overlay  → draw featured_overlay_text on the image
         exif          → embed description + GPS
         → JPEG bytes
 
 Usage:
-    from automator.options import ImageOption
+    from automator.options import MediaOption
     from automator.image_processor import ImageProcessor
 
-    proc = ImageProcessor(ImageOption(
+    proc = ImageProcessor(MediaOption(
         pixel_jitter      = True,
         size_jitter_px    = 2,
-        thumbnail_text    = "강남 수학 과외",
+        featured_overlay_text    = "강남 수학 과외",
         exif_description  = "강남 수학 과외",
         exif_gps_lat      = 37.4942,
         exif_gps_lng      = 127.0617,
@@ -33,7 +33,7 @@ Usage:
     ))
 
     preview_bytes   = proc.process_preview(raw_bytes, keyword="강남 수학 과외")
-    thumbnail_bytes = proc.process_thumbnail(raw_bytes, keyword="강남 수학 과외")
+    thumbnail_bytes = proc.process_featured(raw_bytes, keyword="강남 수학 과외")
     filename        = proc.build_filename("preview", index=1)
     # → "강남-수학-과외-preview-01.jpg"
 """
@@ -48,7 +48,7 @@ from typing import Optional
 
 from PIL import Image, ImageDraw, ImageFont
 
-from automator.options import ImageOption
+from automator.options import MediaOption
 
 
 # ---------------------------------------------------------------------------
@@ -83,10 +83,10 @@ class ImageProcessor:
     Applies SEO-optimised transformations to JPEG/PNG images.
 
     Args:
-        option: ImageOption instance controlling the pipeline.
+        option: MediaOption instance controlling the pipeline.
     """
 
-    def __init__(self, option: ImageOption) -> None:
+    def __init__(self, option: MediaOption) -> None:
         self._opt = option
 
     # ------------------------------------------------------------------
@@ -106,7 +106,7 @@ class ImageProcessor:
         img = self._apply_saturation(img, self._opt.preview_saturation_jitter)
         return self._encode_with_exif(img, keyword)
 
-    def process_thumbnail(self, src: bytes, keyword: str) -> bytes:
+    def process_featured(self, src: bytes, keyword: str) -> bytes:
         """
         Apply transformations to a thumbnail image.
 
@@ -116,7 +116,7 @@ class ImageProcessor:
         img = Image.open(io.BytesIO(src)).convert("RGB")
         img = self._apply_size_jitter(img)
         img = self._apply_pixel_jitter(img)
-        img = self._apply_saturation(img, self._opt.thumbnail_saturation_shift)
+        img = self._apply_saturation(img, self._opt.featured_saturation_shift)
         img = self._apply_text_overlay(img)
         return self._encode_with_exif(img, keyword)
 
@@ -125,7 +125,7 @@ class ImageProcessor:
         Build a keyword-rich filename for upload.
 
         Args:
-            role:  "preview" or "thumbnail".
+            role:  "preview" or "featured".
             index: 1-based image index within the post.
 
         Returns:
@@ -199,19 +199,19 @@ class ImageProcessor:
 
     def _apply_text_overlay(self, img: Image.Image) -> Image.Image:
         """
-        Draw thumbnail_text over the image.
+        Draw featured_overlay_text over the image.
 
         Text is split by spaces into chunks, each rendered on its own line
         and horizontally centered. Font size scales to fill ~60% of the image
         width based on the longest chunk.
         """
-        text = self._opt.thumbnail_text
+        text = self._opt.featured_overlay_text
         if not text:
             return img
 
         draw   = ImageDraw.Draw(img)
         w, h   = img.size
-        color  = self._opt.thumbnail_text_color
+        color  = self._opt.featured_overlay_text_color
 
         # Normalise to list[str] regardless of input type:
         #   str       → split by spaces  ("강남 수학 과외" → ["강남","수학","과외"])
@@ -263,9 +263,9 @@ class ImageProcessor:
             font_size -= 2
             font = _load_font(font_size)
 
-        # ── Spacing from ImageOption (fixed pixels) ───────────────────────────
-        letter_spacing = self._opt.thumbnail_letter_spacing
-        line_gap       = self._opt.thumbnail_line_spacing
+        # ── Spacing from MediaOption (fixed pixels) ───────────────────────────
+        letter_spacing = self._opt.featured_letter_spacing
+        line_gap       = self._opt.featured_line_spacing
 
         def _chunk_width(chunk: str) -> int:
             total = 0

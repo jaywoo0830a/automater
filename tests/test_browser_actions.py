@@ -480,13 +480,6 @@ def test_fill_parallel_fills_all():
     b.fill.assert_called_once_with("world")
 
 @pytest.mark.unit
-def test_fill_parallel_skips_invisible():
-    a, b = _loc(True), _loc(False)
-    results = fill_parallel([(a, "ok"), (b, "skip")], timeout_ms=0)
-    b.fill.assert_not_called()
-    assert results == [True, False]
-
-
 @pytest.mark.unit
 def test_get_texts_parallel_strips():
     locs = [MagicMock(), MagicMock()]

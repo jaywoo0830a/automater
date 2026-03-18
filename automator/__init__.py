@@ -1,37 +1,41 @@
 """
 automator
 ---------
-Naver Blog automation package.
+Blog automation package.
 
 Quick start
 -----------
-    from automator import NaverBlogJob, AccountOption, TitleOption, ContentOption, MetaOption
-    from automator import SmartEditorOne, SEOOption
-
-    job = (
-        NaverBlogJob
-        .for_account(AccountOption(
-            naver_id="my_id",
-            naver_pw="my_pw",
-            blog_id="my_blog",
-        ))
-        .with_title(TitleOption(fixed_title="강남 수학 과외"))
-        .with_content(AssetLoader().to_content_option(paragraphs=3))
-        .with_seo(SEOOption(
-            keyword="강남 수학 과외",
-            tone="review_style",
-        ))
-        .with_image(ImageOption(
-            pixel_jitter     = True,
-            thumbnail_text   = "강남 수학 과외",
-            exif_description = "강남 수학 과외",
-            upload_delay_ms  = 1500,
-        ))
-        .with_meta(MetaOption())
+    from automator import (
+        PostingJob, AccountOption, TitleOption,
+        TextBlock, ImageBlock, FeaturedBlock,
+        MediaOption, PublishOption, SEOOption,
+        SmartEditorOne,
     )
 
-    # editor requires a live Playwright Page:
-    with SmartEditorOne(page, job._account.write_url) as editor:
+    job = (
+        PostingJob
+        .for_account(AccountOption(
+            username="my_id",
+            password="my_pw",
+            meta={"blog_id": "my_blog"},
+        ))
+        .with_title(TitleOption(fixed_title="강남 수학 과외 추천"))
+        .with_body([
+            ImageBlock(path="assets/images/1.jpg"),
+            TextBlock(prompt="강남 수학 과외 홍보 블로그"),
+            FeaturedBlock(path="assets/thumbnails/1.jpg"),
+            TextBlock(prompt="후기 형식 마무리"),
+        ])
+        .with_media(MediaOption(
+            pixel_jitter=True,
+            featured_overlay_text="강남 수학",
+            exif_description="강남 수학 과외",
+        ))
+        .with_publish(PublishOption(mode="immediate"))
+    )
+
+    write_url = f"https://blog.naver.com/{job._account.meta['blog_id']}?Redirect=Write&"
+    with SmartEditorOne(page, write_url) as editor:
         job.run(editor)
 """
 
@@ -39,36 +43,49 @@ from automator.paragraph_generator import ParagraphGenerator
 from automator.options import (
     AccountOption,
     TitleOption,
-    ContentOption,
-    MetaOption,
-    RunSetting,
+    TextBlock,
+    ImageBlock,
+    FeaturedBlock,
+    Block,
+    MediaOption,
+    PublishOption,
     SEOOption,
-    ImageOption,
+    RunSetting,
 )
-from automator.editor import BlogEditor, PostContent, PostStep
+from automator.editor import (
+    BlogEditor, PostContent,
+    ParagraphStep, ImageStep, ThumbnailStep, PostStep,
+)
 from automator.browser_actions import (
     click_if_visible, click_polling,
     dismiss, dismiss_polling, dismiss_parallel,
     js_dispatch_click, find_editor_frame, find_js_frame,
 )
 from automator.smart_editor import SmartEditorOne
-from automator.job import NaverBlogJob
+from automator.job import PostingJob
 from automator.image_processor import ImageProcessor
 from automator.asset_loader import AssetLoader
 
 __all__ = [
     "AccountOption",
     "TitleOption",
-    "ContentOption",
-    "MetaOption",
-    "RunSetting",
+    "TextBlock",
+    "ImageBlock",
+    "FeaturedBlock",
+    "Block",
+    "MediaOption",
+    "PublishOption",
     "SEOOption",
-    "ImageOption",
+    "RunSetting",
     "BlogEditor",
     "PostContent",
+    "ParagraphStep",
+    "ImageStep",
+    "ThumbnailStep",
     "PostStep",
     "SmartEditorOne",
-    "NaverBlogJob",
+    "PostingJob",
     "ImageProcessor",
     "AssetLoader",
+    "ParagraphGenerator",
 ]

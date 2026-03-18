@@ -14,6 +14,7 @@ production 경로 테스트는 monkeypatch로 ENV=production을 설정한 뒤 _c
 """
 
 import pytest
+from automator.editor import ParagraphStep
 from unittest.mock import MagicMock, patch
 
 from automator.paragraph_generator import ParagraphGenerator, _stub_generate
@@ -164,22 +165,19 @@ def test_parse_raises_on_no_json(gen):
 @pytest.mark.unit
 def test_job_uses_generator_when_prompt_set():
     """paragraph_prompt 설정 시 mock generator 텍스트가 editor에 전달된다."""
-    from automator.job import NaverBlogJob
-    from automator.options import AccountOption, TitleOption, ContentOption
+    from automator.job import PostingJob
+    from automator.options import AccountOption, TitleOption, TextBlock
     from unittest.mock import MagicMock
 
     editor = MagicMock()
     (
-        NaverBlogJob
-        .for_account(AccountOption(naver_id="id", naver_pw="pw", blog_id="blog"))
+        PostingJob
+        .for_account(AccountOption(username="id", password="pw", meta={"blog_id":"blog"}))
         .with_title(TitleOption(fixed_title="테스트 포스트"))
-        .with_content(ContentOption(
-            layout=["Paragraph 1", "Paragraph 2"],
-            paragraph_prompt="테스트 프롬프트",
-        ))
+        .with_body([TextBlock(), TextBlock()])
         .run(editor)
     )
-    written = [c.args[0] for c in editor.write_paragraph.call_args_list]
+    written = [c.args[0].text for c in editor.execute.call_args_list if isinstance(c.args[0], ParagraphStep)]
     assert len(written) == 2
     from automator.paragraph_generator import _STUB_PARAGRAPHS
     assert written[0] == _STUB_PARAGRAPHS[0]
@@ -193,20 +191,20 @@ def test_job_uses_stub_when_no_prompt():
     스텁(UDHR) 텍스트가 editor에 전달된다.
     "(단락 N 생성 필요)" 하드코딩은 더 이상 사용하지 않는다.
     """
-    from automator.job import NaverBlogJob
-    from automator.options import AccountOption, TitleOption, ContentOption
+    from automator.job import PostingJob
+    from automator.options import AccountOption, TitleOption, TextBlock
     from automator.paragraph_generator import _STUB_PARAGRAPHS
     from unittest.mock import MagicMock
 
     editor = MagicMock()
     (
-        NaverBlogJob
-        .for_account(AccountOption(naver_id="id", naver_pw="pw", blog_id="blog"))
+        PostingJob
+        .for_account(AccountOption(username="id", password="pw", meta={"blog_id":"blog"}))
         .with_title(TitleOption(fixed_title="테스트 포스트"))
-        .with_content(ContentOption(layout=["Paragraph 1"]))
+        .with_body([TextBlock()])
         .run(editor)
     )
-    written = [c.args[0] for c in editor.write_paragraph.call_args_list]
+    written = [c.args[0].text for c in editor.execute.call_args_list if isinstance(c.args[0], ParagraphStep)]
     assert len(written) == 1
     assert written[0] == _STUB_PARAGRAPHS[0]
 

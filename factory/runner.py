@@ -5,7 +5,7 @@ Executes pending batches in parallel using multiprocessing.
 
 Each worker process:
     1. Locks one batch (status = 'running', worker_pid = PID)
-    2. Iterates batch_items and runs NaverBlogJob for each
+    2. Iterates batch_items and runs PostingJob for each
     3. Marks items done/failed, then batch done/failed
 
 Usage:
@@ -131,9 +131,9 @@ def _worker(args: dict) -> dict:
     """
     from factory.db import Database
     from factory.logging_config import setup, get_logger
-    from automator.job import NaverBlogJob
+    from automator.job import PostingJob
     from automator.options import (
-        AccountOption, TitleOption, ContentOption, MetaOption, RunSetting, KST
+        AccountOption, TitleOption, TextBlock, PublishOption, RunSetting, KST
     )
     from automator.smart_editor import SmartEditorOne
     from playwright.sync_api import sync_playwright
@@ -175,9 +175,9 @@ def _worker(args: dict) -> dict:
         # All items share the same account (enforced by dispatcher)
         first        = items[0]
         account_opt  = AccountOption(
-            naver_id     = first["naver_id"],
-            naver_pw     = first["naver_pw"],
-            blog_id      = first["blog_id"],
+            username     = first["naver_id"],
+            password     = first["naver_pw"],
+            meta         = {"blog_id": first["blog_id"]},
             session_path = first["session_path"] or "session_state.json",
         )
 
@@ -196,7 +196,7 @@ def _worker(args: dict) -> dict:
                     page   = ctx.new_page()
                     editor = SmartEditorOne(
                         page,
-                        account_opt.write_url,
+                        f"https://blog.naver.com/{first['blog_id']}?Redirect=Write&",
                         dry_run=dry_run,
                     )
                     try:
@@ -204,19 +204,19 @@ def _worker(args: dict) -> dict:
                             _FETCH_COMBO_KEYWORDS_SQL, (item["combination_id"],)
                         )
                         title_opt   = _build_title_option(item, dim_values)
-                        content_opt = _build_content_option(item, dim_values)
-                        meta_opt    = MetaOption(
-                            schedule_mode = "fixed",
-                            schedule_at   = scheduled_at.replace(tzinfo=KST)
-                                            if scheduled_at.tzinfo is None
-                                            else scheduled_at,
+                        body_blocks = _build_body(item, dim_values)
+                        publish_opt = PublishOption(
+                            mode = "fixed",
+                            at   = scheduled_at.replace(tzinfo=KST)
+                                   if scheduled_at.tzinfo is None
+                                   else scheduled_at,
                         )
                         job = (
-                            NaverBlogJob
+                            PostingJob
                             .for_account(account_opt)
                             .with_title(title_opt)
-                            .with_content(content_opt)
-                            .with_meta(meta_opt)
+                            .with_body(body_blocks)
+                            .with_publish(publish_opt)
                             .with_setting(RunSetting())
                         )
                         job.run(editor)
@@ -279,18 +279,19 @@ def _build_title_option(item: dict, combo_keywords: list[dict]):
     )
 
 
-def _build_content_option(item: dict, combo_keywords: list[dict]):
-    from automator.options import ContentOption
+def _build_body(item: dict, combo_keywords: list[dict]):
+    from automator.options import TextBlock
     values  = _build_values(item, combo_keywords)
     keyword = " ".join(values[slug] for slug in sorted(values))
     prompt  = (
         f"{keyword}을(를) 홍보하는 블로그 글을 작성해주세요. "
         f"신뢰감 있는 톤으로 자연스럽게 서술해주세요."
     )
-    return ContentOption(
-        layout           = ["Paragraph 1", "Paragraph 2", "Paragraph 3"],
-        paragraph_prompt = prompt,
-    )
+    return [
+        TextBlock(prompt=prompt),
+        TextBlock(prompt=prompt),
+        TextBlock(prompt=prompt),
+    ]
 
 
 # ---------------------------------------------------------------------------

@@ -10,10 +10,11 @@
 #  DB 관리:
 #    db-up      MySQL 시작
 #    db-down    MySQL 종료
-#    db-reset   데이터 전체 삭제 후 재초기화 (볼륨 삭제, 확인 필요)
+#    db-reset   전체 초기화 (볼륨 삭제, 확인 필요)
 #    db-logs    MySQL 로그 실시간 확인
 #
 #  파이프라인:
+#    select     캠페인 키워드 필터 설정
 #    seed       조합 생성 (멱등 — 재실행 안전)
 #    dispatch   가용 계정에 배치 할당
 #    run        pending 배치 병렬 실행
@@ -92,17 +93,17 @@ case "${CMD}" in
 
   # ── 파이프라인 ─────────────────────────────────────────────────────────────
 
-  seed)
-    _require_venv
-    _require_db
-    echo "조합 생성: 선택된 값들의 카테시안 곱 → combinations 테이블"
-    python -m factory.main seed "$@"
-    ;;
-
   select)
     _require_venv
     _require_db
     python -m factory.main select "$@"
+    ;;
+
+  seed)
+    _require_venv
+    _require_db
+    echo "조합 생성: 선택된 키워드들의 카테시안 곱 → combinations 테이블"
+    python -m factory.main seed "$@"
     ;;
 
   dispatch)
@@ -147,9 +148,8 @@ case "${CMD}" in
 
   파이프라인:
     bash ./run/factory.sh select --list
-    bash ./run/factory.sh select --dimension region --values "강남구,수원시"
-    bash ./run/factory.sh select --dimension subject --values "수학"
-    bash ./run/factory.sh select --dimension learning_type --values "과외"
+    bash ./run/factory.sh select --category region --values "강남구,수원시"
+    bash ./run/factory.sh select --category subject --values "수학"
     bash ./run/factory.sh seed
     bash ./run/factory.sh dispatch [--schedule-at "YYYY-MM-DD HH:MM"]
     bash ./run/factory.sh run [--workers N] [--dry-run]

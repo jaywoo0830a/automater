@@ -1,29 +1,33 @@
 """
 automator/options.py
 ---------------------
-Value objects that describe a blog posting job.
+Value objects describing a blog posting job.
 
-Each dataclass maps directly to one configuration step in the UI:
+Design
+------
+블로그 포스팅 = 5가지 질문의 답:
 
-    AccountOption  ← 계정 설정
-    TitleOption    ← 제목 설정
-    ContentOption  ← 내용 설정
-    MetaOption     ← 메타데이터 설정
-    RunSetting     ← 기타 실행 설정
+  AccountOption  — 누가 올리는가
+  TitleOption    — 무슨 제목인가
+  Block 목록     — 무엇이 담겼는가  (순서 = 레이아웃)
+  MediaOption    — 미디어를 어떻게 처리하는가
+  PublishOption  — 언제·어떻게 올리는가
 
-All dataclasses are frozen (immutable). To modify a value, use
-dataclasses.replace().
+Block hierarchy:
+  Block = TextBlock | ImageBlock | FeaturedBlock
+  TextBlock     → 단락 텍스트  (ParagraphStep 으로 변환)
+  ImageBlock    → 본문 이미지  (ImageStep 으로 변환)
+  FeaturedBlock → 대표 이미지  (ThumbnailStep 으로 변환)
 
-No I/O, no Playwright, no imports beyond stdlib.
+All dataclasses are frozen (immutable). No I/O. No imports beyond stdlib.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Literal
+from typing import Literal, Union
 
-# Korean Standard Time (UTC+9) — use for all schedule_at values
 KST = timezone(timedelta(hours=9))
 
 
@@ -34,202 +38,226 @@ KST = timezone(timedelta(hours=9))
 @dataclass(frozen=True)
 class AccountOption:
     """
-    Naver account credentials and per-account posting quota.
+    Platform-agnostic account credentials.
 
     Attributes:
-        naver_id:     Naver login ID.
-        naver_pw:     Naver login password.
-        blog_id:      Blog ID used to construct the write URL.
-        proxies:      Proxy addresses ("ip:port") to cycle through.
-        session_path: Path to Playwright storage-state JSON.
-                      Defaults to "<naver_id>_session.json".
+        username:     Login username / ID.
+        password:     Login password.
+        meta:         Platform-specific extras.
+                      Naver    → {"blog_id": "rlawjddn"}
+                      WordPress → {"api_url": "https://...", "api_key": "..."}
+        proxies:      "ip:port" list to cycle through.
+        session_path: Playwright storage-state JSON path.
+                      Defaults to "<username>_session.json".
     """
-    naver_id:     str
-    naver_pw:     str
-    blog_id:      str
+    username:     str
+    password:     str
+    meta:         dict      = field(default_factory=dict)
     proxies:      list[str] = field(default_factory=list)
     session_path: str       = ""
 
     @property
-    def write_url(self) -> str:
-        return f"https://blog.naver.com/{self.blog_id}?Redirect=Write&"
-
-    @property
     def resolved_session_path(self) -> str:
-        return self.session_path or f"{self.naver_id}_session.json"
+        return self.session_path or f"{self.username}_session.json"
 
 
 # ---------------------------------------------------------------------------
 # TitleOption
 # ---------------------------------------------------------------------------
 
-
 @dataclass(frozen=True)
 class TitleOption:
     """
-    Rules for generating a blog post title from a template and values.
+    Rules for generating a post title.
 
     Template format
     ---------------
-    Python str.format()-style with {slug} tokens.
-    {salt} is a special token — replaced with a random salt from salts.json.
-    All other {slug} tokens must exist in the values dict.
+    Python str.format()-style {slug} tokens.
+    {salt} → random salt from salts.json.
 
     Examples:
-        "{region} {subject} {learning_type} {salt}"  → "강남 수학 과외 강력 추천"
-        "{salt} {region} {subject} {learning_type}"  → "검증된 강남 수학 과외"
-        "{region} {target_audience} {subject} {salt}"→ "원주 성인 영어회화 추천"
-        "{region} {school} {grade} {subject} {learning_type} {salt}"
-
-    Fields
-    ------
-    template:
-        {slug} token string. {salt} is replaced randomly from salts.json.
-        Required unless fixed_title is set.
-
-    values:
-        Dict of slug → value for template substitution.
-        e.g. {"region": "강남", "subject": "수학", "learning_type": "과외"}
-        Populated by FactoryRunner from DB combo, or set explicitly for
-        standalone use.
-
-    salt_preset:
-        Path to salts.json. Empty = use default presets/title/salts.json.
-
-    fixed_title:
-        When set, returned as-is. Skips template/values entirely.
+        TitleOption(
+            template="{region} {subject} {salt}",
+            values={"region": "강남", "subject": "수학"},
+        )
+        TitleOption(fixed_title="강남 수학 과외 추천")
     """
-    # Template and values
-    template:    str  = ""
-    values:      dict = field(default_factory=dict)
-
-    # Salt preset path (salts.json)
-    salt_preset: str  = ""
-
-    # Direct override — skips everything when set
-    fixed_title: str  = ""
-
-    # Stub features (not yet implemented)
-    has_space:        bool = True
-    add_affix:        bool = False
-    randomize_chars:  bool = False
-    ai_preset_prompt: str  = ""
+    template:         str        = ""
+    values:           dict       = field(default_factory=dict)
+    salt_preset:      str        = ""
+    fixed_title:      str        = ""
+    has_space:        bool       = True
+    add_affix:        bool       = False
+    randomize_chars:  bool       = False
+    ai_preset_prompt: str        = ""
     seed:             int | None = None
 
+
 # ---------------------------------------------------------------------------
-# ContentOption
+# Block hierarchy
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
-class ContentOption:
+class TextBlock:
     """
-    Rules for generating post body content and image layout.
+    본문 단락 하나.
 
-    Fields
-    ------
-    preview_images:
-        본문에 삽입할 이미지 경로 리스트.
-        alias: "Image 1", "Image 2", ... (인덱스+1 순서로 자동 부여)
+    prompt 가 비어있으면 stub 텍스트(UDHR)를 반환한다.
+    SEOOption 이 설정되어 있으면 prompt 보다 우선한다.
 
-    thumbnail_images:
-        썸네일 베이스 이미지 경로 리스트.
-        alias: "Thumbnail 1", "Thumbnail 2", ...
-        현재는 1장만 사용하지만, 네이버 정책 변경 대비 리스트로 관리.
-
-    layout:
-        alias 문자열 리스트로 포스트 내용의 순서를 지정한다.
-        유효 alias:
-          "Image N"       — preview_images[N-1] 업로드
-          "Thumbnail N"   — thumbnail_images[N-1] 업로드 (대표 이미지)
-          "Paragraph N"   — N번째 AI 생성 단락 삽입
-        파라그래프 개수는 layout 내 "Paragraph N" 최대 번호로 자동 결정된다.
-
-        예시:
-          ["Image 1", "Image 2", "Paragraph 1", "Thumbnail 1",
-           "Paragraph 2", "Paragraph 3"]
-          → 이미지 2장 → 단락 1 → 썸네일 → 단락 2, 3
-
-        빈 리스트이면 콘텐츠 없이 제목과 본문만 게시된다.
+    Attributes:
+        prompt:   Gemini 에 전달할 프롬프트.
+        newlines: 단락 뒤 줄바꿈 횟수 (기본 2).
     """
-    preview_images:    list[str] = field(default_factory=list)
-    thumbnail_images:  list[str] = field(default_factory=list)
-    layout:            list[str] = field(default_factory=list)
-    paragraph_newlines: int      = 2  # Enter presses appended after each paragraph
-    paragraph_prompt:   str      = ""  # Gemini prompt for paragraph generation; empty = placeholder
-
-
-# ---------------------------------------------------------------------------
-# MetaOption
-# ---------------------------------------------------------------------------
-
-TagStyle = Literal[
-    "dynamic", "education", "region", "subject", "learning_type",
-]
-
-ScheduleMode = Literal[
-    "immediate",      # publish immediately (default — existing behaviour)
-    "fixed",          # publish at exactly schedule_at
-    "random_window",  # publish at a random time within schedule_at ± jitter
-]
+    prompt:   str = ""
+    newlines: int = 2
 
 
 @dataclass(frozen=True)
-class MetaOption:
+class ImageBlock:
     """
-    Rules for post metadata: tags, backlinks, internal links, publish schedule.
+    본문 이미지 하나. 대표 이미지로 지정되지 않는다.
 
-    Publish schedule
-    ----------------
-    schedule_mode = "immediate"  (default)
-        Publish immediately. schedule_at and schedule_jitter_minutes are ignored.
-
-    schedule_mode = "fixed"
-        Reserve the post at the exact KST datetime given in schedule_at.
-        schedule_at must be a timezone-aware future datetime. (validated by job)
-
-    schedule_mode = "random_window"
-        Pick a random datetime within schedule_at ± schedule_jitter_minutes and
-        reserve the post at that time. Useful for evading spam-detection patterns
-        caused by identical posting times across multiple accounts.
-        schedule_at must be timezone-aware, and schedule_at - jitter must be in
-        the future. (validated by job)
-
-    Notes:
-        - schedule_at must always be a timezone-aware datetime.
-        - Recommended timezone: KST  (from automator.options import KST)
-        - NaverBlogJob.validate() raises ValueError for any constraint violation.
+    Attributes:
+        path: 업로드할 이미지 파일 경로.
     """
-
-    # --- existing fields (unchanged) ---
-    min_tags:            int      = 12
-    max_tags:            int      = 20
-    tag_style:           TagStyle = "dynamic"
-    backlink_ratio:      int      = 0
-    internal_link_ratio: int      = 0
-
-    # --- publish schedule ---
-    schedule_mode:           ScheduleMode    = "immediate"
-    schedule_at:             datetime | None = None
-    schedule_jitter_minutes: int             = 30
-
-
-# ---------------------------------------------------------------------------
-# RunSetting
-# ---------------------------------------------------------------------------
-
-OnFailure = Literal["stop", "switch_account"]
+    path: str
 
 
 @dataclass(frozen=True)
-class RunSetting:
-    """Runtime behaviour: scheduling, throttling, failure handling, browser."""
-    scheduled:         bool      = True
-    schedule_interval: int       = 12
-    post_interval:     int       = 60
-    max_daily_posts:   int       = 10
-    on_failure:        OnFailure = "stop"
-    headless:          bool      = True
-    slow_mo:           int       = 0
+class FeaturedBlock:
+    """
+    대표(썸네일) 이미지 하나.
+    업로드 후 포스트 대표 이미지로 지정된다.
+    MediaOption.featured_overlay_text 가 있으면 텍스트 오버레이가 적용된다.
+
+    Attributes:
+        path: 업로드할 이미지 파일 경로.
+    """
+    path: str
+
+
+# Sealed union — isinstance 분기에 사용
+Block = Union[TextBlock, ImageBlock, FeaturedBlock]
+
+
+# ---------------------------------------------------------------------------
+# MediaOption
+# ---------------------------------------------------------------------------
+
+@dataclass
+class MediaOption:
+    """
+    이미지 변환 파이프라인 규칙. 파일 경로를 모른다.
+    모든 이미지(ImageBlock + FeaturedBlock)에 동일하게 적용된다.
+
+    Pipeline
+    --------
+    ImageBlock    : size_jitter → pixel_jitter → saturation(±preview%) → exif
+    FeaturedBlock : size_jitter → pixel_jitter → saturation(±featured%) →
+                    featured_overlay_text → exif
+
+    Attributes:
+        upload_delay_ms:           업로드 간 대기 (ms).
+        pixel_jitter:              1-3 픽셀 RGB 미세 변경.
+        size_jitter_px:            ±N px 리사이즈.
+        preview_saturation_jitter: 본문 이미지 채도 변화 (±%, 기본 ±3%).
+        featured_saturation_shift: 대표 이미지 채도 변화 (±%, 기본 ±30%).
+        featured_overlay_text:     대표 이미지에 렌더링할 텍스트.
+                                   str → 공백으로 분리해 줄별 표시.
+                                   list[str] → 각 요소가 한 줄.
+        featured_text_color:       텍스트 색상 (hex, 기본 "#FFFFFF").
+        featured_line_spacing:     줄 간격 (px).
+        featured_letter_spacing:   자간 (px).
+        exif_description:          Exif ImageDescription 값.
+        exif_gps_lat/lng:          Exif GPS 좌표.
+        filename_keyword:          업로드 파일명에 포함할 키워드.
+    """
+    upload_delay_ms:            int         = 1500
+    pixel_jitter:               bool        = True
+    size_jitter_px:             int         = 2
+    preview_saturation_jitter:  float       = 0.03
+    featured_saturation_shift:  float       = 0.30
+    featured_overlay_text:      str | list  = ""
+    featured_text_color:        str         = "#FFFFFF"
+    featured_line_spacing:      int         = 24
+    featured_letter_spacing:    int         = 3
+    exif_description:           str         = ""
+    exif_gps_lat:               float | None = None
+    exif_gps_lng:               float | None = None
+    filename_keyword:           str         = ""
+
+    def __post_init__(self) -> None:
+        if self.upload_delay_ms < 0:
+            raise ValueError(f"upload_delay_ms must be ≥ 0, got {self.upload_delay_ms}")
+        if self.size_jitter_px < 0:
+            raise ValueError(f"size_jitter_px must be ≥ 0, got {self.size_jitter_px}")
+        if not (0.0 <= self.preview_saturation_jitter <= 1.0):
+            raise ValueError("preview_saturation_jitter must be 0.0–1.0")
+        if not (0.0 <= self.featured_saturation_shift <= 1.0):
+            raise ValueError("featured_saturation_shift must be 0.0–1.0")
+        if not self.featured_text_color.startswith("#") or \
+                len(self.featured_text_color) not in (4, 7):
+            raise ValueError(
+                f"featured_text_color must be hex like '#FFFFFF', "
+                f"got {self.featured_text_color!r}"
+            )
+        if self.featured_line_spacing < 0:
+            raise ValueError("featured_line_spacing must be ≥ 0")
+        if self.featured_letter_spacing < 0:
+            raise ValueError("featured_letter_spacing must be ≥ 0")
+
+
+# ---------------------------------------------------------------------------
+# PublishOption
+# ---------------------------------------------------------------------------
+
+ScheduleMode  = Literal["immediate", "fixed", "random_window"]
+TagStyle      = Literal["dynamic", "education", "region", "subject", "learning_type"]
+Visibility    = Literal["public", "private", "draft"]
+
+
+@dataclass(frozen=True)
+class PublishOption:
+    """
+    발행에 관한 모든 결정을 담는다.
+
+    일정·태그·공개범위는 "이 포스트를 어떻게 세상에 내놓는가"라는
+    같은 이유로 변경된다. 하나의 옵션 클래스로 통합한다.
+
+    Schedule
+    --------
+    mode="immediate"     즉시 발행 (기본값).
+    mode="fixed"         at 시각에 정확히 예약.
+    mode="random_window" at ± jitter_minutes 범위 내 무작위 예약.
+    at 은 항상 timezone-aware datetime 이어야 한다. (권장: KST)
+
+    Tags
+    ----
+    tags 가 비어있으면 자동 생성(tag_style 기반).
+    명시적으로 지정하면 그대로 사용한다.
+
+    Visibility
+    ----------
+    "public"  — 전체 공개 (기본값).
+    "private" — 비공개.
+    "draft"   — 임시저장.
+    """
+    # ── Schedule ──────────────────────────────────────────────────────────────
+    mode:           ScheduleMode    = "immediate"
+    at:             datetime | None = None
+    jitter_minutes: int             = 30
+
+    # ── Tags ──────────────────────────────────────────────────────────────────
+    tags:                list[str]  = field(default_factory=list)
+    min_tags:            int        = 12
+    max_tags:            int        = 20
+    tag_style:           TagStyle   = "dynamic"
+    backlink_ratio:      int        = 0
+    internal_link_ratio: int        = 0
+
+    # ── Visibility ────────────────────────────────────────────────────────────
+    visibility: Visibility = "public"
 
 
 # ---------------------------------------------------------------------------
@@ -243,75 +271,11 @@ VALID_TONES             = ("formal", "informal_friendly", "review_style")
 @dataclass
 class SEOOption:
     """
-    Controls how Gemini generates paragraph text for SEO purposes.
+    단락별 SEO 최적화 규칙.
 
-    Passed to seo_prompt.to_prompt(seo, paragraph_index, total_paragraphs)
-    which converts it into a structured instruction string for the Gemini API.
-
-    Keyword
-    -------
-    keyword:
-        Primary target keyword (e.g. "강남 수학 과외").
-    keyword_count_first:
-        How many times the keyword appears in the first paragraph. (2–3 is safe)
-    keyword_count_others:
-        Per-paragraph keyword count for middle paragraphs.
-    keyword_count_last:
-        Keyword count for the last paragraph. Naver weights first/last paragraphs heavily.
-    keyword_position:
-        Where in the first paragraph the keyword first appears.
-        "first_sentence" / "early" (first 30%) / "anywhere"
-    allow_variants:
-        If True, Gemini may mix spacing variants ("강남수학과외" / "강남 수학 과외").
-        Reduces spam-detection risk.
-    related_keywords:
-        Supporting keywords to weave in naturally (e.g. ["대치동", "내신"]).
-        Boosts topic-relevance score.
-    repeat_title_keyword:
-        If True, the post title keyword should appear verbatim in the body.
-        Improves title-body keyword match score.
-
-    Character count
-    ---------------
-    first_para_min / first_para_max:
-        Character range for the first paragraph.
-    other_para_min / other_para_max:
-        Character range for each middle paragraph.
-    total_min / total_max:
-        Combined character range across all paragraphs.
-    sentences_per_para_min / sentences_per_para_max:
-        Sentence count range per paragraph.
-    sentence_max_chars:
-        Maximum characters per sentence. Keep ≤60 for mobile readability.
-    sentence_variety:
-        If True, mix short (~20 chars) and long (~60 chars) sentences for rhythm.
-
-    Sentence structure
-    ------------------
-    first_sentence_max:
-        Maximum characters for the very first sentence (shown in search preview).
-    include_question:
-        Insert one question-form sentence in the first paragraph.
-        Boosts reader engagement and dwell time.
-    tone:
-        "formal" / "informal_friendly" / "review_style"
-        review_style = first-person experience narrative — highest trust for parent audience.
-    include_numbers:
-        Include concrete figures (e.g. "성적 30% 향상", "3개월 만에").
-        Numbers increase credibility and CTR.
-    include_empathy:
-        Add empathy phrases (e.g. "많이 고민하셨죠?").
-        Effective for parent-targeted content.
-    include_cta:
-        Append a call-to-action sentence to the last paragraph
-        ("댓글로 물어보세요", "저장해두세요").
-        Comments / scraps / likes are direct Naver quality signals.
-    use_connectors:
-        Use transition words between paragraphs ("그런데", "특히", "그래서").
-        Smooth flow reduces bounce rate.
+    with_seo() 로 설정 시 TextBlock.prompt 보다 우선하며,
+    단락 위치(첫/중간/마지막)마다 다른 Gemini 프롬프트를 생성한다.
     """
-
-    # ── Keyword ──────────────────────────────────────────────────────────────
     keyword:               str       = ""
     keyword_count_first:   int       = 3
     keyword_count_others:  int       = 1
@@ -320,27 +284,23 @@ class SEOOption:
     allow_variants:        bool      = True
     related_keywords:      list[str] = field(default_factory=list)
     repeat_title_keyword:  bool      = True
-
-    # ── Character count ───────────────────────────────────────────────────────
-    first_para_min:        int       = 250
-    first_para_max:        int       = 400
-    other_para_min:        int       = 150
-    other_para_max:        int       = 350
-    total_min:             int       = 800
-    total_max:             int       = 1200
+    first_para_min:         int      = 250
+    first_para_max:         int      = 400
+    other_para_min:         int      = 150
+    other_para_max:         int      = 350
+    total_min:              int      = 800
+    total_max:              int      = 1200
     sentences_per_para_min: int      = 3
     sentences_per_para_max: int      = 7
-    sentence_max_chars:    int       = 60
-    sentence_variety:      bool      = True
-
-    # ── Sentence structure ────────────────────────────────────────────────────
-    first_sentence_max:    int       = 40
-    include_question:      bool      = True
-    tone:                  str       = "review_style"
-    include_numbers:       bool      = True
-    include_empathy:       bool      = True
-    include_cta:           bool      = True
-    use_connectors:        bool      = True
+    sentence_max_chars:     int      = 60
+    sentence_variety:       bool     = True
+    first_sentence_max:     int      = 40
+    include_question:       bool     = True
+    tone:                   str      = "review_style"
+    include_numbers:        bool     = True
+    include_empathy:        bool     = True
+    include_cta:            bool     = True
+    use_connectors:         bool     = True
 
     def __post_init__(self) -> None:
         if self.keyword_position not in VALID_KEYWORD_POSITIONS:
@@ -352,154 +312,33 @@ class SEOOption:
             raise ValueError(
                 f"tone must be one of {VALID_TONES}, got {self.tone!r}"
             )
-        if self.first_para_min > self.first_para_max:
-            raise ValueError(
-                f"first_para_min ({self.first_para_min}) must be ≤ "
-                f"first_para_max ({self.first_para_max})"
-            )
-        if self.other_para_min > self.other_para_max:
-            raise ValueError(
-                f"other_para_min ({self.other_para_min}) must be ≤ "
-                f"other_para_max ({self.other_para_max})"
-            )
-        if self.total_min > self.total_max:
-            raise ValueError(
-                f"total_min ({self.total_min}) must be ≤ total_max ({self.total_max})"
-            )
-        if self.sentences_per_para_min > self.sentences_per_para_max:
-            raise ValueError(
-                f"sentences_per_para_min ({self.sentences_per_para_min}) must be ≤ "
-                f"sentences_per_para_max ({self.sentences_per_para_max})"
-            )
-        for field_name in ("keyword_count_first", "keyword_count_others", "keyword_count_last"):
-            val = getattr(self, field_name)
-            if val < 0:
-                raise ValueError(f"keyword_count fields must be ≥ 0, got {field_name}={val}")
+        for lo, hi, name in (
+            (self.first_para_min, self.first_para_max, "first_para"),
+            (self.other_para_min, self.other_para_max, "other_para"),
+            (self.total_min, self.total_max, "total"),
+            (self.sentences_per_para_min, self.sentences_per_para_max, "sentences_per_para"),
+        ):
+            if lo > hi:
+                raise ValueError(f"{name}_min must be ≤ {name}_max")
+        for fn in ("keyword_count_first", "keyword_count_others", "keyword_count_last"):
+            if getattr(self, fn) < 0:
+                raise ValueError(f"{fn} must be ≥ 0")
 
 
 # ---------------------------------------------------------------------------
-# ImageOption
+# RunSetting
 # ---------------------------------------------------------------------------
 
-@dataclass
-class ImageOption:
-    """
-    Controls image processing before upload.
+OnFailure = Literal["stop", "switch_account"]
 
-    Each image goes through: pixel_jitter → size_jitter → exif → save.
-    Thumbnails additionally go through: thumbnail_text overlay.
 
-    Fields
-    ------
-    upload_delay_ms:
-        Milliseconds to wait after each file upload.
-        Prevents Naver editor from failing on rapid sequential uploads.
-
-    pixel_jitter:
-        If True, randomly alter 1–3 pixels so the image hash differs
-        from the source. Prevents duplicate-content detection.
-
-    size_jitter_px:
-        Randomly resize the image by ±N pixels in each dimension.
-        0 = no resize. Works together with pixel_jitter.
-
-    preview_saturation_jitter:
-        Randomly shift saturation of preview images by ±value (0.0–1.0).
-        Keep small — imperceptible colour shift, changes hash only.
-        Default 0.03 (±3%).
-
-    thumbnail_saturation_shift:
-        Randomly shift saturation of thumbnail images by ±value (0.0–1.0).
-        Keep larger — visible colour tone change per posting.
-        Default 0.30 (±30%).
-
-    thumbnail_text:
-        Text to overlay on thumbnail images. Accepts:
-          str  — split by spaces, each word on its own line.
-                 e.g. "강남 수학 과외"  →  3 lines
-          list[str]  — each element is one line.
-                 e.g. ["강남", "수학 과외"]  →  2 lines
-        Empty string or empty list = no overlay.
-
-    thumbnail_text_color:
-        Hex color for the thumbnail text overlay (e.g. "#FFFFFF").
-
-    thumbnail_line_spacing:
-        Pixels between lines. Default 24px — comfortable for Korean
-        on a 1000×1000 image with ~150px font size.
-
-    thumbnail_letter_spacing:
-        Pixels between characters. Default 3px — subtle spacing for
-        Korean syllable blocks which already have internal spacing.
-
-    exif_description:
-        Value written to the JPEG Exif ImageDescription field.
-        Naver's image crawler reads this. Typically the target keyword.
-
-    exif_gps_lat / exif_gps_lng:
-        GPS coordinates embedded in Exif GPS IFD.
-        Boosts local search relevance when set to the region's coordinates.
-        None = no GPS data.
-
-    filename_keyword:
-        Keyword string used when building the upload filename.
-        e.g. "강남-수학-과외" → "강남-수학-과외-01.jpg"
-        Empty = generic fallback name.
-    """
-
-    # ── Upload timing ─────────────────────────────────────────────────────────
-    upload_delay_ms:       int   = 1500
-
-    # ── Pixel / size variation ────────────────────────────────────────────────
-    pixel_jitter:             bool  = True
-    size_jitter_px:           int   = 2
-    preview_saturation_jitter:    float = 0.03   # ±3%  — imperceptible
-    thumbnail_saturation_shift:   float = 0.30   # ±30% — visible tone change
-
-    # ── Thumbnail text overlay ────────────────────────────────────────────────
-    thumbnail_text:           str | list = ""
-    thumbnail_text_color:     str   = "#FFFFFF"
-    thumbnail_line_spacing:   int   = 24    # px between lines
-    thumbnail_letter_spacing: int   = 3     # px between characters
-
-    # ── Exif metadata ─────────────────────────────────────────────────────────
-    exif_description:      str         = ""
-    exif_gps_lat:          float | None = None
-    exif_gps_lng:          float | None = None
-
-    # ── Filename ──────────────────────────────────────────────────────────────
-    filename_keyword:      str   = ""
-
-    def __post_init__(self) -> None:
-        if self.upload_delay_ms < 0:
-            raise ValueError(
-                f"upload_delay_ms must be ≥ 0, got {self.upload_delay_ms}"
-            )
-        if self.size_jitter_px < 0:
-            raise ValueError(
-                f"size_jitter_px must be ≥ 0, got {self.size_jitter_px}"
-            )
-        if not (0.0 <= self.preview_saturation_jitter <= 1.0):
-            raise ValueError(
-                f"preview_saturation_jitter must be 0.0–1.0, "
-                f"got {self.preview_saturation_jitter}"
-            )
-        if not (0.0 <= self.thumbnail_saturation_shift <= 1.0):
-            raise ValueError(
-                f"thumbnail_saturation_shift must be 0.0–1.0, "
-                f"got {self.thumbnail_saturation_shift}"
-            )
-        if not self.thumbnail_text_color.startswith("#") or \
-                len(self.thumbnail_text_color) not in (4, 7):
-            raise ValueError(
-                f"thumbnail_text_color must be a hex color like '#FFFFFF', "
-                f"got {self.thumbnail_text_color!r}"
-            )
-        if self.thumbnail_line_spacing < 0:
-            raise ValueError(
-                f"thumbnail_line_spacing must be ≥ 0, got {self.thumbnail_line_spacing}"
-            )
-        if self.thumbnail_letter_spacing < 0:
-            raise ValueError(
-                f"thumbnail_letter_spacing must be ≥ 0, got {self.thumbnail_letter_spacing}"
-            )
+@dataclass(frozen=True)
+class RunSetting:
+    """Runtime behaviour: throttling, failure handling, browser."""
+    scheduled:         bool      = True
+    schedule_interval: int       = 12
+    post_interval:     int       = 60
+    max_daily_posts:   int       = 10
+    on_failure:        OnFailure = "stop"
+    headless:          bool      = True
+    slow_mo:           int       = 0

@@ -79,9 +79,9 @@ def account() -> AccountOption:
                 "session_state.json 필요. bash ./run/dev.sh --session 으로 세션을 저장하세요."
             )
     return AccountOption(
-        naver_id     = NAVER_ID,
-        naver_pw     = NAVER_PW,
-        blog_id      = NAVER_BLOG_ID,
+        username     = NAVER_ID,
+        password     = NAVER_PW,
+        meta         = {"blog_id": NAVER_BLOG_ID},
         session_path = SESSION_PATH,
     )
 
@@ -111,8 +111,8 @@ def auth_context(browser_instance: Browser, account: AccountOption):
         ctx  = browser_instance.new_context(locale="ko-KR", timezone_id="Asia/Seoul")
         page = ctx.new_page()
         page.goto("https://nid.naver.com/nidlogin.login")
-        _LOGIN_SEL.locator(page, "naver_login_id").fill(account.naver_id)
-        _LOGIN_SEL.locator(page, "naver_login_pw").fill(account.naver_pw)
+        _LOGIN_SEL.locator(page, "naver_login_id").fill(account.username)
+        _LOGIN_SEL.locator(page, "naver_login_pw").fill(account.password)
         _LOGIN_SEL.locator(page, "naver_login_submit").click()
         page.wait_for_url(lambda url: "nidlogin" not in url, timeout=15_000)
         ctx.storage_state(path=account.resolved_session_path)
@@ -133,7 +133,7 @@ def page(auth_context: BrowserContext) -> Page:
 @pytest.fixture
 def editor(page: Page, account: AccountOption) -> SmartEditorOne:
     """dry_run=True — 발행 팝오버는 열리지만 실제 발행하기 버튼은 누르지 않는다."""
-    return SmartEditorOne(page, account.write_url, dry_run=True)
+    return SmartEditorOne(page, f"https://blog.naver.com/{account.meta['blog_id']}?Redirect=Write&", dry_run=True)
 
 
 # ---------------------------------------------------------------------------

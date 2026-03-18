@@ -1,125 +1,129 @@
 """
 automator/job.py
 ----------------
-NaverBlogJob — immutable builder + orchestrator for a blog post publishing run.
+PostingJob — platform-agnostic immutable builder + orchestrator.
 
-This module has zero knowledge of DOM, CSS, or Playwright. It expresses
-the business flow purely in terms of the BlogEditor interface and the
-option value objects.
+Builder
+-------
+    base = PostingJob.for_account(account)
 
-Builder pattern
----------------
-    base = NaverBlogJob.for_account(account).with_setting(setting)
+    job = (
+        base
+        .with_title(TitleOption(template="{region} {subject} {salt}", values={...}))
+        .with_body([
+            ImageBlock(path="img.jpg"),
+            TextBlock(prompt="강남 수학 과외 홍보"),
+            FeaturedBlock(path="thumb.jpg"),
+            TextBlock(prompt="후기 형식 마무리"),
+        ])
+        .with_seo(SEOOption(keyword="강남 수학 과외", tone="review_style"))
+        .with_media(MediaOption(pixel_jitter=True, exif_gps_lat=37.49,
+                                featured_overlay_text="강남 수학"))
+        .with_publish(PublishOption(mode="immediate", tags=["강남수학과외"]))
+    )
+    job.run(editor)
 
-    job_a = base.with_title(title_a).with_content(content_a).with_meta(meta_a)
-    job_b = base.with_title(title_b).with_content(content_b).with_meta(meta_b)
-
-    job_a.run(editor)
-    job_b.run(editor)
-
-Each .with_*() returns a NEW instance so the base is never mutated.
-The editor is injected at run() time because it requires a live Playwright Page.
+with_*() 는 항상 새 인스턴스를 반환한다 — base 는 절대 변하지 않는다.
+editor 는 run() 시점에 주입된다.
 """
 
 from __future__ import annotations
 
 import random
-import sys
 import tempfile
 import time
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from automator.editor import BlogEditor, PostContent, PostStep
+from automator.editor import (
+    BlogEditor, PostContent,
+    ParagraphStep, ImageStep, ThumbnailStep, PostStep,
+)
 from automator.title_generator import TitleGenerator, validate_template
-from automator.layout import validate_layout, paragraph_count, parse_alias
+from automator.layout import validate_blocks, text_block_count
 from automator.paragraph_generator import ParagraphGenerator
 from automator.seo_prompt import to_prompt
 from automator.options import (
     AccountOption,
     TitleOption,
-    ContentOption,
-    MetaOption,
-    RunSetting,
+    Block, TextBlock, ImageBlock, FeaturedBlock,
+    MediaOption,
+    PublishOption,
     SEOOption,
-    ImageOption,
+    RunSetting,
     KST,
 )
 
 
 @dataclass
-class NaverBlogJob:
+class PostingJob:
     """
-    Immutable builder and orchestrator for a single Naver Blog post.
+    플랫폼 독립적인 포스팅 잡 빌더 + 오케스트레이터.
 
-    Entry point:
-
-        job = (
-            NaverBlogJob
-            .for_account(AccountOption(naver_id="id", naver_pw="pw", blog_id="blog"))
-            .with_title(TitleOption(subjects=["국어", "수학"]))
-            .with_content(ContentOption(paragraph_count=5))
-            .with_meta(MetaOption(min_tags=10, max_tags=15))
-            .with_setting(RunSetting(post_interval=30))
-        )
-
-        success = job.run(editor)   # editor = SmartEditorOne(page, account.write_url)
+    최소 사용:
+        job = PostingJob.for_account(account).with_title(TitleOption(fixed_title="제목"))
+        job.run(editor)
     """
 
-    _account: AccountOption | None = field(default=None, repr=False)
-    _title:   TitleOption   | None = field(default=None, repr=False)
-    _content: ContentOption | None = field(default=None, repr=False)
-    _meta:    MetaOption    | None = field(default=None, repr=False)
-    _setting: RunSetting    | None = field(default=None, repr=False)
-    _seo:     SEOOption     | None = field(default=None, repr=False)
-    _image:   ImageOption   | None = field(default=None, repr=False)
+    _account: AccountOption   | None = field(default=None, repr=False)
+    _title:   TitleOption     | None = field(default=None, repr=False)
+    _body:    list[Block]            = field(default_factory=list, repr=False)
+    _seo:     SEOOption       | None = field(default=None, repr=False)
+    _media:   MediaOption     | None = field(default=None, repr=False)
+    _publish: PublishOption   | None = field(default=None, repr=False)
+    _setting: RunSetting      | None = field(default=None, repr=False)
 
     # ------------------------------------------------------------------
     # Builder
     # ------------------------------------------------------------------
 
     @classmethod
-    def for_account(cls, account: AccountOption) -> "NaverBlogJob":
-        """Start building a job for the given account."""
+    def for_account(cls, account: AccountOption) -> "PostingJob":
+        """계정 정보로 잡 빌드를 시작한다."""
         return cls(_account=account)
 
-    def with_title(self, title: TitleOption) -> "NaverBlogJob":
-        """Return a new job with the given title option."""
+    def with_title(self, title: TitleOption) -> "PostingJob":
+        """제목 옵션을 설정한 새 인스턴스를 반환한다."""
         return replace(self, _title=title)
 
-    def with_content(self, content: ContentOption) -> "NaverBlogJob":
-        """Return a new job with the given content option."""
-        return replace(self, _content=content)
+    def with_body(self, blocks: list[Block]) -> "PostingJob":
+        """
+        포스트 본문을 Block 목록으로 설정한 새 인스턴스를 반환한다.
 
-    def with_meta(self, meta: MetaOption) -> "NaverBlogJob":
-        """Return a new job with the given meta option."""
-        return replace(self, _meta=meta)
+        Block 의 순서가 곧 레이아웃이다.
+          TextBlock     → 단락 텍스트
+          ImageBlock    → 본문 이미지
+          FeaturedBlock → 대표(썸네일) 이미지  (최대 1개)
+        """
+        return replace(self, _body=list(blocks))
 
-    def with_setting(self, setting: RunSetting) -> "NaverBlogJob":
-        """Return a new job with the given run setting."""
-        return replace(self, _setting=setting)
+    def with_seo(self, seo: SEOOption) -> "PostingJob":
+        """
+        SEO 옵션을 설정한 새 인스턴스를 반환한다.
 
-    def with_seo(self, seo: SEOOption) -> "NaverBlogJob":
-        """Return a new job with the given SEO option.
-
-        When set, each paragraph gets its own prompt via seo_prompt.to_prompt()
-        based on its position (first / middle / last).
-        Takes priority over ContentOption.paragraph_prompt.
+        설정 시 TextBlock.prompt 보다 우선하며,
+        단락 위치(첫/중간/마지막)마다 다른 Gemini 프롬프트가 생성된다.
         """
         return replace(self, _seo=seo)
 
-    def with_image(self, image: ImageOption) -> "NaverBlogJob":
-        """Return a new job with the given image processing option.
-
-        When set, preview and thumbnail images are transformed by
-        ImageProcessor before upload:
-          - pixel_jitter / size_jitter  — unique hash per upload
-          - thumbnail_text overlay      — keyword branding
-          - Exif metadata               — SEO description + GPS
-          - upload_delay_ms             — wait between uploads
+    def with_media(self, media: MediaOption) -> "PostingJob":
         """
-        return replace(self, _image=image)
+        이미지 변환 파이프라인을 설정한 새 인스턴스를 반환한다.
+
+        파일 경로를 알지 못한다. 모든 이미지 블록에 동일 규칙이 적용된다.
+        """
+        return replace(self, _media=media)
+
+    def with_publish(self, publish: PublishOption) -> "PostingJob":
+        """
+        발행 설정(일정·태그·공개범위)을 지정한 새 인스턴스를 반환한다.
+        """
+        return replace(self, _publish=publish)
+
+    def with_setting(self, setting: RunSetting) -> "PostingJob":
+        """실행 엔진 설정을 지정한 새 인스턴스를 반환한다."""
+        return replace(self, _setting=setting)
 
     # ------------------------------------------------------------------
     # Execution
@@ -127,24 +131,22 @@ class NaverBlogJob:
 
     def run(self, editor: BlogEditor) -> None:
         """
-        Generate content from options and publish via the editor.
+        콘텐츠를 생성하고 editor 를 통해 발행한다.
 
-        All errors propagate to the caller — nothing is swallowed here.
-        The Factory layer is responsible for catching, logging, and continuing.
+        모든 예외는 그대로 전파된다.
+        Factory 레이어가 포착·로깅·계속 진행할 책임을 가진다.
 
         Raises:
-            ValueError:        If required options are missing or invalid.
-            RateLimitError:    If the Gemini API returns 429.
-            PlaywrightError:   If the browser/editor operation fails.
-            Exception:         Any other unexpected error.
+            ValueError:      필수 옵션 누락 또는 유효하지 않은 값.
+            RateLimitError:  Gemini API 429.
+            PlaywrightError: 브라우저/에디터 조작 실패.
         """
         self.validate()
 
         title   = self._title   or TitleOption()
-        content = self._content or ContentOption()
-        meta    = self._meta    or MetaOption()
+        publish = self._publish or PublishOption()
 
-        post = self._generate_content(title, content, meta)
+        post = self._generate_content(title, publish)
         self._execute(editor, post)
 
     # ------------------------------------------------------------------
@@ -153,77 +155,61 @@ class NaverBlogJob:
 
     def validate(self) -> None:
         """
-        Raise ValueError for missing or invalid configuration.
-
-        Called by run() before the browser is touched.
-        Can also be called directly to pre-check a job.
+        설정 오류를 사전에 검출한다.
+        run() 이 브라우저를 열기 전에 호출된다.
         """
         if self._account is None:
             raise ValueError(
-                "NaverBlogJob requires an AccountOption. "
-                "Use NaverBlogJob.for_account(account)."
+                "PostingJob requires an AccountOption. "
+                "Use PostingJob.for_account(account)."
             )
-        if not self._account.naver_id.strip():
-            raise ValueError("AccountOption.naver_id must not be empty")
-        if not self._account.naver_pw.strip():
-            raise ValueError("AccountOption.naver_pw must not be empty")
-        if not self._account.blog_id.strip():
-            raise ValueError("AccountOption.blog_id must not be empty")
+        if not self._account.username.strip():
+            raise ValueError("AccountOption.username must not be empty")
+        if not self._account.password.strip():
+            raise ValueError("AccountOption.password must not be empty")
 
         if self._title is not None and not self._title.fixed_title:
             if self._title.template:
                 validate_template(self._title.template)
 
-        if self._content is not None:
-            validate_layout(self._content)
+        validate_blocks(self._body)
 
-        if self._meta is not None:
-            if self._meta.min_tags > self._meta.max_tags:
-                raise ValueError("MetaOption.min_tags must be <= max_tags")
-            if not (0 <= self._meta.backlink_ratio <= 100):
-                raise ValueError("MetaOption.backlink_ratio must be 0–100")
-            if not (0 <= self._meta.internal_link_ratio <= 100):
-                raise ValueError("MetaOption.internal_link_ratio must be 0–100")
+        if self._publish is not None:
+            pub = self._publish
+            if pub.min_tags > pub.max_tags:
+                raise ValueError("PublishOption.min_tags must be <= max_tags")
+            if not (0 <= pub.backlink_ratio <= 100):
+                raise ValueError("PublishOption.backlink_ratio must be 0–100")
+            if not (0 <= pub.internal_link_ratio <= 100):
+                raise ValueError("PublishOption.internal_link_ratio must be 0–100")
 
-            # --- publish schedule ---
-            mode = self._meta.schedule_mode
+            mode = pub.mode
             if mode != "immediate":
-                at = self._meta.schedule_at
-
-                # rule 1: schedule_at is required
-                if at is None:
+                if pub.at is None:
                     raise ValueError(
-                        "MetaOption.schedule_at은 schedule_mode가 "
-                        f"'{mode}'일 때 반드시 지정해야 합니다."
+                        f"PublishOption.at 은 mode='{mode}'일 때 필수입니다."
                     )
-
-                # rule 2: must be timezone-aware
-                if at.tzinfo is None:
+                if pub.at.tzinfo is None:
                     raise ValueError(
-                        "MetaOption.schedule_at은 timezone-aware datetime이어야 합니다. "
+                        "PublishOption.at 은 timezone-aware datetime 이어야 합니다. "
                         "예: datetime(2025, 6, 1, 9, 0, tzinfo=KST)"
                     )
-
-                # rule 3: earliest possible time must be in the future
-                now = datetime.now(tz=KST)
-                if mode == "random_window":
-                    jitter = self._meta.schedule_jitter_minutes
-                    earliest = at - timedelta(minutes=jitter)
-                else:
-                    earliest = at
+                now      = datetime.now(tz=KST)
+                earliest = (
+                    pub.at - timedelta(minutes=pub.jitter_minutes)
+                    if mode == "random_window"
+                    else pub.at
+                )
                 if earliest <= now:
                     raise ValueError(
-                        "MetaOption.schedule_at은 현재 시각보다 미래여야 합니다. "
+                        "PublishOption.at 은 현재 시각보다 미래여야 합니다. "
                         f"(earliest={earliest.isoformat()}, now={now.isoformat()})"
                     )
-
-            # rule 4: jitter must be positive for random_window
-            if self._meta.schedule_mode == "random_window":
-                if self._meta.schedule_jitter_minutes <= 0:
-                    raise ValueError(
-                        "MetaOption.schedule_jitter_minutes은 양수여야 합니다. "
-                        f"(got {self._meta.schedule_jitter_minutes})"
-                    )
+            if mode == "random_window" and pub.jitter_minutes <= 0:
+                raise ValueError(
+                    f"PublishOption.jitter_minutes 은 양수여야 합니다. "
+                    f"(got {pub.jitter_minutes})"
+                )
 
         if self._setting is not None:
             if self._setting.post_interval < 0:
@@ -232,79 +218,92 @@ class NaverBlogJob:
                 raise ValueError("RunSetting.max_daily_posts must be >= 1")
 
     # ------------------------------------------------------------------
-    # Content generation (stub — replaced by AI generator later)
+    # Content generation
     # ------------------------------------------------------------------
 
     def _generate_content(
         self,
         title:   TitleOption,
-        content: ContentOption,
-        meta:    MetaOption,
+        publish: PublishOption,
     ) -> PostContent:
         """
-        Produce a PostContent from options.
+        Block 목록에서 PostContent 를 생성한다.
 
-        Layout processing
-        -----------------
-        Iterates content.layout in order and builds a PostStep list that
-        preserves the exact sequence:
+        TextBlock 단락 생성 우선순위
+        ----------------------------
+        1. SEOOption 있음  → 위치(첫/중간/마지막)별 개별 Gemini 프롬프트
+        2. TextBlock.prompt 있음 → 해당 프롬프트로 Gemini 호출
+        3. 둘 다 없음      → ParagraphGenerator(prompt="") → stub 텍스트
 
-          "Image N"     → PostStep("image",     preview_images[N-1])
-          "Thumbnail N" → PostStep("thumbnail", thumbnail_images[N-1])
-          "Paragraph N" → PostStep("paragraph", stub or generated text)
-
-        The editor executes steps in order, so the published post matches
-        the layout exactly.
+        Block → PostStep 변환
+        ---------------------
+        TextBlock     → ParagraphStep(text, newlines)
+        ImageBlock    → ImageStep(path)
+        FeaturedBlock → ThumbnailStep(path)
         """
         generated_title = TitleGenerator(title).generate()
 
-        # Generate paragraph texts
-        #
-        # Priority:
-        #   1. SEOOption 있음  → 단락마다 to_prompt(seo, index, total) 로 개별 프롬프트 생성
-        #   2. paragraph_prompt 있음 → 모든 단락에 동일한 프롬프트 사용 (하위 호환)
-        #   3. 둘 다 없음      → ParagraphGenerator(prompt="") → stub 반환
-        n_paragraphs = paragraph_count(content.layout)
-        seo = self._seo
+        # 단락 텍스트 미리 생성
+        text_blocks    = [b for b in self._body if isinstance(b, TextBlock)]
+        n_paragraphs   = len(text_blocks)
+        seo            = self._seo
+        paragraph_texts: list[str] = []
 
         if n_paragraphs > 0:
             if seo is not None:
-                # SEOOption: 단락 위치(첫/중간/마지막)마다 다른 프롬프트
-                texts = [
+                paragraph_texts = [
                     ParagraphGenerator(
-                        prompt=to_prompt(seo, paragraph_index=i, total_paragraphs=n_paragraphs)
+                        prompt=to_prompt(seo, paragraph_index=i,
+                                         total_paragraphs=n_paragraphs)
                     ).generate(1)[0]
                     for i in range(n_paragraphs)
                 ]
             else:
-                # 하위 호환: 기존 단일 프롬프트 방식
-                prompt = content.paragraph_prompt or ""
-                texts  = ParagraphGenerator(prompt=prompt).generate(n_paragraphs)
-            paragraphs = {i: texts[i - 1] for i in range(1, n_paragraphs + 1)}
-        else:
-            paragraphs = {}
+                # TextBlock 마다 개별 prompt 사용
+                if all(b.prompt for b in text_blocks):
+                    # 각 블록이 고유 프롬프트를 가진 경우
+                    paragraph_texts = [
+                        ParagraphGenerator(prompt=b.prompt).generate(1)[0]
+                        for b in text_blocks
+                    ]
+                else:
+                    # 첫 번째 블록의 prompt 를 공유 (하위 호환)
+                    shared_prompt  = text_blocks[0].prompt if text_blocks else ""
+                    paragraph_texts = ParagraphGenerator(
+                        prompt=shared_prompt
+                    ).generate(n_paragraphs)
 
-        steps: list[PostStep] = []
-        for alias in content.layout:
-            kind, n = parse_alias(alias)
-            if kind == "image":
-                steps.append(PostStep("image", content.preview_images[n - 1]))
-            elif kind == "thumbnail":
-                steps.append(PostStep("thumbnail", content.thumbnail_images[n - 1]))
-            elif kind == "paragraph":
-                steps.append(PostStep("paragraph", paragraphs[n]))
+        # 빈 body — stub 단락 하나
+        if not self._body:
+            stub = ParagraphGenerator(prompt="").generate(1)[0]
+            steps: list[PostStep] = [ParagraphStep(text=stub, newlines=2)]
+            return PostContent(
+                title=generated_title,
+                steps=steps,
+                tags=publish.tags,
+                schedule_at=self._resolve_schedule(publish),
+            )
 
-        # Empty layout — generate one stub paragraph so the post isn't blank
-        if not steps:
-            stub_text = ParagraphGenerator(prompt="").generate(1)[0]
-            steps.append(PostStep("paragraph", stub_text))
+        # Block → PostStep
+        text_idx    = 0
+        steps_out: list[PostStep] = []
+        for block in self._body:
+            if isinstance(block, TextBlock):
+                steps_out.append(ParagraphStep(
+                    text=paragraph_texts[text_idx],
+                    newlines=block.newlines,
+                ))
+                text_idx += 1
+            elif isinstance(block, ImageBlock):
+                steps_out.append(ImageStep(path=block.path))
+            elif isinstance(block, FeaturedBlock):
+                steps_out.append(ThumbnailStep(path=block.path))
 
         return PostContent(
             title=generated_title,
-            steps=steps,
-            tags=[],
-            paragraph_newlines=content.paragraph_newlines,
-            schedule_at=self._resolve_schedule(meta),
+            steps=steps_out,
+            tags=publish.tags,
+            schedule_at=self._resolve_schedule(publish),
         )
 
     # ------------------------------------------------------------------
@@ -312,25 +311,13 @@ class NaverBlogJob:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _resolve_schedule(meta: MetaOption) -> datetime | None:
-        """
-        Resolve MetaOption schedule fields into a concrete datetime.
-
-        Returns:
-            None                  — for "immediate" mode.
-            meta.schedule_at      — for "fixed" mode (returned as-is).
-            randomised datetime   — for "random_window" mode; picks a
-                                    uniformly random offset within
-                                    ±schedule_jitter_minutes of schedule_at.
-        """
-        if meta.schedule_mode == "immediate":
+    def _resolve_schedule(publish: PublishOption) -> datetime | None:
+        if publish.mode == "immediate":
             return None
-        if meta.schedule_mode == "fixed":
-            return meta.schedule_at
-        # random_window
-        jitter_secs = meta.schedule_jitter_minutes * 60
-        offset_secs = random.uniform(-jitter_secs, jitter_secs)
-        return meta.schedule_at + timedelta(seconds=offset_secs)
+        if publish.mode == "fixed":
+            return publish.at
+        jitter = publish.jitter_minutes * 60
+        return publish.at + timedelta(seconds=random.uniform(-jitter, jitter))
 
     # ------------------------------------------------------------------
     # Editor execution
@@ -338,83 +325,61 @@ class NaverBlogJob:
 
     def _execute(self, editor: BlogEditor, post: PostContent) -> None:
         """
-        Drive the editor through the full publish sequence.
+        editor 를 구동해 포스트를 발행한다.
 
-        Executes each PostStep in layout order:
-          "paragraph" → write_paragraph()
-          "image"     → move_cursor_to_end() + upload_image()
-          "thumbnail" → move_cursor_to_end() + upload_image()
-                        + set_representative_image()
-
-        The first step never needs move_cursor_to_end() — the editor
-        cursor starts at the top of the body field after open().
+        MediaOption 설정 시:
+          ImageStep    → process_preview()  적용
+          ThumbnailStep → process_featured() 적용 (오버레이 포함)
+          변환된 bytes 는 임시 파일에 저장 → finally 에서 정리.
         """
         editor.open()
         editor.write_title(post.title)
 
-        # Track uploaded image count to compute the representative index
+        media     = self._media
+        processor = None
+        if media is not None:
+            from automator.image_processor import ImageProcessor
+            processor = ImageProcessor(media)
+
         image_upload_count = 0
         rep_index: int | None = None
-        image_opt = self._image
-
-        # Prepare ImageProcessor if ImageOption is set
-        processor = None
-        if image_opt is not None:
-            from automator.image_processor import ImageProcessor
-            processor = ImageProcessor(image_opt)
-
-        # Temporary files created during this run — cleaned up at the end
         tmp_files: list[str] = []
 
         try:
             for i, step in enumerate(post.steps):
-                # Move cursor to end before every step except the very first
                 if i > 0:
                     editor.move_cursor_to_end()
 
-                if step.kind == "paragraph":
-                    editor.write_paragraph(step.value, newlines=post.paragraph_newlines)
+                if processor is not None and isinstance(step, (ImageStep, ThumbnailStep)):
+                    src = Path(step.path).read_bytes()
+                    processed = (
+                        processor.process_featured(src, keyword=media.exif_description)
+                        if isinstance(step, ThumbnailStep)
+                        else processor.process_preview(src, keyword=media.exif_description)
+                    )
+                    role  = "featured" if isinstance(step, ThumbnailStep) else "preview"
+                    fname = processor.build_filename(role, image_upload_count + 1)
+                    tmp   = tempfile.NamedTemporaryFile(
+                        suffix=".jpg",
+                        prefix=fname.replace(".jpg", "_"),
+                        delete=False,
+                    )
+                    tmp.write(processed)
+                    tmp.close()
+                    tmp_files.append(tmp.name)
+                    from dataclasses import replace as dc_replace
+                    step = dc_replace(step, path=tmp.name)
 
-                elif step.kind in ("image", "thumbnail"):
-                    upload_path = step.value
+                editor.execute(step)
 
-                    if processor is not None:
-                        # Read source, process, write to a temp file
-                        src_bytes = Path(step.value).read_bytes()
-                        if step.kind == "thumbnail":
-                            processed = processor.process_thumbnail(
-                                src_bytes,
-                                keyword=image_opt.exif_description,
-                            )
-                        else:
-                            processed = processor.process_preview(
-                                src_bytes,
-                                keyword=image_opt.exif_description,
-                            )
-                        # Build keyword-rich filename
-                        role  = "thumbnail" if step.kind == "thumbnail" else "preview"
-                        fname = processor.build_filename(role, image_upload_count + 1)
-                        tmp   = tempfile.NamedTemporaryFile(
-                            suffix=".jpg", prefix=fname.replace(".jpg", "_"),
-                            delete=False,
-                        )
-                        tmp.write(processed)
-                        tmp.close()
-                        tmp_files.append(tmp.name)
-                        upload_path = tmp.name
-
-                    editor.upload_image(upload_path)
-
-                    if step.kind == "thumbnail":
+                if isinstance(step, (ImageStep, ThumbnailStep)):
+                    if isinstance(step, ThumbnailStep):
                         rep_index = image_upload_count
                     image_upload_count += 1
-
-                    # Mandatory delay between uploads
-                    if image_opt is not None and image_opt.upload_delay_ms > 0:
-                        time.sleep(image_opt.upload_delay_ms / 1000)
+                    if media is not None and media.upload_delay_ms > 0:
+                        time.sleep(media.upload_delay_ms / 1000)
 
         finally:
-            # Clean up temp files regardless of success or failure
             for tmp_path in tmp_files:
                 try:
                     Path(tmp_path).unlink(missing_ok=True)

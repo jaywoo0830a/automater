@@ -4,7 +4,7 @@
 #   (없음)       가상환경 활성화 후 셸 진입
 #   --watch      파일 변경 시 unit 테스트 자동 재실행
 #   --session    네이버 로그인 후 세션 파일 저장
-#   --capture    셀렉터 캡처 도구 실행 (Chromium 오픈)
+#   --capture    셀렉터 캡처 도구 실행
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -42,24 +42,10 @@ case "${MODE}" in
     echo "  automator/ tests/ factory/ 변경 시 unit 테스트 자동 실행 (Ctrl+C 종료)"
     echo ""
 
-    UNIT_TESTS=(
-        tests/test_job_unit.py
-        tests/test_editor_unit.py
-        tests/test_selector_unit.py
-        tests/test_config.py
-        tests/test_title_unit.py
-        tests/test_layout_unit.py
-        tests/test_paragraph_generator.py
-        tests/test_seo_option.py
-        tests/test_seo_job_integration.py
-        factory/tests/test_combo_generator.py
-        factory/tests/test_dispatcher.py
-    )
-
     if python -c "import pytest_watch" 2>/dev/null; then
-        pytest-watch "${UNIT_TESTS[@]}" -- -v
+        pytest-watch -- -m unit -v
     elif command -v entr &>/dev/null; then
-        find automator tests factory -name "*.py" | entr -c pytest "${UNIT_TESTS[@]}" -v
+        find automator tests factory -name "*.py" | entr -c pytest -m unit -v
     else
         echo "❌ pytest-watch 또는 entr 필요"
         echo "   pip install pytest-watch"

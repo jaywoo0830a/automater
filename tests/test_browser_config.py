@@ -3,7 +3,7 @@ tests/test_config.py
 --------------------
 Unit tests for BrowserSettings and Geolocation (automator/config.py).
 
-AccountOption 테스트는 test_job_unit.py 에 있다.
+AccountOption 테스트는 test_job_builder.py 에 있다.
 """
 
 import pytest
