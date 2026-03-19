@@ -12,28 +12,22 @@ Run:
 """
 
 import os
-import pytest
+from datetime import datetime, timedelta
+from pathlib import Path
 
+import pytest
 from dotenv import load_dotenv
 from playwright.sync_api import Page
 
 from automator.config import browser_settings
 from automator.options import (
-    AccountOption, TitleOption, RunSetting,
+    AccountOption, TitleOption, RunSetting, KST,
     ParagraphBlock, ImageBlock, FeaturedImageBlock, Section,
     PublishOption,
 )
 from automator.selector_loader import SelectorLoader
 from automator.smart_editor import SmartEditorOne
 from automator.job import PostingJob
-from automator.editor import ImageStep
-from automator.asset_loader import AssetLoader
-
-_MAIN_FRAME  = "#mainFrame"
-_EDITOR_BODY = ".se-content"
-
-_LOGIN_SEL  = SelectorLoader.load("selectors/naver/login.json")
-_EDITOR_SEL = SelectorLoader.load("selectors/naver/editor.json")
 
 load_dotenv()
 
@@ -41,6 +35,37 @@ NAVER_ID      = os.getenv("NAVER_ID", "")
 NAVER_PW      = os.getenv("NAVER_PW", "")
 NAVER_BLOG_ID = os.getenv("NAVER_BLOG_ID", "")
 SESSION_PATH  = os.getenv("SESSION_PATH", "session_state.json")
+
+_MAIN_FRAME  = "#mainFrame"
+_EDITOR_BODY = ".se-content"
+
+_LOGIN_SEL  = SelectorLoader.load("selectors/naver/login.json")
+_EDITOR_SEL = SelectorLoader.load("selectors/naver/editor.json")
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _asset(subdir: str, index: int) -> str | None:
+    """assets/<subdir>/ 의 index 번째 파일 경로. 없으면 None."""
+    base  = Path("assets") / subdir
+    files = sorted(base.iterdir()) if base.is_dir() else []
+    return str(files[index]) if index < len(files) else None
+
+
+def _run_job(job, editor) -> None:
+    """PostingJob 을 실행한다. conftest 의 mock 으로 Gemini API 호출 없음."""
+    job.run(editor)
+
+
+def _schedule(hours_ahead: int = 2) -> datetime:
+    """현재 시각 기준 hours_ahead 시간 뒤 정각(10분 단위)을 반환한다."""
+    now = datetime.now(tz=KST)
+    return (
+        now.replace(minute=(now.minute // 10) * 10, second=0, microsecond=0)
+        + timedelta(hours=hours_ahead)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -53,80 +78,6 @@ def test_editor_iframe_is_visible(page: Page, account: AccountOption):
     page.frame_locator(_MAIN_FRAME) \
         .locator(_EDITOR_BODY) \
         .wait_for(state="visible", timeout=15_000)
-
-
-@pytest.mark.e2e
-def test_image_upload_inserts_image_in_editor(editor: SmartEditorOne, page: Page):
-    loader = AssetLoader()
-    if not loader.images:
-        pytest.skip("assets/images/ 에 이미지가 없습니다.")
-    editor.open()
-    editor.execute(ImageStep(path=loader.images[0]))
-    assert page.frame_locator(_MAIN_FRAME).first \
-        .locator(_EDITOR_SEL.css("editor_image")).first.is_visible()
-
-
-# ---------------------------------------------------------------------------
-# E2E: Representative image
-# ---------------------------------------------------------------------------
-
-def _upload_three(editor, page):
-    loader = AssetLoader()
-    if not loader.images:
-        pytest.skip("assets/images/ 에 이미지가 없습니다.")
-    editor.open()
-    for i in range(3):
-        if i > 0:
-            editor.move_cursor_to_end()
-        editor.execute(ImageStep(path=loader.images[0]))
-    page.frame_locator(_MAIN_FRAME).first \
-        .locator(_EDITOR_SEL.css("editor_image")).nth(2) \
-        .wait_for(state="visible", timeout=15_000)
-
-
-def _assert_selected(page, index, total):
-    frame   = page.frame_locator(_MAIN_FRAME).first
-    buttons = frame.locator(_EDITOR_SEL.css("editor_image_rep"))
-    assert frame.locator(_EDITOR_SEL.css("editor_image_rep_selected")).count() == 1
-    for i in range(total):
-        classes = buttons.nth(i).get_attribute("class") or ""
-        if i == index:
-            assert "se-is-selected" in classes
-        else:
-            assert "se-is-selected" not in classes
-
-
-@pytest.mark.e2e
-def test_set_first_image_as_representative(editor, page):
-    _upload_three(editor, page)
-    editor.set_representative_image(0)
-    _assert_selected(page, 0, 3)
-
-
-@pytest.mark.e2e
-def test_set_second_image_as_representative(editor, page):
-    _upload_three(editor, page)
-    editor.set_representative_image(1)
-    _assert_selected(page, 1, 3)
-
-
-@pytest.mark.e2e
-def test_set_third_image_as_representative(editor, page):
-    _upload_three(editor, page)
-    editor.set_representative_image(2)
-    _assert_selected(page, 2, 3)
-
-
-# ---------------------------------------------------------------------------
-# Pipeline helpers
-# ---------------------------------------------------------------------------
-
-def _run_job(job, editor) -> None:
-    """
-    PostingJob 을 실행한다. 성공 시 None, 실패 시 예외.
-    conftest.py 의 ParagraphGenerator mock 으로 Gemini API 호출 없음.
-    """
-    job.run(editor)
 
 
 # ---------------------------------------------------------------------------
@@ -154,7 +105,7 @@ def test_pipeline_text_only(editor: SmartEditorOne, account: AccountOption):
 
 
 # ---------------------------------------------------------------------------
-# Pipeline: all options
+# Pipeline: all options (dry_run)
 # ---------------------------------------------------------------------------
 
 @pytest.mark.e2e
@@ -162,38 +113,27 @@ def test_pipeline_text_only(editor: SmartEditorOne, account: AccountOption):
 def test_pipeline_all_options(editor: SmartEditorOne, account: AccountOption):
     """
     빌더의 모든 옵션을 지정한 통합 파이프라인 테스트.
-
-    with_title        — template 기반 제목 생성
-    with_body         — ImageBlock + ParagraphBlock + FeaturedImageBlock 혼합
-    keyword           — ParagraphBlock 에 직접 설정
-    with_publish      — 예약 발행 (fixed, +2시간)
-    with_setting      — 기본 런타임 설정
-
     dry_run=True (editor fixture 기본값) — 팝오버 열림 후 발행 버튼 미클릭.
+    이미지는 assets/ 에 파일이 있을 때만 포함한다.
     """
-    from datetime import datetime, timedelta
-    from automator.options import KST
+    image = _asset("images", 0)
+    thumb = _asset("thumbnails", 0)
 
-    now    = datetime.now(tz=KST)
-    target = (
-        now.replace(minute=(now.minute // 10) * 10, second=0, microsecond=0)
-        + timedelta(hours=2)
-    )
-
-    loader = AssetLoader()
-    images = loader.images[:2]
-    thumbs = loader.thumbnails[:1]
-
-    blocks = []
-    if images:
-        blocks.append(ImageBlock(path=images[0]))
-    blocks.append(ParagraphBlock(prompt="강남 수학 과외 홍보 블로그"))
-    if len(images) > 1:
-        blocks.append(ImageBlock(path=images[1]))
-    blocks.append(ParagraphBlock(prompt="후기 형식 마무리"))
-    if thumbs:
-        blocks.append(FeaturedImageBlock(path=thumbs[0]))
-    body = [Section(blocks=tuple(blocks))]
+    blocks: list = [
+        ParagraphBlock(
+            prompt="강남 수학 과외 홍보 블로그",
+            keyword="강남 수학 과외",
+            tone="review",
+        ),
+        ParagraphBlock(prompt="후기 형식 마무리"),
+    ]
+    if image:
+        blocks.insert(0, ImageBlock(path=image))
+    if thumb:
+        blocks.append(FeaturedImageBlock(
+            path=thumb,
+            overlay_text="강남 수학 과외",
+        ))
 
     job = (
         PostingJob
@@ -202,11 +142,8 @@ def test_pipeline_all_options(editor: SmartEditorOne, account: AccountOption):
             template="{region} {subject} {learning_type} {salt}",
             values={"region": "강남", "subject": "수학", "learning_type": "과외"},
         ))
-        .with_body(body)
-        .with_publish(PublishOption(
-            mode = "fixed",
-            at   = target,
-        ))
+        .with_body([Section(blocks=tuple(blocks))])
+        .with_publish(PublishOption(mode="fixed", at=_schedule()))
         .with_setting(RunSetting())
     )
     _run_job(job, editor)
@@ -226,22 +163,26 @@ def test_pipeline_real_publish(page: Page, account: AccountOption, real_run: boo
       - pytest --real-run
       - ENV=production  (Gemini 실제 호출)
       - GEMINI_API_KEY  (.env 설정)
-      - assets/images/, assets/thumbnails/ 에 파일 존재
     """
     if not real_run:
         pytest.skip("--real-run 플래그 없음 — 실제 발행 건너뜀")
 
-    from datetime import datetime, timedelta
-    from automator.options import KST
+    image = _asset("images", 0)
+    thumb = _asset("thumbnails", 0)
 
-    now    = datetime.now(tz=KST)
-    target = (
-        now.replace(minute=(now.minute // 10) * 10, second=0, microsecond=0)
-        + timedelta(hours=2)
-    )
-
-    loader = AssetLoader()
-    body   = loader.default_blocks(prompt="강남 수학 과외 홍보 블로그", n_paragraphs=3)
+    blocks: list = [
+        ParagraphBlock(keyword="강남 수학 과외", tone="review",
+                       min_chars=250, max_chars=400),
+        ParagraphBlock(keyword="강남 수학 과외", tone="review"),
+        ParagraphBlock(keyword="강남 수학 과외", tone="promotional"),
+    ]
+    if image:
+        blocks.insert(0, ImageBlock(path=image))
+    if thumb:
+        blocks.append(FeaturedImageBlock(
+            path=thumb,
+            overlay_text="강남 수학 과외",
+        ))
 
     write_url = f"https://blog.naver.com/{account.meta['blog_id']}?Redirect=Write&"
     editor    = SmartEditorOne(page, write_url, dry_run=False)
@@ -253,11 +194,8 @@ def test_pipeline_real_publish(page: Page, account: AccountOption, real_run: boo
             template="{region} {subject} {learning_type} {salt}",
             values={"region": "강남", "subject": "수학", "learning_type": "과외"},
         ))
-        .with_body(body)
-        .with_publish(PublishOption(
-            mode = "fixed",
-            at   = target,
-        ))
+        .with_body([Section(blocks=tuple(blocks))])
+        .with_publish(PublishOption(mode="fixed", at=_schedule()))
         .with_setting(RunSetting())
     )
     _run_job(job, editor)

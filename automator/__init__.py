@@ -81,7 +81,6 @@ from automator.browser_actions import (
 )
 from automator.smart_editor import SmartEditorOne
 from automator.job import PostingJob
-from automator.asset_loader import AssetLoader
 
 __all__ = [
     "AccountOption",
@@ -106,6 +105,5 @@ __all__ = [
     "PostStep",
     "SmartEditorOne",
     "PostingJob",
-    "AssetLoader",
     "ParagraphGenerator",
 ]

@@ -7,7 +7,6 @@ tests/conftest.py
 ----------
 Unit fixtures  : mock_paragraph_generator (autouse)
 E2E fixtures   : account → browser_instance → auth_context → page → editor
-                 post_images (이미지 경로) — AssetLoader 로 대체됨
 
 E2E fixture 사용 조건
 ----------------------
