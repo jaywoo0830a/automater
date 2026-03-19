@@ -63,7 +63,7 @@ def _worker(args: dict) -> dict:
     from factory.models import Batch, BatchItem, Combination, Keyword
     from factory.logging_config import setup, get_logger
     from automator.job import PostingJob
-    from automator.options import AccountOption, TitleOption, TextBlock, PublishOption, RunSetting
+    from automator.options import AccountOption, TitleOption, ParagraphBlock, PublishOption, RunSetting, Section
     from playwright.sync_api import sync_playwright
 
     setup(log_dir=args.get("log_dir", "logs"))
@@ -212,14 +212,14 @@ def _build_title_option(combo):
 
 
 def _build_body(combo):
-    from automator.options import TextBlock
+    from automator.options import ParagraphBlock, Section
     values  = _build_values(combo)
     keyword = " ".join(values.values())
     prompt  = (
         f"{keyword}을(를) 홍보하는 블로그 글을 작성해주세요. "
         f"신뢰감 있는 톤으로 자연스럽게 서술해주세요."
     )
-    return [TextBlock(prompt=prompt)] * 3
+    return [Section(blocks=tuple(ParagraphBlock(prompt=prompt) for _ in range(3)))]
 
 
 # ---------------------------------------------------------------------------

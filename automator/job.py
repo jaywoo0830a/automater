@@ -11,14 +11,16 @@ Builder
         base
         .with_title(TitleOption(template="{region} {subject} {salt}", values={...}))
         .with_body([
-            ImageBlock(path="img.jpg"),
-            TextBlock(prompt="강남 수학 과외 홍보"),
-            FeaturedBlock(path="thumb.jpg"),
-            TextBlock(prompt="후기 형식 마무리"),
+            Section(blocks=(
+                HeadingBlock(level=2, text="강남 수학 과외 안내"),
+                ParagraphBlock(prompt="강남 수학 과외 홍보"),
+            ), role="intro"),
+            Section(blocks=(
+                ImageBlock(path="img.jpg"),
+                ParagraphBlock(prompt="후기 형식 마무리"),
+                FeaturedImageBlock(path="thumb.jpg"),
+            ), role="closing"),
         ])
-        .with_seo(SEOOption(keyword="강남 수학 과외", tone="review_style"))
-        .with_media(MediaOption(pixel_jitter=True, exif_gps_lat=37.49,
-                                featured_overlay_text="강남 수학"))
         .with_publish(PublishOption(mode="immediate", tags=["강남수학과외"]))
     )
     job.run(editor)
@@ -41,16 +43,15 @@ from automator.editor import (
     ParagraphStep, ImageStep, ThumbnailStep, PostStep,
 )
 from automator.title_generator import TitleGenerator, validate_template
-from automator.layout import validate_blocks, text_block_count
+from automator.layout import validate_sections, paragraph_block_count, all_blocks
 from automator.paragraph_generator import ParagraphGenerator
-from automator.seo_prompt import to_prompt
+from automator.seo_prompt import build_prompt
 from automator.options import (
     AccountOption,
     TitleOption,
-    Block, TextBlock, ImageBlock, FeaturedBlock,
-    MediaOption,
+    Section,
+    Block, ParagraphBlock, ImageBlock, FeaturedImageBlock,
     PublishOption,
-    SEOOption,
     RunSetting,
     KST,
 )
@@ -66,13 +67,11 @@ class PostingJob:
         job.run(editor)
     """
 
-    _account: AccountOption   | None = field(default=None, repr=False)
-    _title:   TitleOption     | None = field(default=None, repr=False)
-    _body:    list[Block]            = field(default_factory=list, repr=False)
-    _seo:     SEOOption       | None = field(default=None, repr=False)
-    _media:   MediaOption     | None = field(default=None, repr=False)
-    _publish: PublishOption   | None = field(default=None, repr=False)
-    _setting: RunSetting      | None = field(default=None, repr=False)
+    _account: AccountOption   | None = field(default=None,        repr=False)
+    _title:   TitleOption     | None = field(default=None,        repr=False)
+    _body:    list[Section]          = field(default_factory=list, repr=False)
+    _publish: PublishOption   | None = field(default=None,        repr=False)
+    _setting: RunSetting      | None = field(default=None,        repr=False)
 
     # ------------------------------------------------------------------
     # Builder
@@ -87,38 +86,23 @@ class PostingJob:
         """제목 옵션을 설정한 새 인스턴스를 반환한다."""
         return replace(self, _title=title)
 
-    def with_body(self, blocks: list[Block]) -> "PostingJob":
+    def with_body(self, sections: list[Section]) -> "PostingJob":
         """
-        포스트 본문을 Block 목록으로 설정한 새 인스턴스를 반환한다.
+        포스트 본문을 Section 목록으로 설정한 새 인스턴스를 반환한다.
 
-        Block 의 순서가 곧 레이아웃이다.
-          TextBlock     → 단락 텍스트
-          ImageBlock    → 본문 이미지
-          FeaturedBlock → 대표(썸네일) 이미지  (최대 1개)
+        Section 안의 Block 순서가 곧 레이아웃이다.
+          ParagraphBlock    → 텍스트 단락
+          ImageBlock        → 본문 이미지
+          FeaturedImageBlock→ 대표(썸네일) 이미지  (전체 섹션에서 최대 1개)
+          HeadingBlock      → 제목
+          ListBlock         → 목록
+          QuoteBlock        → 인용문
+          DividerBlock      → 구분선
         """
-        return replace(self, _body=list(blocks))
-
-    def with_seo(self, seo: SEOOption) -> "PostingJob":
-        """
-        SEO 옵션을 설정한 새 인스턴스를 반환한다.
-
-        설정 시 TextBlock.prompt 보다 우선하며,
-        단락 위치(첫/중간/마지막)마다 다른 Gemini 프롬프트가 생성된다.
-        """
-        return replace(self, _seo=seo)
-
-    def with_media(self, media: MediaOption) -> "PostingJob":
-        """
-        이미지 변환 파이프라인을 설정한 새 인스턴스를 반환한다.
-
-        파일 경로를 알지 못한다. 모든 이미지 블록에 동일 규칙이 적용된다.
-        """
-        return replace(self, _media=media)
+        return replace(self, _body=list(sections))
 
     def with_publish(self, publish: PublishOption) -> "PostingJob":
-        """
-        발행 설정(일정·태그·공개범위)을 지정한 새 인스턴스를 반환한다.
-        """
+        """발행 설정(일정·태그·공개범위)을 지정한 새 인스턴스를 반환한다."""
         return replace(self, _publish=publish)
 
     def with_setting(self, setting: RunSetting) -> "PostingJob":
@@ -134,7 +118,6 @@ class PostingJob:
         콘텐츠를 생성하고 editor 를 통해 발행한다.
 
         모든 예외는 그대로 전파된다.
-        Factory 레이어가 포착·로깅·계속 진행할 책임을 가진다.
 
         Raises:
             ValueError:      필수 옵션 누락 또는 유효하지 않은 값.
@@ -154,10 +137,7 @@ class PostingJob:
     # ------------------------------------------------------------------
 
     def validate(self) -> None:
-        """
-        설정 오류를 사전에 검출한다.
-        run() 이 브라우저를 열기 전에 호출된다.
-        """
+        """설정 오류를 사전에 검출한다."""
         if self._account is None:
             raise ValueError(
                 "PostingJob requires an AccountOption. "
@@ -172,7 +152,7 @@ class PostingJob:
             if self._title.template:
                 validate_template(self._title.template)
 
-        validate_blocks(self._body)
+        validate_sections(self._body)
 
         if self._publish is not None:
             pub = self._publish
@@ -227,77 +207,66 @@ class PostingJob:
         publish: PublishOption,
     ) -> PostContent:
         """
-        Block 목록에서 PostContent 를 생성한다.
+        Section 목록에서 PostContent 를 생성한다.
 
-        TextBlock 단락 생성 우선순위
-        ----------------------------
-        1. SEOOption 있음  → 위치(첫/중간/마지막)별 개별 Gemini 프롬프트
-        2. TextBlock.prompt 있음 → 해당 프롬프트로 Gemini 호출
-        3. 둘 다 없음      → ParagraphGenerator(prompt="") → stub 텍스트
+        ParagraphBlock 텍스트 생성 우선순위
+        ------------------------------------
+        keyword 있음  → build_prompt() 로 SEO 최적화 프롬프트 자동 생성
+        keyword 없음  → block.prompt 사용 (비어있으면 stub 텍스트)
 
         Block → PostStep 변환
         ---------------------
-        TextBlock     → ParagraphStep(text, newlines)
-        ImageBlock    → ImageStep(path)
-        FeaturedBlock → ThumbnailStep(path)
+        ParagraphBlock    → ParagraphStep(text, newlines)
+        ImageBlock        → ImageStep(path)
+        FeaturedImageBlock→ ThumbnailStep(path)
+        HeadingBlock      → (현재 에디터 미지원, skip)
+        ListBlock         → (현재 에디터 미지원, skip)
+        QuoteBlock        → (현재 에디터 미지원, skip)
+        DividerBlock      → (현재 에디터 미지원, skip)
         """
         generated_title = TitleGenerator(title).generate()
 
-        # 단락 텍스트 미리 생성
-        text_blocks    = [b for b in self._body if isinstance(b, TextBlock)]
-        n_paragraphs   = len(text_blocks)
-        seo            = self._seo
+        flat_blocks    = all_blocks(self._body)
+        para_blocks    = [b for b in flat_blocks if isinstance(b, ParagraphBlock)]
+        n_paragraphs   = len(para_blocks)
         paragraph_texts: list[str] = []
 
         if n_paragraphs > 0:
-            if seo is not None:
-                paragraph_texts = [
-                    ParagraphGenerator(
-                        prompt=to_prompt(seo, paragraph_index=i,
-                                         total_paragraphs=n_paragraphs)
-                    ).generate(1)[0]
-                    for i in range(n_paragraphs)
-                ]
-            else:
-                # TextBlock 마다 개별 prompt 사용
-                if all(b.prompt for b in text_blocks):
-                    # 각 블록이 고유 프롬프트를 가진 경우
-                    paragraph_texts = [
-                        ParagraphGenerator(prompt=b.prompt).generate(1)[0]
-                        for b in text_blocks
-                    ]
-                else:
-                    # 첫 번째 블록의 prompt 를 공유 (하위 호환)
-                    shared_prompt  = text_blocks[0].prompt if text_blocks else ""
-                    paragraph_texts = ParagraphGenerator(
-                        prompt=shared_prompt
-                    ).generate(n_paragraphs)
+            # keyword 가 있으면 SEO 자동 프롬프트, 없으면 block.prompt 사용
+            paragraph_texts = [
+                ParagraphGenerator(
+                    prompt=build_prompt(b, paragraph_index=i,
+                                       total_paragraphs=n_paragraphs)
+                ).generate(1)[0]
+                for i, b in enumerate(para_blocks)
+            ]
 
         # 빈 body — stub 단락 하나
-        if not self._body:
+        if not flat_blocks:
             stub = ParagraphGenerator(prompt="").generate(1)[0]
-            steps: list[PostStep] = [ParagraphStep(text=stub, newlines=2)]
             return PostContent(
                 title=generated_title,
-                steps=steps,
+                steps=[ParagraphStep(text=stub, newlines=2)],
                 tags=publish.tags,
                 schedule_at=self._resolve_schedule(publish),
             )
 
         # Block → PostStep
-        text_idx    = 0
+        para_idx   = 0
         steps_out: list[PostStep] = []
-        for block in self._body:
-            if isinstance(block, TextBlock):
+        for block in flat_blocks:
+            if isinstance(block, ParagraphBlock):
                 steps_out.append(ParagraphStep(
-                    text=paragraph_texts[text_idx],
+                    text=paragraph_texts[para_idx],
                     newlines=block.newlines,
                 ))
-                text_idx += 1
+                para_idx += 1
             elif isinstance(block, ImageBlock):
                 steps_out.append(ImageStep(path=block.path))
-            elif isinstance(block, FeaturedBlock):
+            elif isinstance(block, FeaturedImageBlock):
                 steps_out.append(ThumbnailStep(path=block.path))
+            # HeadingBlock / ListBlock / QuoteBlock / DividerBlock:
+            # 현재 SmartEditorOne 미지원 — 추후 구현
 
         return PostContent(
             title=generated_title,
@@ -324,23 +293,14 @@ class PostingJob:
     # ------------------------------------------------------------------
 
     def _execute(self, editor: BlogEditor, post: PostContent) -> None:
-        """
-        editor 를 구동해 포스트를 발행한다.
-
-        MediaOption 설정 시:
-          ImageStep    → process_preview()  적용
-          ThumbnailStep → process_featured() 적용 (오버레이 포함)
-          변환된 bytes 는 임시 파일에 저장 → finally 에서 정리.
-        """
+        """editor 를 구동해 포스트를 발행한다."""
         editor.open()
         editor.write_title(post.title)
 
-        media     = self._media
-        processor = None
-        if media is not None:
-            from automator.image_processor import ImageProcessor
-            processor = ImageProcessor(media)
+        from automator.image_processor import process_image, process_featured, build_filename
 
+        setting            = self._setting
+        upload_delay_ms    = (setting.upload_delay_ms if setting else 1500)
         image_upload_count = 0
         rep_index: int | None = None
         tmp_files: list[str] = []
@@ -350,25 +310,44 @@ class PostingJob:
                 if i > 0:
                     editor.move_cursor_to_end()
 
-                if processor is not None and isinstance(step, (ImageStep, ThumbnailStep)):
-                    src = Path(step.path).read_bytes()
-                    processed = (
-                        processor.process_featured(src, keyword=media.exif_description)
-                        if isinstance(step, ThumbnailStep)
-                        else processor.process_preview(src, keyword=media.exif_description)
-                    )
-                    role  = "featured" if isinstance(step, ThumbnailStep) else "preview"
-                    fname = processor.build_filename(role, image_upload_count + 1)
-                    tmp   = tempfile.NamedTemporaryFile(
-                        suffix=".jpg",
-                        prefix=fname.replace(".jpg", "_"),
-                        delete=False,
-                    )
-                    tmp.write(processed)
-                    tmp.close()
-                    tmp_files.append(tmp.name)
-                    from dataclasses import replace as dc_replace
-                    step = dc_replace(step, path=tmp.name)
+                if isinstance(step, (ImageStep, ThumbnailStep)) and Path(step.path).exists():
+                    raw_bytes = Path(step.path).read_bytes()
+                    # 블록에서 이미지 처리 설정을 직접 읽는다
+                    if isinstance(step, ThumbnailStep):
+                        # FeaturedImageBlock 은 flat_blocks 에서 찾는다
+                        feat_block = next(
+                            (b for b in all_blocks(self._body)
+                             if isinstance(b, FeaturedImageBlock) and b.path == step.path),
+                            None,
+                        )
+                        if feat_block is not None:
+                            processed = process_featured(raw_bytes, feat_block)
+                            fname     = build_filename("featured", image_upload_count + 1,
+                                                       feat_block.filename_keyword)
+                            tmp = tempfile.NamedTemporaryFile(
+                                suffix=".jpg", prefix=fname.replace(".jpg", "_"), delete=False
+                            )
+                            tmp.write(processed); tmp.close()
+                            tmp_files.append(tmp.name)
+                            from dataclasses import replace as dc_replace
+                            step = dc_replace(step, path=tmp.name)
+                    else:
+                        img_block = next(
+                            (b for b in all_blocks(self._body)
+                             if isinstance(b, ImageBlock) and b.path == step.path),
+                            None,
+                        )
+                        if img_block is not None:
+                            processed = process_image(raw_bytes, img_block)
+                            fname     = build_filename("preview", image_upload_count + 1,
+                                                       img_block.filename_keyword)
+                            tmp = tempfile.NamedTemporaryFile(
+                                suffix=".jpg", prefix=fname.replace(".jpg", "_"), delete=False
+                            )
+                            tmp.write(processed); tmp.close()
+                            tmp_files.append(tmp.name)
+                            from dataclasses import replace as dc_replace
+                            step = dc_replace(step, path=tmp.name)
 
                 editor.execute(step)
 
@@ -376,8 +355,8 @@ class PostingJob:
                     if isinstance(step, ThumbnailStep):
                         rep_index = image_upload_count
                     image_upload_count += 1
-                    if media is not None and media.upload_delay_ms > 0:
-                        time.sleep(media.upload_delay_ms / 1000)
+                    if upload_delay_ms > 0:
+                        time.sleep(upload_delay_ms / 1000)
 
         finally:
             for tmp_path in tmp_files:

@@ -6,9 +6,11 @@ Blog automation package.
 Quick start
 -----------
     from automator import (
-        PostingJob, AccountOption, TitleOption,
-        TextBlock, ImageBlock, FeaturedBlock,
-        MediaOption, PublishOption, SEOOption,
+        PostingJob,
+        AccountOption, TitleOption, PublishOption, RunSetting,
+        Section, BlockMeta,
+        HeadingBlock, ParagraphBlock, ImageBlock, FeaturedImageBlock,
+        ListBlock, QuoteBlock, DividerBlock,
         SmartEditorOne,
     )
 
@@ -21,16 +23,28 @@ Quick start
         ))
         .with_title(TitleOption(fixed_title="강남 수학 과외 추천"))
         .with_body([
-            ImageBlock(path="assets/images/1.jpg"),
-            TextBlock(prompt="강남 수학 과외 홍보 블로그"),
-            FeaturedBlock(path="assets/thumbnails/1.jpg"),
-            TextBlock(prompt="후기 형식 마무리"),
+            Section(
+                role="intro",
+                blocks=(
+                    HeadingBlock(level=2, text="강남 수학 과외 안내"),
+                    ParagraphBlock(
+                        keyword="강남 수학 과외",
+                        tone="review",
+                        min_chars=250,
+                    ),
+                ),
+            ),
+            Section(
+                role="closing",
+                blocks=(
+                    ImageBlock(path="assets/images/1.jpg"),
+                    FeaturedImageBlock(
+                        path="assets/thumbnails/1.jpg",
+                        overlay_text="강남 수학 과외",
+                    ),
+                ),
+            ),
         ])
-        .with_media(MediaOption(
-            pixel_jitter=True,
-            featured_overlay_text="강남 수학",
-            exif_description="강남 수학 과외",
-        ))
         .with_publish(PublishOption(mode="immediate"))
     )
 
@@ -43,13 +57,17 @@ from automator.paragraph_generator import ParagraphGenerator
 from automator.options import (
     AccountOption,
     TitleOption,
-    TextBlock,
-    ImageBlock,
-    FeaturedBlock,
+    Section,
+    BlockMeta,
     Block,
-    MediaOption,
+    HeadingBlock,
+    ParagraphBlock,
+    ImageBlock,
+    FeaturedImageBlock,
+    ListBlock,
+    QuoteBlock,
+    DividerBlock,
     PublishOption,
-    SEOOption,
     RunSetting,
 )
 from automator.editor import (
@@ -63,19 +81,22 @@ from automator.browser_actions import (
 )
 from automator.smart_editor import SmartEditorOne
 from automator.job import PostingJob
-from automator.image_processor import ImageProcessor
 from automator.asset_loader import AssetLoader
 
 __all__ = [
     "AccountOption",
     "TitleOption",
-    "TextBlock",
-    "ImageBlock",
-    "FeaturedBlock",
+    "Section",
+    "BlockMeta",
     "Block",
-    "MediaOption",
+    "HeadingBlock",
+    "ParagraphBlock",
+    "ImageBlock",
+    "FeaturedImageBlock",
+    "ListBlock",
+    "QuoteBlock",
+    "DividerBlock",
     "PublishOption",
-    "SEOOption",
     "RunSetting",
     "BlogEditor",
     "PostContent",
@@ -85,7 +106,6 @@ __all__ = [
     "PostStep",
     "SmartEditorOne",
     "PostingJob",
-    "ImageProcessor",
     "AssetLoader",
     "ParagraphGenerator",
 ]

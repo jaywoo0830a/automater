@@ -8,37 +8,22 @@ Block 목록을 생성한다.
 -------------
     assets/
     ├── images/       # 본문 이미지  → ImageBlock
-    └── thumbnails/   # 대표 이미지  → FeaturedBlock
+    └── thumbnails/   # 대표 이미지  → FeaturedImageBlock
 
 Usage
 -----
     from automator.asset_loader import AssetLoader
-    from automator.options import TextBlock
 
     loader = AssetLoader()
-
-    # 감지된 파일 확인
-    print(loader.images)     # ['assets/images/1.jpg', ...]
-    print(loader.thumbnails) # ['assets/thumbnails/1.jpg']
-
-    # 기본 레이아웃: 이미지 → 단락 → 대표이미지
-    blocks = loader.default_blocks(prompt="강남 수학 과외 홍보")
-
-    # 직접 조립
-    from automator.options import ImageBlock, FeaturedBlock
-    blocks = [
-        ImageBlock(path=loader.images[0]),
-        TextBlock(prompt="단락 1"),
-        FeaturedBlock(path=loader.thumbnails[0]),
-        TextBlock(prompt="단락 2"),
-    ]
+    blocks = loader.default_blocks(prompt="강남 수학 과외 홍보", n_paragraphs=2)
+    # → [ImageBlock, ImageBlock, ParagraphBlock, ParagraphBlock, FeaturedImageBlock]
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from automator.options import Block, ImageBlock, FeaturedBlock, TextBlock
+from automator.options import Block, ImageBlock, FeaturedImageBlock, ParagraphBlock
 
 _SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 _IMAGES_SUBDIR        = "images"
@@ -89,11 +74,11 @@ class AssetLoader:
         이미지 → 단락들 → 대표이미지 순서의 기본 레이아웃을 반환한다.
 
         이미지와 썸네일이 모두 없으면 빈 리스트를 반환한다.
-        TextBlock 은 n_paragraphs > 0 이고 이미지가 하나라도 있을 때만 추가된다.
+        ParagraphBlock 은 n_paragraphs > 0 일 때만 추가된다.
 
         Args:
-            prompt:       각 TextBlock 에 사용할 Gemini 프롬프트.
-            n_paragraphs: TextBlock 수. 기본값 0 — 이미지만 있는 구조.
+            prompt:       각 ParagraphBlock 에 사용할 Gemini 프롬프트.
+            n_paragraphs: ParagraphBlock 수. 기본값 0 — 이미지만 있는 구조.
         """
         if not self._images and not self._thumbnails:
             return []
@@ -102,7 +87,7 @@ class AssetLoader:
         for path in self._images:
             blocks.append(ImageBlock(path=path))
         for _ in range(n_paragraphs):
-            blocks.append(TextBlock(prompt=prompt))
+            blocks.append(ParagraphBlock(prompt=prompt))
         for path in self._thumbnails:
-            blocks.append(FeaturedBlock(path=path))
+            blocks.append(FeaturedImageBlock(path=path))
         return blocks

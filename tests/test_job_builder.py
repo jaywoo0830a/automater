@@ -15,13 +15,17 @@ import pytest
 from automator.job import PostingJob
 from automator.options import (
     AccountOption, TitleOption,
-    TextBlock, ImageBlock, FeaturedBlock,
-    MediaOption, PublishOption, SEOOption, RunSetting,
+    ParagraphBlock, ImageBlock, FeaturedImageBlock, Section,
+    PublishOption, RunSetting,
 )
 
 
 def _account():
     return AccountOption(username="id", password="pw", meta={"blog_id": "blog"})
+
+
+def _section(*blocks):
+    return Section(blocks=tuple(blocks))
 
 
 # ---------------------------------------------------------------------------
@@ -30,15 +34,13 @@ def _account():
 
 @pytest.mark.unit
 def test_for_account__returns_posting_job_instance():
-    job = PostingJob.for_account(_account())
-    assert isinstance(job, PostingJob)
+    assert isinstance(PostingJob.for_account(_account()), PostingJob)
 
 
 @pytest.mark.unit
 def test_for_account__stores_account_option():
     acc = _account()
-    job = PostingJob.for_account(acc)
-    assert job._account is acc
+    assert PostingJob.for_account(acc)._account is acc
 
 
 # ---------------------------------------------------------------------------
@@ -47,8 +49,8 @@ def test_for_account__stores_account_option():
 
 @pytest.mark.unit
 def test_with_title__does_not_mutate_base_job():
-    base   = PostingJob.for_account(_account())
-    _      = base.with_title(TitleOption(fixed_title="A"))
+    base = PostingJob.for_account(_account())
+    _    = base.with_title(TitleOption(fixed_title="A"))
     assert base._title is None
 
 
@@ -63,24 +65,25 @@ def test_with_title__new_instance_has_title():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
-def test_with_body__stores_blocks():
-    blocks = [TextBlock(prompt="p"), ImageBlock(path="img.jpg")]
-    job    = PostingJob.for_account(_account()).with_body(blocks)
-    assert len(job._body) == 2
+def test_with_body__stores_sections():
+    sections = [_section(ParagraphBlock(prompt="p"), ImageBlock(path="img.jpg"))]
+    job      = PostingJob.for_account(_account()).with_body(sections)
+    assert len(job._body) == 1
+    assert len(job._body[0].blocks) == 2
 
 
 @pytest.mark.unit
 def test_with_body__stores_independent_copy_of_list():
-    blocks = [TextBlock()]
-    job    = PostingJob.for_account(_account()).with_body(blocks)
-    blocks.append(ImageBlock(path="extra.jpg"))   # 원본 수정
-    assert len(job._body) == 1                     # job 은 영향받지 않음
+    sections = [_section(ParagraphBlock())]
+    job      = PostingJob.for_account(_account()).with_body(sections)
+    sections.append(_section(ImageBlock(path="extra.jpg")))  # 원본 수정
+    assert len(job._body) == 1                                # job 은 영향받지 않음
 
 
 @pytest.mark.unit
 def test_with_body__does_not_mutate_base_job():
     base = PostingJob.for_account(_account())
-    _    = base.with_body([TextBlock()])
+    _    = base.with_body([_section(ParagraphBlock())])
     assert base._body == []
 
 
@@ -101,8 +104,11 @@ def test_forked_jobs__have_independent_titles():
 @pytest.mark.unit
 def test_forked_jobs__have_independent_bodies():
     base = PostingJob.for_account(_account())
-    ja   = base.with_body([TextBlock(prompt="for A")])
-    jb   = base.with_body([ImageBlock(path="for_b.jpg"), TextBlock()])
+    ja   = base.with_body([_section(ParagraphBlock(prompt="for A"))])
+    jb   = base.with_body([
+        _section(ImageBlock(path="for_b.jpg")),
+        _section(ParagraphBlock()),
+    ])
     assert len(ja._body) == 1
     assert len(jb._body) == 2
 
@@ -110,19 +116,6 @@ def test_forked_jobs__have_independent_bodies():
 # ---------------------------------------------------------------------------
 # 나머지 with_* 메서드
 # ---------------------------------------------------------------------------
-
-@pytest.mark.unit
-def test_with_seo__stored_on_new_instance():
-    seo = SEOOption(keyword="kw")
-    job = PostingJob.for_account(_account()).with_seo(seo)
-    assert job._seo is seo
-
-
-@pytest.mark.unit
-def test_with_media__stored_on_new_instance():
-    media = MediaOption(pixel_jitter=False)
-    job   = PostingJob.for_account(_account()).with_media(media)
-    assert job._media is media
 
 
 @pytest.mark.unit

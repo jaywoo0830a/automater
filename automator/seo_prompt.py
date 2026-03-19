@@ -1,125 +1,89 @@
 """
 automator/seo_prompt.py
 ------------------------
-Converts SEOOption into a structured Gemini prompt for a single paragraph.
+ParagraphBlock 의 keyword / tone / min_chars / max_chars 를 바탕으로
+Gemini 에 전달할 SEO 최적화 프롬프트를 자동 생성한다.
 
 Usage:
-    from automator.options import SEOOption
-    from automator.seo_prompt import to_prompt
+    from automator.options import ParagraphBlock
+    from automator.seo_prompt import build_prompt
 
-    seo    = SEOOption(keyword="강남 수학 과외", tone="review_style")
-    prompt = to_prompt(seo, paragraph_index=0, total_paragraphs=3)
-    # → pass to ParagraphGenerator(prompt=prompt).generate(1)
+    block  = ParagraphBlock(keyword="강남 수학 과외", tone="review", min_chars=250)
+    prompt = build_prompt(block, paragraph_index=0, total_paragraphs=3)
 """
 
 from __future__ import annotations
 
-from automator.options import SEOOption
+from automator.options import ParagraphBlock
 
 _TONE_LABELS = {
-    "formal":             "격식체, 전문적인 어조",
-    "informal_friendly":  "친근하고 부드러운 구어체",
-    "review_style":       "실제 학부모가 쓴 경험담 형식, 1인칭 시점",
+    "informational": "정보 전달 위주의 명확한 어조",
+    "review":        "실제 학부모가 쓴 경험담 형식, 1인칭 시점",
+    "story":         "이야기 형식, 감성적인 흐름",
+    "promotional":   "홍보·설득 어조, 행동 유도 포함",
 }
 
 _POSITION_LABELS = {
-    "first_sentence": "첫 문장 안에",
-    "early":          "단락 앞부분(첫 30%) 안에",
-    "anywhere":       "단락 안 어디든",
+    0: "첫 문장 안에",     # 첫 번째 단락
+    "mid": "단락 앞부분(첫 30%) 안에",
+    "last": "자연스럽게 1회 이상",
 }
 
 
-def to_prompt(
-    seo:              SEOOption,
+def build_prompt(
+    block:            ParagraphBlock,
     paragraph_index:  int,
     total_paragraphs: int,
 ) -> str:
     """
-    Build a Gemini instruction string for one paragraph.
+    ParagraphBlock 의 메타 정보로 SEO 프롬프트를 생성한다.
+
+    keyword 가 없으면 block.prompt 를 그대로 반환한다.
 
     Args:
-        seo:              SEOOption instance.
-        paragraph_index:  0-based index of this paragraph.
-        total_paragraphs: Total number of paragraphs in the post.
+        block:            ParagraphBlock 인스턴스.
+        paragraph_index:  0-based 현재 단락 인덱스.
+        total_paragraphs: 전체 단락 수.
 
     Returns:
-        Instruction string — pass directly to ParagraphGenerator(prompt=...).
+        Gemini 에 전달할 프롬프트 문자열.
     """
-    is_first = paragraph_index == 0
-    is_last  = paragraph_index == total_paragraphs - 1
+    if not block.keyword:
+        return block.prompt
 
-    # ── Keyword count for this paragraph ─────────────────────────────────────
-    if is_first:
-        kw_count = seo.keyword_count_first
-    elif is_last:
-        kw_count = seo.keyword_count_last
+    keyword   = block.keyword
+    tone_desc = _TONE_LABELS.get(block.tone, block.tone)
+
+    # 위치별 키워드 배치 지침
+    if paragraph_index == 0:
+        position_desc = _POSITION_LABELS[0]
+        kw_count      = 3
+    elif paragraph_index == total_paragraphs - 1:
+        position_desc = _POSITION_LABELS["last"]
+        kw_count      = 2
     else:
-        kw_count = seo.keyword_count_others
+        position_desc = _POSITION_LABELS["mid"]
+        kw_count      = 1
 
-    # ── Character range ───────────────────────────────────────────────────────
-    if is_first:
-        char_min, char_max = seo.first_para_min, seo.first_para_max
+    # 글자 수 지침
+    if block.min_chars > 0 and block.max_chars > 0:
+        length_desc = f"{block.min_chars}자 이상 {block.max_chars}자 이하"
+    elif block.min_chars > 0:
+        length_desc = f"{block.min_chars}자 이상"
+    elif block.max_chars > 0:
+        length_desc = f"{block.max_chars}자 이하"
     else:
-        char_min, char_max = seo.other_para_min, seo.other_para_max
+        length_desc = "150자 이상 400자 이하"
 
-    # ── Keyword instruction ───────────────────────────────────────────────────
-    if seo.keyword:
-        variant_note = " (띄어쓰기 변형 혼용 가능)" if seo.allow_variants else ""
-        position_note = f", 반드시 {_POSITION_LABELS[seo.keyword_position]} 등장" if is_first else ""
-        keyword_line = (
-            f'- 키워드 "{seo.keyword}"{variant_note}를 정확히 {kw_count}회 포함{position_note}'
-        )
-    else:
-        keyword_line = ""
+    # 추가 지시사항 (block.prompt 가 있으면 포함)
+    extra = f"\n\n추가 지시사항: {block.prompt}" if block.prompt else ""
 
-    # ── Collect conditions ────────────────────────────────────────────────────
-    conditions: list[str] = []
-
-    if keyword_line:
-        conditions.append(keyword_line)
-
-    conditions.append(f"- {char_min}자 이상 {char_max}자 이하로 작성")
-    conditions.append(
-        f"- 문장 수: {seo.sentences_per_para_min}~{seo.sentences_per_para_max}개"
+    return (
+        f"다음 조건을 모두 충족하는 블로그 단락을 한국어로 작성하세요.\n\n"
+        f"키워드: {keyword}\n"
+        f"키워드 위치: {position_desc} {kw_count}회 이상 자연스럽게 포함\n"
+        f"문체: {tone_desc}\n"
+        f"글자 수: {length_desc}\n"
+        f"단락 위치: 전체 {total_paragraphs}개 단락 중 {paragraph_index + 1}번째\n"
+        f"주의: 제목, 소제목 없이 본문 단락만 작성하세요.{extra}"
     )
-    conditions.append(f"- 한 문장의 최대 길이: {seo.sentence_max_chars}자 이하 (모바일 가독성)")
-
-    if seo.sentence_variety:
-        conditions.append("- 짧은 문장(~20자)과 긴 문장(~60자)을 혼합해 리듬감을 만들 것")
-
-    if is_first and seo.first_sentence_max:
-        conditions.append(f"- 첫 문장은 {seo.first_sentence_max}자 이내로 짧고 명확하게")
-
-    if is_first and seo.include_question:
-        conditions.append('- 질문형 문장 1개 포함 (예: "혹시 강남 수학 과외를 찾고 계신가요?")')
-
-    if seo.related_keywords:
-        kws = ", ".join(f'"{k}"' for k in seo.related_keywords)
-        conditions.append(f"- 연관 키워드 {kws} 중 1~2개를 자연스럽게 포함")
-
-    if seo.include_numbers:
-        conditions.append('- 구체적인 수치 포함 (예: "성적 30% 향상", "3개월 만에")')
-
-    if seo.include_empathy:
-        conditions.append('- 공감 표현 포함 (예: "많이 고민하셨죠?", "저도 처음엔 몰랐어요")')
-
-    if not is_first and seo.use_connectors:
-        conditions.append('- 앞 단락과 자연스럽게 이어지도록 연결 표현 사용 (예: "그런데", "특히", "그래서")')
-
-    if is_last and seo.include_cta:
-        conditions.append(
-            '- 마지막 문장은 행동 유도(CTA)로 마무리 (예: "댓글로 편하게 물어보세요", "저장해두시면 나중에 도움이 돼요")'
-        )
-
-    tone_label = _TONE_LABELS[seo.tone]
-    conditions.append(f"- 톤: {tone_label}")
-
-    conditions_str = "\n".join(conditions)
-
-    return f"""다음 조건을 반드시 지켜서 블로그 단락 1개를 작성해주세요.
-
-[조건]
-{conditions_str}
-
-[출력 형식]
-JSON 배열로만 반환하세요. 다른 설명 없이 배열만: ["단락 내용"]""".strip()

@@ -7,7 +7,7 @@ AssetLoader — assets/ 디렉토리 스캔 및 Block 목록 생성 검증.
 import pytest
 from pathlib import Path
 from automator.asset_loader import AssetLoader
-from automator.options import ImageBlock, FeaturedBlock, TextBlock
+from automator.options import ImageBlock, FeaturedImageBlock, ParagraphBlock
 
 
 @pytest.fixture
@@ -70,24 +70,24 @@ def test_default_blocks__structure_is_images_then_texts_then_featured(asset_dir)
     loader = AssetLoader(root=asset_dir)
     blocks = loader.default_blocks(prompt="test", n_paragraphs=2)
     types  = [type(b).__name__ for b in blocks]
-    assert types == ["ImageBlock", "ImageBlock", "TextBlock", "TextBlock", "FeaturedBlock"]
+    assert types == ["ImageBlock", "ImageBlock", "ParagraphBlock", "ParagraphBlock", "FeaturedImageBlock"]
 
 
 @pytest.mark.unit
 def test_default_blocks__text_blocks_carry_given_prompt(asset_dir):
     loader = AssetLoader(root=asset_dir)
     blocks = loader.default_blocks(prompt="내 프롬프트", n_paragraphs=1)
-    texts  = [b for b in blocks if isinstance(b, TextBlock)]
+    texts  = [b for b in blocks if isinstance(b, ParagraphBlock)]
     assert all(b.prompt == "내 프롬프트" for b in texts)
 
 
 @pytest.mark.unit
 def test_default_blocks__no_paragraphs_by_default_returns_only_image_blocks(asset_dir):
-    """n_paragraphs 미지정 시 TextBlock 이 생성되지 않는다."""
+    """n_paragraphs 미지정 시 ParagraphBlock 이 생성되지 않는다."""
     loader = AssetLoader(root=asset_dir)
     blocks = loader.default_blocks()
     types  = [type(b).__name__ for b in blocks]
-    assert "TextBlock" not in types
+    assert "ParagraphBlock" not in types
 
 
 @pytest.mark.unit

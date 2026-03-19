@@ -20,8 +20,8 @@ from playwright.sync_api import Page
 from automator.config import browser_settings
 from automator.options import (
     AccountOption, TitleOption, RunSetting,
-    TextBlock, ImageBlock, FeaturedBlock,
-    PublishOption, SEOOption, MediaOption,
+    ParagraphBlock, ImageBlock, FeaturedImageBlock, Section,
+    PublishOption,
 )
 from automator.selector_loader import SelectorLoader
 from automator.smart_editor import SmartEditorOne
@@ -142,8 +142,10 @@ def test_pipeline_text_only(editor: SmartEditorOne, account: AccountOption):
         .for_account(account)
         .with_title(TitleOption(fixed_title="텍스트 전용 테스트"))
         .with_body([
-            TextBlock(prompt="강남 수학 과외 홍보 블로그"),
-            TextBlock(prompt="후기 형식 마무리"),
+            Section(blocks=(
+                ParagraphBlock(prompt="강남 수학 과외 홍보 블로그"),
+                ParagraphBlock(prompt="후기 형식 마무리"),
+            )),
         ])
         .with_publish(PublishOption(mode="immediate"))
         .with_setting(RunSetting())
@@ -162,9 +164,8 @@ def test_pipeline_all_options(editor: SmartEditorOne, account: AccountOption):
     빌더의 모든 옵션을 지정한 통합 파이프라인 테스트.
 
     with_title        — template 기반 제목 생성
-    with_body         — ImageBlock + TextBlock + FeaturedBlock 혼합
-    with_seo          — 키워드·글자수·톤 지정 (TextBlock.prompt 보다 우선)
-    with_media        — pixel_jitter / Exif / featured overlay
+    with_body         — ImageBlock + ParagraphBlock + FeaturedImageBlock 혼합
+    keyword           — ParagraphBlock 에 직접 설정
     with_publish      — 예약 발행 (fixed, +2시간)
     with_setting      — 기본 런타임 설정
 
@@ -183,15 +184,16 @@ def test_pipeline_all_options(editor: SmartEditorOne, account: AccountOption):
     images = loader.images[:2]
     thumbs = loader.thumbnails[:1]
 
-    body = []
+    blocks = []
     if images:
-        body.append(ImageBlock(path=images[0]))
-    body.append(TextBlock(prompt="강남 수학 과외 홍보 블로그"))
+        blocks.append(ImageBlock(path=images[0]))
+    blocks.append(ParagraphBlock(prompt="강남 수학 과외 홍보 블로그"))
     if len(images) > 1:
-        body.append(ImageBlock(path=images[1]))
-    body.append(TextBlock(prompt="후기 형식 마무리"))
+        blocks.append(ImageBlock(path=images[1]))
+    blocks.append(ParagraphBlock(prompt="후기 형식 마무리"))
     if thumbs:
-        body.append(FeaturedBlock(path=thumbs[0]))
+        blocks.append(FeaturedImageBlock(path=thumbs[0]))
+    body = [Section(blocks=tuple(blocks))]
 
     job = (
         PostingJob
@@ -201,33 +203,6 @@ def test_pipeline_all_options(editor: SmartEditorOne, account: AccountOption):
             values={"region": "강남", "subject": "수학", "learning_type": "과외"},
         ))
         .with_body(body)
-        .with_seo(SEOOption(
-            keyword             = "강남 수학 과외",
-            keyword_count_first = 3,
-            keyword_count_last  = 2,
-            first_para_min      = 200,
-            first_para_max      = 350,
-            total_min           = 600,
-            total_max           = 1000,
-            tone                = "review_style",
-            include_question    = True,
-            include_cta         = True,
-        ))
-        .with_media(MediaOption(
-            pixel_jitter              = True,
-            size_jitter_px            = 2,
-            exif_description          = "강남 수학 과외",
-            exif_gps_lat              = 37.4942,
-            exif_gps_lng              = 127.0617,
-            filename_keyword          = "강남-수학-과외",
-            preview_saturation_jitter = 0.03,
-            featured_saturation_shift = 0.30,
-            featured_overlay_text     = ["강남", "수학 과외"],
-            featured_text_color       = "#FFFFFF",
-            featured_line_spacing     = 24,
-            featured_letter_spacing   = 3,
-            upload_delay_ms           = 0,
-        ))
         .with_publish(PublishOption(
             mode = "fixed",
             at   = target,
@@ -279,24 +254,6 @@ def test_pipeline_real_publish(page: Page, account: AccountOption, real_run: boo
             values={"region": "강남", "subject": "수학", "learning_type": "과외"},
         ))
         .with_body(body)
-        .with_seo(SEOOption(
-            keyword             = "강남 수학 과외",
-            keyword_count_first = 3,
-            keyword_count_last  = 2,
-            tone                = "review_style",
-            include_question    = True,
-            include_cta         = True,
-        ))
-        .with_media(MediaOption(
-            pixel_jitter              = True,
-            size_jitter_px            = 2,
-            exif_description          = "강남 수학 과외",
-            exif_gps_lat              = 37.4942,
-            exif_gps_lng              = 127.0617,
-            filename_keyword          = "강남-수학-과외",
-            featured_overlay_text     = ["강남", "수학 과외"],
-            upload_delay_ms           = 1500,
-        ))
         .with_publish(PublishOption(
             mode = "fixed",
             at   = target,

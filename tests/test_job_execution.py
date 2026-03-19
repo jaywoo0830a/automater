@@ -18,7 +18,7 @@ from automator.editor import (
 from automator.job import PostingJob
 from automator.options import (
     AccountOption, TitleOption,
-    TextBlock, ImageBlock, FeaturedBlock,
+    ParagraphBlock, ImageBlock, FeaturedImageBlock, Section,
     PublishOption, KST,
 )
 
@@ -67,7 +67,7 @@ def test_open_is_called_before_write_title(editor):
 @pytest.mark.unit
 def test_write_title_is_called_before_any_execute(editor):
     _base_job().with_title(TitleOption(fixed_title="T")) \
-               .with_body([TextBlock()]).run(editor)
+               .with_body([Section(blocks=(ParagraphBlock(),))]).run(editor)
     names = [a[0] for a in editor.actions]
     assert names.index("write_title") < names.index("execute")
 
@@ -104,9 +104,11 @@ def test_empty_body__still_calls_publish(editor):
 def test_blocks_are_executed_in_declared_order(editor):
     _base_job().with_title(TitleOption(fixed_title="T")) \
                .with_body([
-                   ImageBlock(path="img.jpg"),
-                   TextBlock(),
-                   FeaturedBlock(path="thumb.jpg"),
+                   Section(blocks=(
+                       ImageBlock(path="img.jpg"),
+                       ParagraphBlock(),
+                       FeaturedImageBlock(path="thumb.jpg"),
+                   )),
                ]).run(editor)
 
     step_types = [
@@ -119,7 +121,7 @@ def test_blocks_are_executed_in_declared_order(editor):
 @pytest.mark.unit
 def test_text_block__produces_paragraph_step(editor):
     _base_job().with_title(TitleOption(fixed_title="T")) \
-               .with_body([TextBlock(newlines=3)]).run(editor)
+               .with_body([Section(blocks=(ParagraphBlock(newlines=3),))]).run(editor)
     steps = [a[1] for a in editor.actions if a[0] == "execute"]
     assert isinstance(steps[0], ParagraphStep)
     assert steps[0].newlines == 3
@@ -128,7 +130,7 @@ def test_text_block__produces_paragraph_step(editor):
 @pytest.mark.unit
 def test_image_block__produces_image_step(editor):
     _base_job().with_title(TitleOption(fixed_title="T")) \
-               .with_body([ImageBlock(path="img.jpg")]).run(editor)
+               .with_body([Section(blocks=(ImageBlock(path="img.jpg"),))]).run(editor)
     steps = [a[1] for a in editor.actions if a[0] == "execute"]
     assert isinstance(steps[0], ImageStep)
     assert steps[0].path == "img.jpg"
@@ -137,7 +139,7 @@ def test_image_block__produces_image_step(editor):
 @pytest.mark.unit
 def test_featured_block__produces_thumbnail_step(editor):
     _base_job().with_title(TitleOption(fixed_title="T")) \
-               .with_body([FeaturedBlock(path="thumb.jpg")]).run(editor)
+               .with_body([Section(blocks=(FeaturedImageBlock(path="thumb.jpg"),))]).run(editor)
     steps = [a[1] for a in editor.actions if a[0] == "execute"]
     assert isinstance(steps[0], ThumbnailStep)
 
@@ -149,21 +151,21 @@ def test_featured_block__produces_thumbnail_step(editor):
 @pytest.mark.unit
 def test_featured_block__calls_set_representative_image(editor):
     _base_job().with_title(TitleOption(fixed_title="T")) \
-               .with_body([ImageBlock("img.jpg"), FeaturedBlock("thumb.jpg")]).run(editor)
+               .with_body([Section(blocks=(ImageBlock(path="img.jpg"), FeaturedImageBlock(path="thumb.jpg")))]).run(editor)
     assert any(a[0] == "set_rep" for a in editor.actions)
 
 
 @pytest.mark.unit
 def test_no_featured_block__skips_set_representative_image(editor):
     _base_job().with_title(TitleOption(fixed_title="T")) \
-               .with_body([ImageBlock("img.jpg"), TextBlock()]).run(editor)
+               .with_body([Section(blocks=(ImageBlock(path="img.jpg"), ParagraphBlock()))]).run(editor)
     assert not any(a[0] == "set_rep" for a in editor.actions)
 
 
 @pytest.mark.unit
 def test_featured_block__set_rep_called_after_all_executes(editor):
     _base_job().with_title(TitleOption(fixed_title="T")) \
-               .with_body([FeaturedBlock("thumb.jpg"), TextBlock()]).run(editor)
+               .with_body([Section(blocks=(FeaturedImageBlock(path="thumb.jpg"), ParagraphBlock()))]).run(editor)
     names = [a[0] for a in editor.actions]
     last_execute = max(i for i, n in enumerate(names) if n == "execute")
     set_rep_idx  = names.index("set_rep")
@@ -177,14 +179,14 @@ def test_featured_block__set_rep_called_after_all_executes(editor):
 @pytest.mark.unit
 def test_multiple_blocks__cursor_moved_between_each(editor):
     _base_job().with_title(TitleOption(fixed_title="T")) \
-               .with_body([TextBlock(), TextBlock()]).run(editor)
+               .with_body([Section(blocks=(ParagraphBlock(), ParagraphBlock()))]).run(editor)
     assert any(a[0] == "cursor_end" for a in editor.actions)
 
 
 @pytest.mark.unit
 def test_single_block__cursor_not_moved(editor):
     _base_job().with_title(TitleOption(fixed_title="T")) \
-               .with_body([TextBlock()]).run(editor)
+               .with_body([Section(blocks=(ParagraphBlock(),))]).run(editor)
     assert not any(a[0] == "cursor_end" for a in editor.actions)
 
 

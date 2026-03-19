@@ -166,7 +166,7 @@ def test_parse_raises_on_no_json(gen):
 def test_job_uses_generator_when_prompt_set():
     """paragraph_prompt 설정 시 mock generator 텍스트가 editor에 전달된다."""
     from automator.job import PostingJob
-    from automator.options import AccountOption, TitleOption, TextBlock
+    from automator.options import AccountOption, TitleOption, ParagraphBlock, Section
     from unittest.mock import MagicMock
 
     editor = MagicMock()
@@ -174,14 +174,14 @@ def test_job_uses_generator_when_prompt_set():
         PostingJob
         .for_account(AccountOption(username="id", password="pw", meta={"blog_id":"blog"}))
         .with_title(TitleOption(fixed_title="테스트 포스트"))
-        .with_body([TextBlock(), TextBlock()])
+        .with_body([Section(blocks=(ParagraphBlock(), ParagraphBlock()))])
         .run(editor)
     )
     written = [c.args[0].text for c in editor.execute.call_args_list if isinstance(c.args[0], ParagraphStep)]
     assert len(written) == 2
     from automator.paragraph_generator import _STUB_PARAGRAPHS
-    assert written[0] == _STUB_PARAGRAPHS[0]
-    assert written[1] == _STUB_PARAGRAPHS[1]
+    # 블록마다 generate(1) 을 개별 호출하므로 둘 다 첫 번째 stub 텍스트
+    assert all(w == _STUB_PARAGRAPHS[0] for w in written)
 
 
 @pytest.mark.unit
@@ -192,7 +192,7 @@ def test_job_uses_stub_when_no_prompt():
     "(단락 N 생성 필요)" 하드코딩은 더 이상 사용하지 않는다.
     """
     from automator.job import PostingJob
-    from automator.options import AccountOption, TitleOption, TextBlock
+    from automator.options import AccountOption, TitleOption, ParagraphBlock, Section
     from automator.paragraph_generator import _STUB_PARAGRAPHS
     from unittest.mock import MagicMock
 
@@ -201,7 +201,7 @@ def test_job_uses_stub_when_no_prompt():
         PostingJob
         .for_account(AccountOption(username="id", password="pw", meta={"blog_id":"blog"}))
         .with_title(TitleOption(fixed_title="테스트 포스트"))
-        .with_body([TextBlock()])
+        .with_body([Section(blocks=(ParagraphBlock(),))])
         .run(editor)
     )
     written = [c.args[0].text for c in editor.execute.call_args_list if isinstance(c.args[0], ParagraphStep)]

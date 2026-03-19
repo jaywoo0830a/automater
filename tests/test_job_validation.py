@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from automator.job import PostingJob
 from automator.options import (
     AccountOption, TitleOption,
-    FeaturedBlock, TextBlock,
+    FeaturedImageBlock, ParagraphBlock, Section,
     PublishOption, RunSetting, KST,
 )
 
@@ -88,13 +88,17 @@ def test_fixed_title__skips_template_validation():
 
 @pytest.mark.unit
 def test_two_featured_blocks__raises_value_error():
-    with pytest.raises(ValueError, match="FeaturedBlock"):
-        _base().with_body([FeaturedBlock("a.jpg"), FeaturedBlock("b.jpg")]).validate()
+    with pytest.raises(ValueError, match="FeaturedImageBlock"):
+        _base().with_body([
+            Section(blocks=(FeaturedImageBlock(path="a.jpg"), FeaturedImageBlock(path="b.jpg"))),
+        ]).validate()
 
 
 @pytest.mark.unit
 def test_single_featured_block__passes_validation():
-    _base().with_body([TextBlock(), FeaturedBlock("thumb.jpg")]).validate()
+    _base().with_body([
+        Section(blocks=(ParagraphBlock(), FeaturedImageBlock(path="thumb.jpg"))),
+    ]).validate()
 
 
 # ---------------------------------------------------------------------------
