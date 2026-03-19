@@ -53,4 +53,6 @@ echo "    bash ./run/download_fonts.sh      # 한글 폰트 다운로드 (썸네
 echo "    bash ./run/dev.sh --session       # 네이버 세션 저장"
 echo "    bash ./run/test.sh                # 단위 테스트 확인"
 echo "    bash ./run/test.sh --factory      # factory 단위 테스트 (Docker 필요)"
+echo "    bash ./run/factory.sh db-up       # MySQL 시작"
+echo "    bash ./run/factory.sh schema-init # ORM 기반 스키마 생성"
 echo ""

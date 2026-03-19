@@ -32,7 +32,7 @@ case "${MODE}" in
     echo "  bash ./run/test.sh              # unit 테스트"
     echo "  bash ./run/test.sh --e2e        # e2e smoke"
     echo "  bash ./run/test.sh --all        # 전체"
-    echo "  bash ./run/factory.sh status    # 공장 현황"
+    echo "  bash ./run/factory.sh db-up     # MySQL 시작"
     echo ""
     exec "${SHELL}"
     ;;

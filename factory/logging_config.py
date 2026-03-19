@@ -91,7 +91,6 @@ def get_logger(name: str, batch_id: int | None = None) -> logging.LoggerAdapter:
     Usage:
         logger = get_logger(__name__, batch_id=42)
         logger.info("item %s done", item_id)
-        # → "... factory.runner — [batch=42] item 123 done"
 
     Args:
         name:     Logger name (typically __name__).

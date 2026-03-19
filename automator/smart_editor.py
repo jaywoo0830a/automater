@@ -69,6 +69,7 @@ class SmartEditorOne(BlogEditor):
         self._page      = page
         self._write_url = write_url
         self._dry_run   = dry_run
+        self._sel_cache: SelectorLoader | None = None
 
     # ------------------------------------------------------------------
     # BlogEditor interface
@@ -386,7 +387,10 @@ class SmartEditorOne(BlogEditor):
         select_option_by_value(sel.locator(frame, "publish_scheduled_min"),  minute_str)
 
     def _sel(self) -> SelectorLoader:
-        return SelectorLoader.load(_EDITOR_JSON)
+        """Return cached SelectorLoader — loaded once, reused for the lifetime of the editor."""
+        if self._sel_cache is None:
+            self._sel_cache = SelectorLoader.load(_EDITOR_JSON)
+        return self._sel_cache
 
     def _frame(self):
         """Editor content frame — checks .se-content visibility (for editor actions)."""

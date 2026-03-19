@@ -91,7 +91,7 @@ def _stub_generate(count: int) -> list[str]:
     No external dependencies — always works offline.
     """
     return [
-        _STUB_PARAGRAPHS[(i) % len(_STUB_PARAGRAPHS)]
+        _STUB_PARAGRAPHS[i % len(_STUB_PARAGRAPHS)]
         for i in range(count)
     ]
 

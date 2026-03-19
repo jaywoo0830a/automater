@@ -1,32 +1,21 @@
 #!/usr/bin/env bash
-# run/factory.sh — 공장 파이프라인
-#
-#  처음 시작:
-#    bash ./run/factory.sh db-up
-#    bash ./run/factory.sh seed
-#    bash ./run/factory.sh dispatch [--schedule-at "2026-03-25 09:00"]
-#    bash ./run/factory.sh run [--workers 5] [--dry-run]
+# run/factory.sh — DB 관리 및 스키마 초기화
 #
 #  DB 관리:
-#    db-up      MySQL 시작
-#    db-down    MySQL 종료
-#    db-reset   전체 초기화 (볼륨 삭제, 확인 필요)
-#    db-logs    MySQL 로그 실시간 확인
+#    bash ./run/factory.sh db-up          MySQL 시작
+#    bash ./run/factory.sh db-down        MySQL 종료
+#    bash ./run/factory.sh db-reset       전체 초기화 (볼륨 삭제, 확인 필요)
+#    bash ./run/factory.sh db-logs        MySQL 로그 실시간 확인
 #
-#  파이프라인:
-#    select     캠페인 키워드 필터 설정
-#    seed       조합 생성 (멱등 — 재실행 안전)
-#    dispatch   가용 계정에 배치 할당
-#    run        pending 배치 병렬 실행
-#    status     현재 현황 요약
-#    logs       factory.log 실시간 확인
+#  스키마:
+#    bash ./run/factory.sh schema-init    ORM 모델 기반 테이블 생성 (IF NOT EXISTS)
+#    bash ./run/factory.sh schema-drop    ORM 모델 기반 테이블 삭제 (확인 필요)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 VENV_DIR="${PROJECT_ROOT}/.venv"
 COMPOSE_FILE="${PROJECT_ROOT}/factory/docker-compose.yml"
-LOG_FILE="${PROJECT_ROOT}/logs/factory.log"
 
 _require_venv() {
     if [ ! -d "${VENV_DIR}" ]; then
@@ -70,6 +59,8 @@ case "${CMD}" in
     docker compose -f "${COMPOSE_FILE}" up -d
     _db_wait 12
     echo "✅ MySQL 준비 완료 (localhost:3306)"
+    echo ""
+    echo "  다음 단계: bash ./run/factory.sh schema-init"
     ;;
 
   db-down)
@@ -84,55 +75,41 @@ case "${CMD}" in
     docker compose -f "${COMPOSE_FILE}" down -v
     docker compose -f "${COMPOSE_FILE}" up -d
     _db_wait 18
-    echo "✅ 초기화 완료 — 스키마·시드 자동 적용됨"
+    echo "✅ DB 초기화 완료"
+    echo ""
+    echo "  다음 단계: bash ./run/factory.sh schema-init"
     ;;
 
   db-logs)
     docker compose -f "${COMPOSE_FILE}" logs -f db
     ;;
 
-  # ── 파이프라인 ─────────────────────────────────────────────────────────────
+  # ── 스키마 관리 ─────────────────────────────────────────────────────────────
 
-  select)
+  schema-init)
     _require_venv
     _require_db
-    python -m factory.main select "$@"
+    echo "  ORM 모델 기반 스키마 생성 (CREATE TABLE IF NOT EXISTS)..."
+    python -c "
+from dotenv import load_dotenv; load_dotenv()
+from factory.db import get_engine, create_schema
+create_schema(get_engine())
+print('  ✅ 스키마 생성 완료')
+"
     ;;
 
-  seed)
+  schema-drop)
     _require_venv
     _require_db
-    echo "조합 생성: 선택된 키워드들의 카테시안 곱 → combinations 테이블"
-    python -m factory.main seed "$@"
-    ;;
-
-  dispatch)
-    _require_venv
-    _require_db
-    echo "배치 할당: 가용 계정에 조합 40개씩 배분"
-    python -m factory.main dispatch "$@"
-    ;;
-
-  run)
-    _require_venv
-    _require_db
-    echo "배치 실행: pending 배치 병렬 처리"
-    python -m factory.main run "$@"
-    ;;
-
-  status)
-    _require_venv
-    _require_db
-    python -m factory.main status
-    ;;
-
-  logs)
-    if [ ! -f "${LOG_FILE}" ]; then
-        echo "❌ 로그 파일 없음: ${LOG_FILE}"
-        echo "   run 명령을 먼저 실행하세요."
-        exit 1
-    fi
-    tail -f "${LOG_FILE}"
+    echo "⚠️  모든 테이블이 삭제됩니다. 계속하려면 'yes' 입력:"
+    read -r CONFIRM
+    if [ "${CONFIRM}" != "yes" ]; then echo "취소됨"; exit 0; fi
+    python -c "
+from dotenv import load_dotenv; load_dotenv()
+from factory.db import get_engine, drop_schema
+drop_schema(get_engine())
+print('  ✅ 스키마 삭제 완료')
+"
     ;;
 
   # ── 도움말 ─────────────────────────────────────────────────────────────────
@@ -141,20 +118,14 @@ case "${CMD}" in
     cat << 'HELP'
 
   DB 관리:
-    bash ./run/factory.sh db-up
-    bash ./run/factory.sh db-down
-    bash ./run/factory.sh db-reset          # 전체 초기화 (확인 필요)
-    bash ./run/factory.sh db-logs           # MySQL 로그
+    bash ./run/factory.sh db-up           # MySQL 시작
+    bash ./run/factory.sh db-down         # MySQL 종료
+    bash ./run/factory.sh db-reset        # 전체 초기화 (확인 필요)
+    bash ./run/factory.sh db-logs         # MySQL 로그
 
-  파이프라인:
-    bash ./run/factory.sh select --list
-    bash ./run/factory.sh select --category region --values "강남구,수원시"
-    bash ./run/factory.sh select --category subject --values "수학"
-    bash ./run/factory.sh seed
-    bash ./run/factory.sh dispatch [--schedule-at "YYYY-MM-DD HH:MM"]
-    bash ./run/factory.sh run [--workers N] [--dry-run]
-    bash ./run/factory.sh status
-    bash ./run/factory.sh logs              # factory.log 실시간 확인
+  스키마:
+    bash ./run/factory.sh schema-init     # ORM 모델 기반 테이블 생성
+    bash ./run/factory.sh schema-drop     # ORM 모델 기반 테이블 삭제
 
 HELP
     ;;

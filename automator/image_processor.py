@@ -151,14 +151,39 @@ def _apply_text_overlay(
     if not text:
         return img
 
-    draw  = ImageDraw.Draw(img)
-    w, h  = img.size
-
     chunks = text.split() if isinstance(text, str) else [str(c) for c in text if c]
     if not chunks:
         return img
 
-    # Font loading
+    draw = ImageDraw.Draw(img)
+    w, h = img.size
+    font = _resolve_overlay_font(draw, chunks, w, h)
+
+    line_widths  = [_chunk_width(draw, c, font, letter_spacing) for c in chunks]
+    line_heights = [_chunk_height(draw, c, font) for c in chunks]
+    total_h      = sum(line_heights) + line_spacing * (len(chunks) - 1)
+    start_y      = (h - total_h) // 2
+
+    shadow_offset = max(1, font.size // 18) if hasattr(font, "size") else 1
+    shadow_color  = "#000000" if color.upper() in ("#FFFFFF", "#FFF") else "#FFFFFF"
+
+    y = start_y
+    for i, chunk in enumerate(chunks):
+        x = (w - line_widths[i]) // 2
+        _draw_spaced_text(draw, x, y, chunk, font, color, shadow_color,
+                          shadow_offset, letter_spacing)
+        y += line_heights[i] + line_spacing
+
+    return img
+
+
+def _resolve_overlay_font(
+    draw: ImageDraw.ImageDraw,
+    chunks: list[str],
+    img_w: int,
+    img_h: int,
+) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    """Load the best available CJK font and scale it to fit the image."""
     fonts_dir = Path(__file__).parent.parent / "assets" / "fonts"
     font_candidates = [
         (str(fonts_dir / "NotoSansKR.ttf"), 0),
@@ -169,7 +194,7 @@ def _apply_text_overlay(
         ("/usr/share/fonts/truetype/nanum/NanumGothic.ttf",        0),
     ]
 
-    def _load_font(size: int):
+    def _load(size: int):
         for fp, idx in font_candidates:
             if Path(fp).exists():
                 try:
@@ -178,52 +203,57 @@ def _apply_text_overlay(
                     continue
         return ImageFont.load_default()
 
-    target_w  = int(w * 0.60)
-    longest   = max(chunks, key=len)
-    font_size = max(20, int(h * 0.20))
-    font      = _load_font(font_size)
+    target_w = int(img_w * 0.60)
+    longest  = max(chunks, key=len)
+    font_size = max(20, int(img_h * 0.20))
+    font = _load(font_size)
 
     while font_size > 14:
         bbox = draw.textbbox((0, 0), longest, font=font)
         if (bbox[2] - bbox[0]) <= target_w:
             break
         font_size -= 2
-        font = _load_font(font_size)
+        font = _load(font_size)
 
-    def _chunk_width(chunk: str) -> int:
-        total = sum(
-            draw.textbbox((0, 0), ch, font=font)[2]
-            - draw.textbbox((0, 0), ch, font=font)[0]
-            + letter_spacing
-            for ch in chunk
-        )
-        return max(0, total - letter_spacing)
+    return font
 
-    def _chunk_height(chunk: str) -> int:
-        bbox = draw.textbbox((0, 0), chunk, font=font)
-        return bbox[3] - bbox[1]
 
-    line_widths  = [_chunk_width(c)  for c in chunks]
-    line_heights = [_chunk_height(c) for c in chunks]
-    total_h      = sum(line_heights) + line_spacing * (len(chunks) - 1)
-    start_y      = (h - total_h) // 2
+def _chunk_width(draw: ImageDraw.ImageDraw, chunk: str, font, spacing: int) -> int:
+    """Calculate total width of a chunk with letter spacing."""
+    total = sum(
+        draw.textbbox((0, 0), ch, font=font)[2]
+        - draw.textbbox((0, 0), ch, font=font)[0]
+        + spacing
+        for ch in chunk
+    )
+    return max(0, total - spacing)
 
-    shadow_offset = max(1, font_size // 18)
-    shadow_color  = "#000000" if color.upper() in ("#FFFFFF", "#FFF") else "#FFFFFF"
 
-    y = start_y
-    for i, chunk in enumerate(chunks):
-        x = (w - line_widths[i]) // 2
-        for ch in chunk:
-            ch_bbox = draw.textbbox((0, 0), ch, font=font)
-            ch_w    = ch_bbox[2] - ch_bbox[0]
-            draw.text((x + shadow_offset, y + shadow_offset), ch,
-                      font=font, fill=shadow_color)
-            draw.text((x, y), ch, font=font, fill=color)
-            x += ch_w + letter_spacing
-        y += line_heights[i] + line_spacing
+def _chunk_height(draw: ImageDraw.ImageDraw, chunk: str, font) -> int:
+    """Calculate the height of a rendered text chunk."""
+    bbox = draw.textbbox((0, 0), chunk, font=font)
+    return bbox[3] - bbox[1]
 
-    return img
+
+def _draw_spaced_text(
+    draw: ImageDraw.ImageDraw,
+    x: int,
+    y: int,
+    chunk: str,
+    font,
+    color: str,
+    shadow_color: str,
+    shadow_offset: int,
+    letter_spacing: int,
+) -> None:
+    """Draw a single line with per-character letter spacing and shadow."""
+    for ch in chunk:
+        ch_bbox = draw.textbbox((0, 0), ch, font=font)
+        ch_w    = ch_bbox[2] - ch_bbox[0]
+        draw.text((x + shadow_offset, y + shadow_offset), ch,
+                  font=font, fill=shadow_color)
+        draw.text((x, y), ch, font=font, fill=color)
+        x += ch_w + letter_spacing
 
 
 def _encode_with_exif(

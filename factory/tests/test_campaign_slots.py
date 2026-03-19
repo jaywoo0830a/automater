@@ -10,7 +10,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from factory.combo_generator import ComboGenerator, build_combos
+from factory.combo_generator import ComboGenerator, ComboSpec, build_combos
 from factory.models import Combination, Keyword, SpacingRule
 from factory.tests.conftest import make_campaign
 
@@ -25,13 +25,16 @@ class TestBuildCombos:
         """2×2×2 × 3 spacing × 2 has_suffix = 48"""
         assert len(build_combos([[1, 2], [3, 4], [5, 6]], [10, 20, 30], [0, 1])) == 48
 
-    def test_required_keys(self):
+    def test_returns_combo_spec_instances(self):
         for combo in build_combos([[1], [2]], [10], [0]):
-            assert {"keyword_ids", "spacing_rule_id", "has_suffix"} <= combo.keys()
+            assert isinstance(combo, ComboSpec)
+            assert isinstance(combo.keyword_ids, list)
+            assert isinstance(combo.spacing_rule_id, int)
+            assert isinstance(combo.has_suffix, int)
 
     def test_no_duplicates(self):
         combos = build_combos([[1, 2], [3, 4]], [10, 20], [0, 1])
-        keys   = [(tuple(c["keyword_ids"]), c["spacing_rule_id"], c["has_suffix"]) for c in combos]
+        keys   = [(tuple(c.keyword_ids), c.spacing_rule_id, c.has_suffix) for c in combos]
         assert len(keys) == len(set(keys))
 
     def test_empty_keyword_group_returns_empty(self):
@@ -113,9 +116,9 @@ class TestComboGeneratorRun:
 
         campaign = make_campaign(session)
         picker   = CampaignKeywordPicker(session=session, campaign_id=campaign.id)
-        picker.pick(category_slug="region", values=["강남구"])
+        picker.save_picks(category_slug="region", values=["강남구"])
         session.flush()
-        picks = picker.get_picked_keyword_ids()
+        picks = picker.load_pick_ids()
 
         inserted = ComboGenerator(session=session, campaign_id=campaign.id, picks=picks).run()
         session.flush()

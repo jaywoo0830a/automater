@@ -29,6 +29,30 @@ def _section(*blocks):
 
 
 # ---------------------------------------------------------------------------
+# AccountOption.session_exists
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+def test_session_exists__returns_false_for_missing_file():
+    acc = AccountOption(username="id", password="pw", session_path="/nonexistent/path.json")
+    assert acc.session_exists() is False
+
+
+@pytest.mark.unit
+def test_session_exists__returns_true_for_existing_file(tmp_path):
+    session = tmp_path / "session.json"
+    session.write_text("{}")
+    acc = AccountOption(username="id", password="pw", session_path=str(session))
+    assert acc.session_exists() is True
+
+
+@pytest.mark.unit
+def test_resolved_session_path__defaults_to_username():
+    acc = AccountOption(username="myuser", password="pw")
+    assert acc.resolved_session_path == "myuser_session.json"
+
+
+# ---------------------------------------------------------------------------
 # for_account
 # ---------------------------------------------------------------------------
 

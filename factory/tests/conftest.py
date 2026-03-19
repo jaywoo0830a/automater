@@ -23,6 +23,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
+from factory.db import create_schema, drop_schema
 from factory.models import (
     Base, Platform, Campaign, KeywordCategory,
     Keyword, CampaignSlot, SpacingRule,
@@ -46,9 +47,9 @@ def _test_url() -> str:
 @pytest.fixture(scope="session")
 def engine():
     eng = create_engine(_test_url())
-    Base.metadata.create_all(eng)
+    create_schema(eng)
     yield eng
-    Base.metadata.drop_all(eng)
+    drop_schema(eng)
     eng.dispose()
 
 

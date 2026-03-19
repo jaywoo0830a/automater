@@ -84,16 +84,16 @@ def test_validate_template_valid(tmpl):
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("tmpl,reason", [
+@pytest.mark.parametrize("tmpl,match", [
     ("",                                     "empty"),
-    ("   ",                                  "whitespace only"),
+    ("   ",                                  "empty"),
     ("{region} {region} {salt}",             "duplicate"),
-    ("no braces at all",                     "no tokens"),
-    ("{} {subject}",                         "empty brace"),
-    ("{123bad} {subject}",                   "invalid identifier"),
+    ("no braces at all",                     "no.*token"),
+    ("{} {subject}",                         "empty braces"),
+    ("{123bad} {subject}",                   "not a valid identifier"),
 ])
-def test_validate_template_invalid(tmpl, reason):
-    with pytest.raises(ValueError, match=reason if reason not in ("empty", "whitespace only", "no tokens", "duplicate", "empty brace", "invalid identifier") else ""):
+def test_validate_template_invalid(tmpl, match):
+    with pytest.raises(ValueError, match=match):
         validate_template(tmpl)
 
 

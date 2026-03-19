@@ -1,7 +1,9 @@
 """
 factory/models.py
 ------------------
-SQLAlchemy 2.0 ORM models — mirrors schema.sql exactly.
+SQLAlchemy 2.0 ORM models — single source of truth for schema.
+
+Use db.create_schema(engine) to create tables from these models.
 
 Table map:
     Platform              → platforms
@@ -20,8 +22,8 @@ Table map:
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Any, Optional
 
 from sqlalchemy import (
     BigInteger,
@@ -85,7 +87,7 @@ class Platform(Base):
     slug:       Mapped[str]           = mapped_column(String(32),  nullable=False, unique=True)
     base_url:   Mapped[str]           = mapped_column(String(256), nullable=False, default="")
     status:     Mapped[str]           = mapped_column(String(16),  nullable=False, default="active")
-    created_at: Mapped[datetime]      = mapped_column(DateTime,    nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime]      = mapped_column(DateTime,    nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # relationships
     accounts:  Mapped[list["Account"]]  = relationship("Account",  back_populates="platform")
@@ -106,12 +108,12 @@ class Account(Base):
     platform_id:   Mapped[int]           = mapped_column(Integer,     ForeignKey("platforms.id"), nullable=False)
     username:      Mapped[str]           = mapped_column(String(128), nullable=False)
     password_enc:  Mapped[str]           = mapped_column(String(512), nullable=False, default="")
-    extra:         Mapped[Optional[dict]]= mapped_column(JSON,        nullable=True)
+    extra:         Mapped[dict[str, Any] | None]= mapped_column(JSON,        nullable=True)
     last_used_at:  Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     cooldown_days: Mapped[int]           = mapped_column(Integer,     nullable=False, default=14)
     status:        Mapped[str]           = mapped_column(String(16),  nullable=False, default="active")
     note:          Mapped[str]           = mapped_column(String(256), nullable=False, default="")
-    created_at:    Mapped[datetime]      = mapped_column(DateTime,    nullable=False, default=datetime.utcnow)
+    created_at:    Mapped[datetime]      = mapped_column(DateTime,    nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # relationships
     platform: Mapped["Platform"] = relationship("Platform", back_populates="accounts")
@@ -128,7 +130,7 @@ class KeywordCategory(Base):
     id:         Mapped[int]      = mapped_column(Integer,    primary_key=True, autoincrement=True)
     name:       Mapped[str]      = mapped_column(String(64), nullable=False)
     slug:       Mapped[str]      = mapped_column(String(32), nullable=False, unique=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime,   nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime,   nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # relationships
     keywords: Mapped[list["Keyword"]]      = relationship("Keyword",      back_populates="category")
@@ -156,8 +158,8 @@ class Keyword(Base):
     tier:          Mapped[int]           = mapped_column(Integer,      nullable=False, default=1)
     active:        Mapped[bool]          = mapped_column(Boolean,      nullable=False, default=True)
     sort_order:    Mapped[int]           = mapped_column(Integer,      nullable=False, default=0)
-    metadata_:     Mapped[Optional[dict]]= mapped_column("metadata",   JSON, nullable=True)
-    created_at:    Mapped[datetime]      = mapped_column(DateTime,     nullable=False, default=datetime.utcnow)
+    metadata_:     Mapped[dict[str, Any] | None]= mapped_column("metadata",   JSON, nullable=True)
+    created_at:    Mapped[datetime]      = mapped_column(DateTime,     nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # relationships
     category: Mapped["KeywordCategory"]     = relationship("KeywordCategory", back_populates="keywords")
@@ -185,9 +187,9 @@ class Campaign(Base):
     name:           Mapped[str]           = mapped_column(String(128), nullable=False)
     description:    Mapped[Optional[str]] = mapped_column(Text,        nullable=True)
     title_template: Mapped[str]           = mapped_column(String(256), nullable=False, default="")
-    config:         Mapped[Optional[dict]]= mapped_column(JSON,        nullable=True)
+    config:         Mapped[dict[str, Any] | None]= mapped_column(JSON,        nullable=True)
     status:         Mapped[str]           = mapped_column(String(16),  nullable=False, default="active")
-    created_at:     Mapped[datetime]      = mapped_column(DateTime,    nullable=False, default=datetime.utcnow)
+    created_at:     Mapped[datetime]      = mapped_column(DateTime,    nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # relationships
     platform:      Mapped["Platform"]             = relationship("Platform",      back_populates="campaigns")
@@ -212,7 +214,7 @@ class CampaignSlot(Base):
     campaign_id: Mapped[int]      = mapped_column(Integer,  ForeignKey("campaigns.id"),          primary_key=True)
     category_id: Mapped[int]      = mapped_column(Integer,  ForeignKey("keyword_categories.id"), primary_key=True)
     sort_order:  Mapped[int]      = mapped_column(Integer,  nullable=False, default=0)
-    created_at:  Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at:  Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # relationships
     campaign: Mapped["Campaign"]         = relationship("Campaign",         back_populates="slots")
@@ -228,10 +230,10 @@ class SpacingRule(Base):
 
     id:          Mapped[int]      = mapped_column(Integer,     primary_key=True, autoincrement=True)
     campaign_id: Mapped[int]      = mapped_column(Integer,     ForeignKey("campaigns.id"), nullable=False)
-    pattern:     Mapped[dict]     = mapped_column(JSON,        nullable=False)
+    pattern:     Mapped[dict[str, Any]]     = mapped_column(JSON,        nullable=False)
     description: Mapped[str]      = mapped_column(String(128), nullable=False, default="")
     active:      Mapped[bool]     = mapped_column(Boolean,     nullable=False, default=True)
-    created_at:  Mapped[datetime] = mapped_column(DateTime,    nullable=False, default=datetime.utcnow)
+    created_at:  Mapped[datetime] = mapped_column(DateTime,    nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # relationships
     campaign:     Mapped["Campaign"]         = relationship("Campaign",      back_populates="spacing_rules")
@@ -252,7 +254,7 @@ class CampaignKeywordPick(Base):
     campaign_id: Mapped[int]      = mapped_column(Integer,  ForeignKey("campaigns.id"),          nullable=False)
     category_id: Mapped[int]      = mapped_column(Integer,  ForeignKey("keyword_categories.id"), nullable=False)
     keyword_id:  Mapped[int]      = mapped_column(Integer,  ForeignKey("keywords.id"),           nullable=False)
-    created_at:  Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at:  Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # relationships
     campaign: Mapped["Campaign"]        = relationship("Campaign",        back_populates="picks")
@@ -270,9 +272,9 @@ class Combination(Base):
     id:              Mapped[int]           = mapped_column(BigInteger,      primary_key=True, autoincrement=True)
     campaign_id:     Mapped[int]           = mapped_column(Integer,     ForeignKey("campaigns.id"),      nullable=False)
     spacing_rule_id: Mapped[Optional[int]] = mapped_column(Integer,     ForeignKey("spacing_rules.id"),  nullable=True)
-    config:          Mapped[Optional[dict]]= mapped_column(JSON,        nullable=True)
+    config:          Mapped[dict[str, Any] | None]= mapped_column(JSON,        nullable=True)
     used_at:         Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    created_at:      Mapped[datetime]      = mapped_column(DateTime,    nullable=False, default=datetime.utcnow)
+    created_at:      Mapped[datetime]      = mapped_column(DateTime,    nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # relationships
     campaign:      Mapped["Campaign"]        = relationship("Campaign",      back_populates="combinations")
@@ -296,7 +298,7 @@ class Batch(Base):
     scheduled_at: Mapped[datetime]      = mapped_column(DateTime,   nullable=False)
     status:       Mapped[str]           = mapped_column(String(16), nullable=False, default="pending")
     worker_pid:   Mapped[Optional[int]] = mapped_column(Integer,    nullable=True)
-    created_at:   Mapped[datetime]      = mapped_column(DateTime,   nullable=False, default=datetime.utcnow)
+    created_at:   Mapped[datetime]      = mapped_column(DateTime,   nullable=False, default=lambda: datetime.now(timezone.utc))
     started_at:   Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
@@ -322,7 +324,7 @@ class BatchItem(Base):
     status:         Mapped[str]           = mapped_column(String(16),   nullable=False, default="pending")
     result_url:     Mapped[Optional[str]] = mapped_column(String(512),  nullable=True)
     error_message:  Mapped[Optional[str]] = mapped_column(Text,         nullable=True)
-    created_at:     Mapped[datetime]      = mapped_column(DateTime,     nullable=False, default=datetime.utcnow)
+    created_at:     Mapped[datetime]      = mapped_column(DateTime,     nullable=False, default=lambda: datetime.now(timezone.utc))
     completed_at:   Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     # relationships

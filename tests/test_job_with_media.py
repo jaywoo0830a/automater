@@ -48,7 +48,7 @@ def test_image_block__process_image_called(tmp_path):
     img    = _make_jpeg(tmp_path)
     editor = MagicMock()
 
-    with patch("automator.image_processor.process_image",
+    with patch("automator.job.process_image",
                return_value=img.read_bytes()) as mock_proc:
         _base().with_body([Section(blocks=(
             ImageBlock(path=str(img)),
@@ -62,7 +62,7 @@ def test_featured_block__process_featured_called(tmp_path):
     thumb  = _make_jpeg(tmp_path)
     editor = MagicMock()
 
-    with patch("automator.image_processor.process_featured",
+    with patch("automator.job.process_featured",
                return_value=thumb.read_bytes()) as mock_proc:
         _base().with_body([Section(blocks=(
             FeaturedImageBlock(path=str(thumb)),
@@ -76,7 +76,7 @@ def test_processed_path_differs_from_original(tmp_path):
     img    = _make_jpeg(tmp_path)
     editor = MagicMock()
 
-    with patch("automator.image_processor.process_image",
+    with patch("automator.job.process_image",
                return_value=b"\xff\xd8\xff" + b"\x00" * 100):
         _base().with_body([Section(blocks=(
             ImageBlock(path=str(img)),
@@ -96,7 +96,7 @@ def test_featured_block__sets_representative_image(tmp_path):
     thumb  = _make_jpeg(tmp_path)
     editor = MagicMock()
 
-    with patch("automator.image_processor.process_featured",
+    with patch("automator.job.process_featured",
                return_value=thumb.read_bytes()):
         _base().with_body([Section(blocks=(
             FeaturedImageBlock(path=str(thumb)),
@@ -117,7 +117,7 @@ def test_image_block_options_passed_to_processor(tmp_path):
         saturation_jitter=0.0,
         exif_description="테스트",
     )
-    with patch("automator.image_processor.process_image",
+    with patch("automator.job.process_image",
                return_value=img.read_bytes()) as mock_proc:
         _base().with_body([Section(blocks=(block,))]).run(editor)
 

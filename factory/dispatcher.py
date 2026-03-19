@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from typing import Sequence, TypeVar
 
 from sqlalchemy import select, case
 from sqlalchemy.orm import Session
@@ -17,6 +18,8 @@ from factory.models import Account, Batch, BatchItem, Combination
 KST             = timezone(timedelta(hours=9))
 BATCH_SIZE      = 40
 SCHEDULE_JITTER_MINUTES = 10
+
+_T = TypeVar("_T")
 
 
 @dataclass
@@ -61,13 +64,13 @@ class BatchDispatcher:
         return result
 
     def _available_accounts(self, now: datetime) -> list[Account]:
-        accounts = self._session.scalars(
+        accounts: Sequence[Account] = self._session.scalars(
             select(Account)
             .where(Account.status == "active")
             .order_by(case((Account.last_used_at.is_(None), 0), else_=1), Account.last_used_at.asc(), Account.id.asc())
         ).all()
 
-        available = []
+        available: list[Account] = []
         for acc in accounts:
             last = acc.last_used_at
             if last is None:
@@ -80,11 +83,11 @@ class BatchDispatcher:
         return available
 
     def _pending_combinations(self) -> list[Combination]:
-        return self._session.scalars(
+        return list(self._session.scalars(
             select(Combination)
             .where(Combination.used_at.is_(None))
             .order_by(Combination.id.asc())
-        ).all()
+        ).all())
 
     def _create_batch(
         self,
@@ -116,5 +119,6 @@ class BatchDispatcher:
             combo.used_at = now
 
 
-def _chunk(lst: list, size: int) -> list[list]:
+def _chunk(lst: list[_T], size: int) -> list[list[_T]]:
+    """Split ``lst`` into sub-lists of at most ``size`` elements."""
     return [lst[i : i + size] for i in range(0, len(lst), size)]

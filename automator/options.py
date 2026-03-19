@@ -66,7 +66,13 @@ class AccountOption:
 
     @property
     def resolved_session_path(self) -> str:
+        """Return explicit session_path or default '<username>_session.json'."""
         return self.session_path or f"{self.username}_session.json"
+
+    def session_exists(self) -> bool:
+        """Return True if the resolved session file exists on disk."""
+        from pathlib import Path
+        return Path(self.resolved_session_path).exists()
 
 
 # ---------------------------------------------------------------------------

@@ -42,6 +42,7 @@ from automator.editor import (
     BlogEditor, PostContent,
     ParagraphStep, ImageStep, ThumbnailStep, PostStep,
 )
+from automator.image_processor import process_image, process_featured, build_filename
 from automator.title_generator import TitleGenerator, validate_template
 from automator.layout import validate_sections, paragraph_block_count, all_blocks
 from automator.paragraph_generator import ParagraphGenerator
@@ -293,14 +294,11 @@ class PostingJob:
     # ------------------------------------------------------------------
 
     def _execute(self, editor: BlogEditor, post: PostContent) -> None:
-        """editor 를 구동해 포스트를 발행한다."""
+        """Drive the editor to publish the post."""
         editor.open()
         editor.write_title(post.title)
 
-        from automator.image_processor import process_image, process_featured, build_filename
-
-        setting            = self._setting
-        upload_delay_ms    = (setting.upload_delay_ms if setting else 1500)
+        upload_delay_ms = self._setting.upload_delay_ms if self._setting else 1500
         image_upload_count = 0
         rep_index: int | None = None
         tmp_files: list[str] = []
@@ -310,44 +308,9 @@ class PostingJob:
                 if i > 0:
                     editor.move_cursor_to_end()
 
-                if isinstance(step, (ImageStep, ThumbnailStep)) and Path(step.path).exists():
-                    raw_bytes = Path(step.path).read_bytes()
-                    # 블록에서 이미지 처리 설정을 직접 읽는다
-                    if isinstance(step, ThumbnailStep):
-                        # FeaturedImageBlock 은 flat_blocks 에서 찾는다
-                        feat_block = next(
-                            (b for b in all_blocks(self._body)
-                             if isinstance(b, FeaturedImageBlock) and b.path == step.path),
-                            None,
-                        )
-                        if feat_block is not None:
-                            processed = process_featured(raw_bytes, feat_block)
-                            fname     = build_filename("featured", image_upload_count + 1,
-                                                       feat_block.filename_keyword)
-                            tmp = tempfile.NamedTemporaryFile(
-                                suffix=".jpg", prefix=fname.replace(".jpg", "_"), delete=False
-                            )
-                            tmp.write(processed); tmp.close()
-                            tmp_files.append(tmp.name)
-                            from dataclasses import replace as dc_replace
-                            step = dc_replace(step, path=tmp.name)
-                    else:
-                        img_block = next(
-                            (b for b in all_blocks(self._body)
-                             if isinstance(b, ImageBlock) and b.path == step.path),
-                            None,
-                        )
-                        if img_block is not None:
-                            processed = process_image(raw_bytes, img_block)
-                            fname     = build_filename("preview", image_upload_count + 1,
-                                                       img_block.filename_keyword)
-                            tmp = tempfile.NamedTemporaryFile(
-                                suffix=".jpg", prefix=fname.replace(".jpg", "_"), delete=False
-                            )
-                            tmp.write(processed); tmp.close()
-                            tmp_files.append(tmp.name)
-                            from dataclasses import replace as dc_replace
-                            step = dc_replace(step, path=tmp.name)
+                step, tmp_path = self._maybe_process_image(step)
+                if tmp_path:
+                    tmp_files.append(tmp_path)
 
                 editor.execute(step)
 
@@ -359,9 +322,9 @@ class PostingJob:
                         time.sleep(upload_delay_ms / 1000)
 
         finally:
-            for tmp_path in tmp_files:
+            for path in tmp_files:
                 try:
-                    Path(tmp_path).unlink(missing_ok=True)
+                    Path(path).unlink(missing_ok=True)
                 except OSError:
                     pass
 
@@ -369,3 +332,75 @@ class PostingJob:
             editor.set_representative_image(rep_index)
 
         editor.publish(schedule_at=post.schedule_at)
+
+    # ------------------------------------------------------------------
+    # Image processing helper
+    # ------------------------------------------------------------------
+
+    def _maybe_process_image(
+        self, step: PostStep,
+    ) -> tuple[PostStep, str | None]:
+        """
+        Apply image transformations if the step is an image with a valid path.
+
+        Returns the (possibly replaced) step and an optional temp file path
+        that the caller must clean up.
+        """
+        if not isinstance(step, (ImageStep, ThumbnailStep)):
+            return step, None
+        if not Path(step.path).exists():
+            return step, None
+
+        raw_bytes = Path(step.path).read_bytes()
+        flat_blocks = all_blocks(self._body)
+
+        if isinstance(step, ThumbnailStep):
+            processed, fname = self._process_thumbnail(raw_bytes, step.path, flat_blocks)
+        else:
+            processed, fname = self._process_body_image(raw_bytes, step.path, flat_blocks)
+
+        if processed is None:
+            return step, None
+
+        tmp = tempfile.NamedTemporaryFile(
+            suffix=".jpg", prefix=fname.replace(".jpg", "_"), delete=False,
+        )
+        tmp.write(processed)
+        tmp.close()
+        return replace(step, path=tmp.name), tmp.name
+
+    def _process_thumbnail(
+        self,
+        raw_bytes: bytes,
+        original_path: str,
+        flat_blocks: list[Block],
+    ) -> tuple[bytes | None, str]:
+        """Process a FeaturedImageBlock and return (processed_bytes, filename)."""
+        feat_block = next(
+            (b for b in flat_blocks
+             if isinstance(b, FeaturedImageBlock) and b.path == original_path),
+            None,
+        )
+        if feat_block is None:
+            return None, ""
+        processed = process_featured(raw_bytes, feat_block)
+        fname = build_filename("featured", 1, feat_block.filename_keyword)
+        return processed, fname
+
+    def _process_body_image(
+        self,
+        raw_bytes: bytes,
+        original_path: str,
+        flat_blocks: list[Block],
+    ) -> tuple[bytes | None, str]:
+        """Process an ImageBlock and return (processed_bytes, filename)."""
+        img_block = next(
+            (b for b in flat_blocks
+             if isinstance(b, ImageBlock) and b.path == original_path),
+            None,
+        )
+        if img_block is None:
+            return None, ""
+        processed = process_image(raw_bytes, img_block)
+        fname = build_filename("preview", 1, img_block.filename_keyword)
+        return processed, fname

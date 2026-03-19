@@ -14,13 +14,13 @@ from factory.models import CampaignKeywordPick, Keyword
 from factory.tests.conftest import make_campaign
 
 
-class TestPick:
+class TestSavePicks:
 
     def test_inserts_correct_keyword_ids(self, session: Session):
         """선택한 value 에 해당하는 keyword_id 만 DB 에 저장된다."""
         campaign = make_campaign(session)
         picker   = CampaignKeywordPicker(session=session, campaign_id=campaign.id)
-        count    = picker.pick(category_slug="region", values=["강남구", "수원시"])
+        count    = picker.save_picks(category_slug="region", values=["강남구", "수원시"])
         session.flush()
 
         picks = session.scalars(
@@ -40,9 +40,9 @@ class TestPick:
         campaign = make_campaign(session)
         picker   = CampaignKeywordPicker(session=session, campaign_id=campaign.id)
 
-        picker.pick(category_slug="region", values=["강남구"])
+        picker.save_picks(category_slug="region", values=["강남구"])
         session.flush()
-        picker.pick(category_slug="region", values=["수원시"])
+        picker.save_picks(category_slug="region", values=["수원시"])
         session.flush()
 
         values_in_db = {
@@ -57,9 +57,9 @@ class TestPick:
         campaign = make_campaign(session)
         picker   = CampaignKeywordPicker(session=session, campaign_id=campaign.id)
 
-        picker.pick(category_slug="region", values=["강남구"])
+        picker.save_picks(category_slug="region", values=["강남구"])
         session.flush()
-        picker.pick(category_slug="region", values=[])
+        picker.save_picks(category_slug="region", values=[])
         session.flush()
 
         picks = session.scalars(
@@ -71,33 +71,33 @@ class TestPick:
         campaign = make_campaign(session)
         picker   = CampaignKeywordPicker(session=session, campaign_id=campaign.id)
         with pytest.raises(ValueError, match="없는 키워드"):
-            picker.pick(category_slug="region", values=["없는동네"])
+            picker.save_picks(category_slug="region", values=["없는동네"])
 
     def test_unknown_category_raises(self, session: Session):
         campaign = make_campaign(session)
         picker   = CampaignKeywordPicker(session=session, campaign_id=campaign.id)
         with pytest.raises(ValueError, match="category"):
-            picker.pick(category_slug="nonexistent", values=["강남구"])
+            picker.save_picks(category_slug="nonexistent", values=["강남구"])
 
     def test_inactive_keyword_raises(self, session: Session):
         """active=False 인 키워드(성남시)는 선택할 수 없다."""
         campaign = make_campaign(session)
         picker   = CampaignKeywordPicker(session=session, campaign_id=campaign.id)
         with pytest.raises(ValueError, match="없는 키워드"):
-            picker.pick(category_slug="region", values=["성남시"])
+            picker.save_picks(category_slug="region", values=["성남시"])
 
 
-class TestListPicks:
+class TestLoadPicks:
 
     def test_returns_per_category_dict(self, session: Session):
         campaign = make_campaign(session)
         picker   = CampaignKeywordPicker(session=session, campaign_id=campaign.id)
 
-        picker.pick(category_slug="region",  values=["강남구", "수원시"])
-        picker.pick(category_slug="subject", values=["수학"])
+        picker.save_picks(category_slug="region",  values=["강남구", "수원시"])
+        picker.save_picks(category_slug="subject", values=["수학"])
         session.flush()
 
-        result = picker.list_picks()
+        result = picker.load_picks()
         assert set(result["region"])   == {"강남구", "수원시"}
         assert result["subject"]       == ["수학"]
         assert result["learning_type"] == []
@@ -105,19 +105,19 @@ class TestListPicks:
     def test_no_picks_returns_empty_lists(self, session: Session):
         campaign = make_campaign(session)
         picker   = CampaignKeywordPicker(session=session, campaign_id=campaign.id)
-        assert all(v == [] for v in picker.list_picks().values())
+        assert all(v == [] for v in picker.load_picks().values())
 
 
-class TestGetPickedKeywordIds:
+class TestLoadPickIds:
 
     def test_picked_returns_id_list_unpicked_returns_none(self, session: Session):
         campaign = make_campaign(session)
         picker   = CampaignKeywordPicker(session=session, campaign_id=campaign.id)
 
-        picker.pick(category_slug="region", values=["강남구"])
+        picker.save_picks(category_slug="region", values=["강남구"])
         session.flush()
 
-        result     = picker.get_picked_keyword_ids()
+        result     = picker.load_pick_ids()
         none_count = sum(1 for v in result.values() if v is None)
         list_count = sum(1 for v in result.values() if v is not None)
 
