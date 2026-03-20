@@ -193,14 +193,14 @@ def test_featured_block__set_rep_called_after_all_content(editor):
 def test_multiple_blocks__cursor_moved_between_each(editor):
     _base_job().with_title(TitleOption(fixed_title="T")) \
                .with_body([Section(blocks=(ParagraphBlock(), ParagraphBlock()))]).run(editor)
-    assert any(a[0] == "cursor_end" for a in editor.actions)
+    assert any(a[0] == "cursor" for a in editor.actions)
 
 
 @pytest.mark.unit
 def test_single_block__cursor_not_moved(editor):
     _base_job().with_title(TitleOption(fixed_title="T")) \
                .with_body([Section(blocks=(ParagraphBlock(),))]).run(editor)
-    assert not any(a[0] == "cursor_end" for a in editor.actions)
+    assert not any(a[0] == "cursor" for a in editor.actions)
 
 
 # ---------------------------------------------------------------------------
