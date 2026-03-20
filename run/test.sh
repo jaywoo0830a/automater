@@ -141,6 +141,8 @@ case "${MODE}" in
     test_post_step.py                  PostStep.execute() dispatch
     test_image_processor.py            process_image() / process_featured()
     test_ports.py                      Port ABCs + test doubles
+    test_block_factory.py              block_type -> Block with interpolation
+    test_preset_loader.py              JSON config -> frozen dataclass
 
   tests/integration/                   Collaborator wiring (injected stubs)
     test_spec_builder.py               PostingSpec immutability
@@ -160,10 +162,11 @@ case "${MODE}" in
 
   factory/tests/ (--factory flag)      DB-backed (MySQL container)
     test_user.py                       User model + ownership
+    test_preset_models.py              PostLayout/PublishPreset/RunPreset
     test_campaign_slots.py             ComboGenerator slot logic
     test_keyword_picker.py             save_picks / load_picks
     test_batch_dispatcher.py           BatchDispatcher
-    test_job_builder.py                Combination -> PostingSpec
+    test_job_builder.py                Combination -> PostingSpec (dynamic)
 
 HELP
     ;;

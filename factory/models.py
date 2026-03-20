@@ -12,12 +12,16 @@ Table map:
     KeywordCategory       → keyword_categories
     Keyword               → keywords
     Affix                 → affixes                (keyword derivation rules)
-    Campaign              → campaigns              (user_id FK)
+    Campaign              → campaigns              (user_id FK, 3 nullable preset FKs)
     CampaignSlot          → campaign_slots
     SpacingRule           → spacing_rules
     CampaignKeywordPick   → campaign_keyword_picks
     CampaignPalette       → campaign_palettes      (runtime sampling pools)
     PaletteItem           → palette_items
+    PostLayout            → post_layouts            (reusable block sequence)
+    LayoutSlot            → layout_slots            (block_type + config JSON)
+    PublishPreset         → publish_presets          (PublishOption as JSON config)
+    RunPreset             → run_presets              (RunSetting as JSON config)
     combination_keywords  → combination_keywords    (association table)
     Combination           → combinations
     Batch                 → batches
@@ -96,8 +100,11 @@ class User(Base):
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime,    nullable=True)
 
     # relationships
-    accounts:  Mapped[list["Account"]]  = relationship("Account",  back_populates="owner")
-    campaigns: Mapped[list["Campaign"]] = relationship("Campaign", back_populates="owner")
+    accounts:        Mapped[list["Account"]]        = relationship("Account",       back_populates="owner")
+    campaigns:       Mapped[list["Campaign"]]       = relationship("Campaign",      back_populates="owner")
+    layouts:         Mapped[list["PostLayout"]]      = relationship("PostLayout",    back_populates="owner")
+    publish_presets: Mapped[list["PublishPreset"]]   = relationship("PublishPreset", back_populates="owner")
+    run_presets:     Mapped[list["RunPreset"]]       = relationship("RunPreset",     back_populates="owner")
 
 
 # ---------------------------------------------------------------------------
@@ -206,35 +213,119 @@ class Keyword(Base):
 
 
 # ---------------------------------------------------------------------------
+# PostLayout — reusable block sequence template
+# ---------------------------------------------------------------------------
+
+class PostLayout(Base):
+    __tablename__ = "post_layouts"
+
+    id:          Mapped[int]           = mapped_column(Integer,     primary_key=True, autoincrement=True)
+    user_id:     Mapped[int]           = mapped_column(Integer,     ForeignKey("users.id"), nullable=False)
+    name:        Mapped[str]           = mapped_column(String(128), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text,        nullable=True)
+    created_at:  Mapped[datetime]      = mapped_column(DateTime,    nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    # relationships
+    owner: Mapped["User"]              = relationship("User",       back_populates="layouts")
+    slots: Mapped[list["LayoutSlot"]]  = relationship(
+        "LayoutSlot", back_populates="layout",
+        order_by="LayoutSlot.sort_order", cascade="all, delete-orphan",
+    )
+    campaigns: Mapped[list["Campaign"]] = relationship("Campaign", back_populates="layout")
+
+
+# ---------------------------------------------------------------------------
+# LayoutSlot — one block in a PostLayout
+# ---------------------------------------------------------------------------
+
+class LayoutSlot(Base):
+    __tablename__ = "layout_slots"
+
+    id:         Mapped[int]      = mapped_column(Integer,    primary_key=True, autoincrement=True)
+    layout_id:  Mapped[int]      = mapped_column(Integer,    ForeignKey("post_layouts.id", ondelete="CASCADE"), nullable=False)
+    sort_order: Mapped[int]      = mapped_column(Integer,    nullable=False, default=0)
+    block_type: Mapped[str]      = mapped_column(String(32), nullable=False)
+    config:     Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime,   nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    # relationships
+    layout: Mapped["PostLayout"] = relationship("PostLayout", back_populates="slots")
+
+
+# ---------------------------------------------------------------------------
+# PublishPreset — PublishOption content as JSON config
+# ---------------------------------------------------------------------------
+
+class PublishPreset(Base):
+    __tablename__ = "publish_presets"
+
+    id:          Mapped[int]           = mapped_column(Integer,     primary_key=True, autoincrement=True)
+    user_id:     Mapped[int]           = mapped_column(Integer,     ForeignKey("users.id"), nullable=False)
+    name:        Mapped[str]           = mapped_column(String(128), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text,        nullable=True)
+    config:      Mapped[dict[str, Any]]= mapped_column(JSON,        nullable=False)
+    created_at:  Mapped[datetime]      = mapped_column(DateTime,    nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    # relationships
+    owner:     Mapped["User"]              = relationship("User",     back_populates="publish_presets")
+    campaigns: Mapped[list["Campaign"]]    = relationship("Campaign", back_populates="publish_preset")
+
+
+# ---------------------------------------------------------------------------
+# RunPreset — RunSetting content as JSON config
+# ---------------------------------------------------------------------------
+
+class RunPreset(Base):
+    __tablename__ = "run_presets"
+
+    id:          Mapped[int]           = mapped_column(Integer,     primary_key=True, autoincrement=True)
+    user_id:     Mapped[int]           = mapped_column(Integer,     ForeignKey("users.id"), nullable=False)
+    name:        Mapped[str]           = mapped_column(String(128), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text,        nullable=True)
+    config:      Mapped[dict[str, Any]]= mapped_column(JSON,        nullable=False)
+    created_at:  Mapped[datetime]      = mapped_column(DateTime,    nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    # relationships
+    owner:     Mapped["User"]              = relationship("User",     back_populates="run_presets")
+    campaigns: Mapped[list["Campaign"]]    = relationship("Campaign", back_populates="run_preset")
+
+
+# ---------------------------------------------------------------------------
 # Campaign
 # ---------------------------------------------------------------------------
 
 class Campaign(Base):
     __tablename__ = "campaigns"
 
-    id:             Mapped[int]           = mapped_column(Integer,     primary_key=True, autoincrement=True)
-    user_id:        Mapped[int]           = mapped_column(Integer,     ForeignKey("users.id"), nullable=False)
-    platform_id:    Mapped[int]           = mapped_column(Integer,     ForeignKey("platforms.id"), nullable=False)
-    name:           Mapped[str]           = mapped_column(String(128), nullable=False)
-    description:    Mapped[Optional[str]] = mapped_column(Text,        nullable=True)
-    title_template: Mapped[str]           = mapped_column(String(256), nullable=False, default="")
-    config:         Mapped[dict[str, Any] | None]= mapped_column(JSON,        nullable=True)
-    status:         Mapped[str]           = mapped_column(String(16),  nullable=False, default="active")
-    created_at:     Mapped[datetime]      = mapped_column(DateTime,    nullable=False, default=lambda: datetime.now(timezone.utc))
+    id:                 Mapped[int]           = mapped_column(Integer,     primary_key=True, autoincrement=True)
+    user_id:            Mapped[int]           = mapped_column(Integer,     ForeignKey("users.id"), nullable=False)
+    platform_id:        Mapped[int]           = mapped_column(Integer,     ForeignKey("platforms.id"), nullable=False)
+    layout_id:          Mapped[Optional[int]] = mapped_column(Integer,     ForeignKey("post_layouts.id"), nullable=True)
+    publish_preset_id:  Mapped[Optional[int]] = mapped_column(Integer,     ForeignKey("publish_presets.id"), nullable=True)
+    run_preset_id:      Mapped[Optional[int]] = mapped_column(Integer,     ForeignKey("run_presets.id"), nullable=True)
+    name:               Mapped[str]           = mapped_column(String(128), nullable=False)
+    description:        Mapped[Optional[str]] = mapped_column(Text,        nullable=True)
+    title_template:     Mapped[str]           = mapped_column(String(256), nullable=False, default="")
+    config:             Mapped[dict[str, Any] | None]= mapped_column(JSON, nullable=True)
+    status:             Mapped[str]           = mapped_column(String(16),  nullable=False, default="active")
+    created_at:         Mapped[datetime]      = mapped_column(DateTime,    nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # relationships
-    owner:         Mapped["User"]                  = relationship("User",         back_populates="campaigns")
-    platform:      Mapped["Platform"]              = relationship("Platform",     back_populates="campaigns")
-    slots:         Mapped[list["CampaignSlot"]]   = relationship(
+    owner:          Mapped["User"]                       = relationship("User",         back_populates="campaigns")
+    platform:       Mapped["Platform"]                   = relationship("Platform",     back_populates="campaigns")
+    layout:         Mapped[Optional["PostLayout"]]       = relationship("PostLayout",   back_populates="campaigns")
+    publish_preset: Mapped[Optional["PublishPreset"]]    = relationship("PublishPreset", back_populates="campaigns")
+    run_preset:     Mapped[Optional["RunPreset"]]        = relationship("RunPreset",    back_populates="campaigns")
+    slots:          Mapped[list["CampaignSlot"]]         = relationship(
         "CampaignSlot", back_populates="campaign", order_by="CampaignSlot.sort_order"
     )
-    spacing_rules: Mapped[list["SpacingRule"]]    = relationship("SpacingRule",   back_populates="campaign")
-    combinations:  Mapped[list["Combination"]]    = relationship("Combination",   back_populates="campaign")
-    batches:       Mapped[list["Batch"]]          = relationship("Batch",         back_populates="campaign")
-    picks:         Mapped[list["CampaignKeywordPick"]] = relationship(
+    spacing_rules:  Mapped[list["SpacingRule"]]          = relationship("SpacingRule",   back_populates="campaign")
+    combinations:   Mapped[list["Combination"]]          = relationship("Combination",   back_populates="campaign")
+    batches:        Mapped[list["Batch"]]                = relationship("Batch",         back_populates="campaign")
+    picks:          Mapped[list["CampaignKeywordPick"]]  = relationship(
         "CampaignKeywordPick", back_populates="campaign"
     )
-    palettes:      Mapped[list["CampaignPalette"]]     = relationship(
+    palettes:       Mapped[list["CampaignPalette"]]      = relationship(
         "CampaignPalette", back_populates="campaign", order_by="CampaignPalette.slug"
     )
 

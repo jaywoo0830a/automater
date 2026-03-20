@@ -3,7 +3,7 @@ factory/tests/test_job_builder.py
 -----------------------------------
 job_builder unit tests — Combination -> PostingSpec conversion rules.
 
-DB-free: uses Mock objects.
+DB-free: uses SimpleNamespace fakes for Combination, Campaign, Layout, Presets.
 """
 
 from __future__ import annotations
@@ -14,11 +14,15 @@ from types import SimpleNamespace
 import pytest
 
 from automator.contracts import PostingSpec
-from automator.options import AccountOption, ParagraphBlock, Section, TitleOption
+from automator.options import (
+    AccountOption, ParagraphBlock, HeadingBlock, ImageBlock,
+    Section, TitleOption,
+)
 from factory.job_builder import (
     build_posting_spec,
-    _build_body,
-    _build_title_option,
+    _build_body_default,
+    _build_body_from_layout,
+    _build_title,
     _build_values,
 )
 
@@ -26,29 +30,44 @@ KST = timezone(timedelta(hours=9))
 
 
 # ---------------------------------------------------------------------------
-# Helpers — lightweight Combination / Keyword / Campaign fakes
+# Helpers — lightweight fakes
 # ---------------------------------------------------------------------------
 
 def _keyword(slug: str, value: str, cat_id: int = 1):
-    """Fake Keyword with .category.slug, .value."""
     category = SimpleNamespace(slug=slug, id=cat_id)
+    return SimpleNamespace(category=category, value=value)
+
+
+def _slot(sort_order: int, block_type: str, config: dict = None):
     return SimpleNamespace(
-        category=category,
-        value=value,
+        sort_order=sort_order,
+        block_type=block_type,
+        config=config or {},
     )
+
+
+def _layout(*slots):
+    return SimpleNamespace(slots=list(slots))
+
+
+def _preset(config: dict):
+    return SimpleNamespace(config=config)
 
 
 def _combo(
     keywords: list,
     title_template: str = "{region} {subject}",
+    layout=None,
+    publish_preset=None,
+    run_preset=None,
 ):
-    """Fake Combination with .keywords, .campaign, .config."""
-    campaign = SimpleNamespace(title_template=title_template)
-    return SimpleNamespace(
-        keywords=keywords,
-        campaign=campaign,
-        config={},
+    campaign = SimpleNamespace(
+        title_template=title_template,
+        layout=layout,
+        publish_preset=publish_preset,
+        run_preset=run_preset,
     )
+    return SimpleNamespace(keywords=keywords, campaign=campaign)
 
 
 def _account():
@@ -62,119 +81,189 @@ def _account():
 class TestBuildValues:
 
     def test_uses_keyword_value(self):
-        combo = _combo(
-            keywords=[
-                _keyword("region", "강남구", cat_id=1),
-                _keyword("subject", "수학", cat_id=2),
-            ],
-        )
+        combo = _combo(keywords=[
+            _keyword("region", "강남구", cat_id=1),
+            _keyword("subject", "수학", cat_id=2),
+        ])
         values = _build_values(combo)
-        assert values["region"] == "강남구"
-        assert values["subject"] == "수학"
+        assert values == {"region": "강남구", "subject": "수학"}
 
     def test_keywords_sorted_by_category_id(self):
-        combo = _combo(
-            keywords=[
-                _keyword("subject", "수학", cat_id=2),
-                _keyword("region", "강남구", cat_id=1),
-            ],
-        )
-        values = _build_values(combo)
-        assert list(values.keys()) == ["region", "subject"]
+        combo = _combo(keywords=[
+            _keyword("subject", "수학", cat_id=2),
+            _keyword("region", "강남구", cat_id=1),
+        ])
+        assert list(_build_values(combo).keys()) == ["region", "subject"]
 
 
 # ---------------------------------------------------------------------------
-# _build_title_option
+# _build_title
 # ---------------------------------------------------------------------------
 
-class TestBuildTitleOption:
+class TestBuildTitle:
 
     def test_returns_title_option_with_template(self):
         combo = _combo(
-            keywords=[
-                _keyword("region", "강남", cat_id=1),
-                _keyword("subject", "수학", cat_id=2),
-            ],
+            keywords=[_keyword("region", "강남", cat_id=1), _keyword("subject", "수학", cat_id=2)],
             title_template="{region} {subject} {salt}",
         )
-        opt = _build_title_option(combo)
+        opt = _build_title(combo)
         assert isinstance(opt, TitleOption)
         assert opt.template == "{region} {subject} {salt}"
-        assert opt.values["region"] == "강남"
-        assert opt.values["subject"] == "수학"
+        assert opt.values == {"region": "강남", "subject": "수학"}
 
 
 # ---------------------------------------------------------------------------
-# _build_body
+# _build_body_default (fallback — no layout)
 # ---------------------------------------------------------------------------
 
-class TestBuildBody:
+class TestBuildBodyDefault:
 
-    def test_returns_single_section_with_three_paragraph_blocks(self):
-        combo = _combo(
-            keywords=[
-                _keyword("region", "강남", cat_id=1),
-                _keyword("subject", "수학", cat_id=2),
-            ],
-        )
-        sections = _build_body(combo)
+    def test_returns_three_paragraph_blocks(self):
+        combo = _combo(keywords=[_keyword("region", "강남", cat_id=1)])
+        sections = _build_body_default(combo)
         assert len(sections) == 1
-        assert isinstance(sections[0], Section)
         assert len(sections[0].blocks) == 3
         assert all(isinstance(b, ParagraphBlock) for b in sections[0].blocks)
 
     def test_prompt_contains_keyword(self):
-        combo = _combo(
-            keywords=[
-                _keyword("region", "강남", cat_id=1),
-                _keyword("subject", "수학", cat_id=2),
-            ],
-        )
-        sections = _build_body(combo)
-        prompt = sections[0].blocks[0].prompt
+        combo = _combo(keywords=[
+            _keyword("region", "강남", cat_id=1),
+            _keyword("subject", "수학", cat_id=2),
+        ])
+        prompt = _build_body_default(combo)[0].blocks[0].prompt
         assert "강남" in prompt
         assert "수학" in prompt
 
 
 # ---------------------------------------------------------------------------
-# build_posting_job
+# _build_body_from_layout (dynamic layout)
+# ---------------------------------------------------------------------------
+
+class TestBuildBodyFromLayout:
+
+    def test_layout_with_paragraph_slots(self):
+        layout = _layout(
+            _slot(0, "paragraph", {"keyword": "{keyword}", "tone": "review"}),
+            _slot(1, "paragraph", {"keyword": "{keyword}", "tone": "promotional"}),
+        )
+        combo = _combo(
+            keywords=[_keyword("region", "강남", cat_id=1)],
+            layout=layout,
+        )
+        sections = _build_body_from_layout(layout, combo)
+        assert len(sections) == 1
+        assert len(sections[0].blocks) == 2
+        assert sections[0].blocks[0].keyword == "강남"
+        assert sections[0].blocks[0].tone == "review"
+        assert sections[0].blocks[1].tone == "promotional"
+
+    def test_layout_with_mixed_blocks(self):
+        layout = _layout(
+            _slot(0, "heading", {"level": 2, "text": "{region} {subject} guide"}),
+            _slot(1, "paragraph", {"keyword": "{keyword}"}),
+            _slot(2, "image", {"path": "/img/{region}.jpg"}),
+        )
+        combo = _combo(keywords=[
+            _keyword("region", "강남", cat_id=1),
+            _keyword("subject", "수학", cat_id=2),
+        ])
+        sections = _build_body_from_layout(layout, combo)
+        blocks = sections[0].blocks
+        assert len(blocks) == 3
+        assert isinstance(blocks[0], HeadingBlock)
+        assert blocks[0].text == "강남 수학 guide"
+        assert isinstance(blocks[1], ParagraphBlock)
+        assert blocks[1].keyword == "강남 수학"
+        assert isinstance(blocks[2], ImageBlock)
+        assert blocks[2].path == "/img/강남.jpg"
+
+    def test_empty_layout_falls_back_to_default(self):
+        layout = _layout()
+        combo = _combo(keywords=[_keyword("region", "강남", cat_id=1)])
+        sections = _build_body_from_layout(layout, combo)
+        assert len(sections[0].blocks) == 3
+        assert all(isinstance(b, ParagraphBlock) for b in sections[0].blocks)
+
+    def test_slots_sorted_by_sort_order(self):
+        layout = _layout(
+            _slot(2, "paragraph", {"prompt": "second"}),
+            _slot(0, "heading", {"level": 1, "text": "first"}),
+        )
+        combo = _combo(keywords=[_keyword("region", "강남", cat_id=1)])
+        blocks = _build_body_from_layout(layout, combo)[0].blocks
+        assert isinstance(blocks[0], HeadingBlock)
+        assert isinstance(blocks[1], ParagraphBlock)
+
+
+# ---------------------------------------------------------------------------
+# build_posting_spec — full composition
 # ---------------------------------------------------------------------------
 
 class TestBuildPostingSpec:
 
-    def test_returns_posting_spec(self):
-        combo = _combo(
-            keywords=[
-                _keyword("region", "강남", cat_id=1),
-                _keyword("subject", "수학", cat_id=2),
-            ],
-            title_template="{region} {subject}",
-        )
+    def test_no_presets_uses_defaults(self):
+        combo = _combo(keywords=[_keyword("region", "강남", cat_id=1)])
         scheduled = datetime.now(tz=KST) + timedelta(hours=2)
         spec = build_posting_spec(combo, _account(), scheduled)
         assert isinstance(spec, PostingSpec)
-        assert spec.account is not None
-        assert spec.title is not None
-        assert len(spec.body) == 1
-        assert spec.publish is not None
         assert spec.publish.mode == "fixed"
         assert spec.publish.at == scheduled
+        assert spec.setting.post_interval == 60  # RunSetting default
 
-    def test_naive_datetime_gets_kst_attached(self):
+    def test_with_publish_preset(self):
         combo = _combo(
             keywords=[_keyword("region", "강남", cat_id=1)],
-            title_template="{region}",
+            publish_preset=_preset({"mode": "random_window", "jitter_minutes": 45}),
         )
+        scheduled = datetime.now(tz=KST) + timedelta(hours=2)
+        spec = build_posting_spec(combo, _account(), scheduled)
+        assert spec.publish.mode == "random_window"
+        assert spec.publish.jitter_minutes == 45
+        assert spec.publish.at == scheduled  # always from dispatch
+
+    def test_with_run_preset(self):
+        combo = _combo(
+            keywords=[_keyword("region", "강남", cat_id=1)],
+            run_preset=_preset({"post_interval": 120, "headless": False}),
+        )
+        scheduled = datetime.now(tz=KST) + timedelta(hours=2)
+        spec = build_posting_spec(combo, _account(), scheduled)
+        assert spec.setting.post_interval == 120
+        assert spec.setting.headless is False
+
+    def test_with_layout(self):
+        layout = _layout(
+            _slot(0, "heading", {"level": 2, "text": "{keyword}"}),
+            _slot(1, "paragraph", {"keyword": "{keyword}"}),
+        )
+        combo = _combo(
+            keywords=[_keyword("region", "강남", cat_id=1)],
+            layout=layout,
+        )
+        scheduled = datetime.now(tz=KST) + timedelta(hours=2)
+        spec = build_posting_spec(combo, _account(), scheduled)
+        assert len(spec.body) == 1
+        assert len(spec.body[0].blocks) == 2
+        assert isinstance(spec.body[0].blocks[0], HeadingBlock)
+
+    def test_all_three_presets(self):
+        layout = _layout(_slot(0, "paragraph", {"keyword": "{keyword}"}))
+        combo = _combo(
+            keywords=[_keyword("region", "강남", cat_id=1)],
+            layout=layout,
+            publish_preset=_preset({"mode": "immediate"}),
+            run_preset=_preset({"max_daily_posts": 3}),
+        )
+        scheduled = datetime.now(tz=KST) + timedelta(hours=2)
+        spec = build_posting_spec(combo, _account(), scheduled)
+        assert len(spec.body[0].blocks) == 1
+        assert spec.publish.mode == "immediate"
+        assert spec.setting.max_daily_posts == 3
+
+    def test_naive_datetime_gets_kst(self):
+        combo = _combo(keywords=[_keyword("region", "강남", cat_id=1)])
         naive = datetime(2099, 1, 1, 9, 0)
         spec = build_posting_spec(combo, _account(), naive)
         assert spec.publish.at.tzinfo is not None
         assert spec.publish.at.utcoffset() == timedelta(hours=9)
-
-    def test_aware_datetime_preserved(self):
-        combo = _combo(
-            keywords=[_keyword("region", "강남", cat_id=1)],
-            title_template="{region}",
-        )
-        aware = datetime(2099, 1, 1, 9, 0, tzinfo=KST)
-        spec = build_posting_spec(combo, _account(), aware)
-        assert spec.publish.at is aware
