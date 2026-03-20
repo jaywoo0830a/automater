@@ -5,7 +5,8 @@ Blog automation package.
 
 Public interface
 ----------------
-    PostingJob          — builder + orchestrator (entry point)
+    JobRunner           — orchestrator: validate -> build -> execute
+    PostingSpec         — frozen data contract (Zone A)
     BlogEditor          — abstract editor with 7 primitives
     SmartEditorOne      — Naver Smart Editor implementation
 
@@ -13,77 +14,54 @@ Public interface
     Section, Block types (7)    — post body structure
     BlockHandler, HANDLERS      — extension point for new block types
 
+    TextGenerator, ImageProcessor, SelectorSource — ports (ABCs)
+    GeminiGenerator, LocalImageProcessor          — concrete implementations
+    StubTextGenerator, NoopImageProcessor          — test doubles
+
     generate_title()            — TitleOption -> str
-    generate_paragraphs()       — prompt -> list[str]
     validate_template()         — raises ValueError on bad template
 
 Usage
 -----
-    job = (
-        PostingJob
-        .for_account(AccountOption(username="id", password="pw"))
-        .with_title(TitleOption(fixed_title="제목"))
-        .with_body([Section(blocks=(ParagraphBlock(),))])
-        .with_publish(PublishOption(mode="immediate"))
+    spec = PostingSpec(
+        account=AccountOption(username="id", password="pw"),
+        title=TitleOption(fixed_title="title"),
+        body=(Section(blocks=(ParagraphBlock(),)),),
     )
-    job.run(editor)
+    runner = JobRunner(SpecValidator(), ContentBuilder(text_gen, img_proc))
+    runner.run(spec, editor)
 """
 
 from automator.options import (
-    AccountOption,
-    TitleOption,
-    Section,
-    Block,
-    HeadingBlock,
-    ParagraphBlock,
-    ImageBlock,
-    FeaturedImageBlock,
-    ListBlock,
-    QuoteBlock,
-    DividerBlock,
-    PublishOption,
-    RunSetting,
+    AccountOption, TitleOption, Section, Block,
+    HeadingBlock, ParagraphBlock, ImageBlock, FeaturedImageBlock,
+    ListBlock, QuoteBlock, DividerBlock,
+    PublishOption, RunSetting,
 )
+from automator.contracts import PostingSpec
 from automator.editor import BlogEditor
 from automator.title_generator import generate_title, validate_template
-from automator.paragraph_generator import generate_paragraphs, RateLimitError
+from automator.paragraph_generator import RateLimitError
 from automator.block_handlers import BlockHandler, ContentContext, get_handler, HANDLERS
-from automator.browser_actions import (
-    click_if_visible, click_polling,
-    dismiss, dismiss_polling, dismiss_parallel,
-    js_dispatch_click, find_editor_frame, find_js_frame,
-)
+from automator.ports import TextGenerator, ImageProcessor, SelectorSource
+from automator.stubs import StubTextGenerator, NoopImageProcessor, DictSelectorSource
+from automator.gemini_generator import GeminiGenerator
+from automator.local_processor import LocalImageProcessor
+from automator.json_selector_source import JsonSelectorSource
+from automator.spec_validator import SpecValidator
+from automator.content_builder import ContentBuilder
+from automator.runner import JobRunner
 from automator.smart_editor import SmartEditorOne
-from automator.job import PostingJob
 
 __all__ = [
-    # Value objects
-    "AccountOption",
-    "TitleOption",
-    "Section",
-    "Block",
-    "HeadingBlock",
-    "ParagraphBlock",
-    "ImageBlock",
-    "FeaturedImageBlock",
-    "ListBlock",
-    "QuoteBlock",
-    "DividerBlock",
-    "PublishOption",
-    "RunSetting",
-    # Editor
-    "BlogEditor",
-    "SmartEditorOne",
-    # Orchestrator
-    "PostingJob",
-    # Functions
-    "generate_title",
-    "validate_template",
-    "generate_paragraphs",
-    "RateLimitError",
-    # Extension API
-    "BlockHandler",
-    "ContentContext",
-    "get_handler",
-    "HANDLERS",
+    "PostingSpec", "AccountOption", "TitleOption", "Section", "Block",
+    "HeadingBlock", "ParagraphBlock", "ImageBlock", "FeaturedImageBlock",
+    "ListBlock", "QuoteBlock", "DividerBlock", "PublishOption", "RunSetting",
+    "BlogEditor", "SmartEditorOne",
+    "JobRunner", "SpecValidator", "ContentBuilder",
+    "TextGenerator", "ImageProcessor", "SelectorSource",
+    "GeminiGenerator", "LocalImageProcessor", "JsonSelectorSource",
+    "StubTextGenerator", "NoopImageProcessor", "DictSelectorSource",
+    "generate_title", "validate_template", "RateLimitError",
+    "BlockHandler", "ContentContext", "get_handler", "HANDLERS",
 ]

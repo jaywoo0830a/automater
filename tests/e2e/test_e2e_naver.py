@@ -21,13 +21,19 @@ from playwright.sync_api import Page
 
 from automator.config import browser_settings
 from automator.options import (
-    AccountOption, TitleOption, RunSetting, KST,
+    AccountOption, TitleOption, KST,
     ParagraphBlock, ImageBlock, FeaturedImageBlock, Section,
     PublishOption,
 )
 from automator.selector_loader import SelectorLoader
 from automator.smart_editor import SmartEditorOne
-from automator.job import PostingJob
+from automator.contracts import PostingSpec
+from automator.stubs import StubTextGenerator, NoopImageProcessor
+from automator.gemini_generator import GeminiGenerator
+from automator.local_processor import LocalImageProcessor
+from automator.spec_validator import SpecValidator
+from automator.content_builder import ContentBuilder
+from automator.runner import JobRunner
 
 load_dotenv()
 
@@ -54,9 +60,21 @@ def _asset(subdir: str, index: int) -> str | None:
     return str(files[index]) if index < len(files) else None
 
 
-def _run_job(job, editor) -> None:
-    """PostingJob 을 실행한다. conftest 의 mock 으로 Gemini API 호출 없음."""
-    job.run(editor)
+def _make_runner(real: bool = False) -> JobRunner:
+    """Build a JobRunner with stubs (default) or real implementations."""
+    if real:
+        text_gen = GeminiGenerator()
+        img_proc = LocalImageProcessor()
+    else:
+        text_gen = StubTextGenerator()
+        img_proc = NoopImageProcessor()
+    return JobRunner(SpecValidator(), ContentBuilder(text_gen, img_proc))
+
+
+def _run_spec(spec: PostingSpec, editor, *, real: bool = False) -> None:
+    """Execute a PostingSpec through the runner."""
+    runner = _make_runner(real=real)
+    runner.run(spec, editor)
 
 
 def _schedule(hours_ahead: int = 2) -> datetime:
@@ -88,20 +106,16 @@ def test_editor_iframe_is_visible(page: Page, account: AccountOption):
 @pytest.mark.slow
 def test_pipeline_text_only(editor: SmartEditorOne, account: AccountOption):
     """텍스트 블록만 있는 포스트 — 이미지 불필요."""
-    job = (
-        PostingJob
-        .for_account(account)
-        .with_title(TitleOption(fixed_title="텍스트 전용 테스트"))
-        .with_body([
-            Section(blocks=(
-                ParagraphBlock(prompt="강남 수학 과외 홍보 블로그"),
-                ParagraphBlock(prompt="후기 형식 마무리"),
-            )),
-        ])
-        .with_publish(PublishOption(mode="immediate"))
-        .with_setting(RunSetting())
+    spec = PostingSpec(
+        account=account,
+        title=TitleOption(fixed_title="텍스트 전용 테스트"),
+        body=(Section(blocks=(
+            ParagraphBlock(prompt="강남 수학 과외 홍보 블로그"),
+            ParagraphBlock(prompt="후기 형식 마무리"),
+        )),),
+        publish=PublishOption(mode="immediate"),
     )
-    _run_job(job, editor)
+    _run_spec(spec, editor)
 
 
 # ---------------------------------------------------------------------------
@@ -112,7 +126,7 @@ def test_pipeline_text_only(editor: SmartEditorOne, account: AccountOption):
 @pytest.mark.slow
 def test_pipeline_all_options(editor: SmartEditorOne, account: AccountOption):
     """
-    빌더의 모든 옵션을 지정한 통합 파이프라인 테스트.
+    모든 옵션을 지정한 통합 파이프라인 테스트.
     dry_run=True (editor fixture 기본값) — 팝오버 열림 후 발행 버튼 미클릭.
     이미지는 assets/ 에 파일이 있을 때만 포함한다.
     """
@@ -135,19 +149,17 @@ def test_pipeline_all_options(editor: SmartEditorOne, account: AccountOption):
             overlay_text="강남 수학 과외",
         ))
 
-    job = (
-        PostingJob
-        .for_account(account)
-        .with_title(TitleOption(
+    spec = PostingSpec(
+        account=account,
+        title=TitleOption(
             template="{region} {subject} {learning_type} {salt}",
             values={"region": "강남", "subject": "수학", "learning_type": "과외"},
             suffix_salts=("강력 추천", "즉시 가능"),
-        ))
-        .with_body([Section(blocks=tuple(blocks))])
-        .with_publish(PublishOption(mode="fixed", at=_schedule()))
-        .with_setting(RunSetting())
+        ),
+        body=(Section(blocks=tuple(blocks)),),
+        publish=PublishOption(mode="fixed", at=_schedule()),
     )
-    _run_job(job, editor)
+    _run_spec(spec, editor)
 
 
 # ---------------------------------------------------------------------------
@@ -188,16 +200,14 @@ def test_pipeline_real_publish(page: Page, account: AccountOption, real_run: boo
     write_url = f"https://blog.naver.com/{account.meta['blog_id']}?Redirect=Write&"
     editor    = SmartEditorOne(page, write_url, dry_run=False)
 
-    job = (
-        PostingJob
-        .for_account(account)
-        .with_title(TitleOption(
+    spec = PostingSpec(
+        account=account,
+        title=TitleOption(
             template="{region} {subject} {learning_type} {salt}",
             values={"region": "강남", "subject": "수학", "learning_type": "과외"},
             suffix_salts=("강력 추천", "즉시 가능"),
-        ))
-        .with_body([Section(blocks=tuple(blocks))])
-        .with_publish(PublishOption(mode="fixed", at=_schedule()))
-        .with_setting(RunSetting())
+        ),
+        body=(Section(blocks=tuple(blocks)),),
+        publish=PublishOption(mode="fixed", at=_schedule()),
     )
-    _run_job(job, editor)
+    _run_spec(spec, editor, real=True)

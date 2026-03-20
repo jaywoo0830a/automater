@@ -1,22 +1,22 @@
 """
 factory/tests/test_job_builder.py
 -----------------------------------
-job_builder 단위 테스트 — Combination → PostingJob 변환 규칙 검증.
+job_builder unit tests — Combination -> PostingSpec conversion rules.
 
-DB 없이 Mock 객체로 테스트한다.
+DB-free: uses Mock objects.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import MagicMock
 
 import pytest
 
+from automator.contracts import PostingSpec
 from automator.options import AccountOption, ParagraphBlock, Section, TitleOption
 from factory.job_builder import (
-    build_posting_job,
+    build_posting_spec,
     _build_body,
     _build_title_option,
     _build_values,
@@ -140,9 +140,9 @@ class TestBuildBody:
 # build_posting_job
 # ---------------------------------------------------------------------------
 
-class TestBuildPostingJob:
+class TestBuildPostingSpec:
 
-    def test_returns_posting_job(self):
+    def test_returns_posting_spec(self):
         combo = _combo(
             keywords=[
                 _keyword("region", "강남", cat_id=1),
@@ -151,13 +151,14 @@ class TestBuildPostingJob:
             title_template="{region} {subject}",
         )
         scheduled = datetime.now(tz=KST) + timedelta(hours=2)
-        job = build_posting_job(combo, _account(), scheduled)
-        assert job._account is not None
-        assert job._title is not None
-        assert len(job._body) == 1
-        assert job._publish is not None
-        assert job._publish.mode == "fixed"
-        assert job._publish.at == scheduled
+        spec = build_posting_spec(combo, _account(), scheduled)
+        assert isinstance(spec, PostingSpec)
+        assert spec.account is not None
+        assert spec.title is not None
+        assert len(spec.body) == 1
+        assert spec.publish is not None
+        assert spec.publish.mode == "fixed"
+        assert spec.publish.at == scheduled
 
     def test_naive_datetime_gets_kst_attached(self):
         combo = _combo(
@@ -165,9 +166,9 @@ class TestBuildPostingJob:
             title_template="{region}",
         )
         naive = datetime(2099, 1, 1, 9, 0)
-        job = build_posting_job(combo, _account(), naive)
-        assert job._publish.at.tzinfo is not None
-        assert job._publish.at.utcoffset() == timedelta(hours=9)
+        spec = build_posting_spec(combo, _account(), naive)
+        assert spec.publish.at.tzinfo is not None
+        assert spec.publish.at.utcoffset() == timedelta(hours=9)
 
     def test_aware_datetime_preserved(self):
         combo = _combo(
@@ -175,5 +176,5 @@ class TestBuildPostingJob:
             title_template="{region}",
         )
         aware = datetime(2099, 1, 1, 9, 0, tzinfo=KST)
-        job = build_posting_job(combo, _account(), aware)
-        assert job._publish.at is aware
+        spec = build_posting_spec(combo, _account(), aware)
+        assert spec.publish.at is aware

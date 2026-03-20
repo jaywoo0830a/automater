@@ -1,0 +1,38 @@
+"""
+automator/contracts.py
+-----------------------
+PostingSpec — shared contract between factory and automator.
+
+This is a pure data class with no execution logic. It sits in Zone A
+(contracts layer) so that both packages depend on it without depending
+on each other.
+
+factory builds PostingSpec → runner executes PostingSpec.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+from automator.options import (
+    AccountOption,
+    TitleOption,
+    Section,
+    PublishOption,
+    RunSetting,
+)
+
+
+@dataclass(frozen=True)
+class PostingSpec:
+    """
+    Immutable posting specification — all data needed to produce one post.
+
+    factory creates this from a Combination row.
+    automator.runner.JobRunner executes it against a BlogEditor.
+    """
+    account: AccountOption
+    title:   TitleOption     = field(default_factory=TitleOption)
+    body:    tuple[Section, ...] = ()
+    publish: PublishOption   = field(default_factory=PublishOption)
+    setting: RunSetting      = field(default_factory=RunSetting)

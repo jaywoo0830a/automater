@@ -172,39 +172,5 @@ def test_non_429_errors_propagate(monkeypatch):
             generate_paragraphs("p", 1)
 
 
-# ===========================================================================
-# PostingJob integration
-# ===========================================================================
-
-@pytest.mark.unit
-def test_job_uses_generator_when_prompt_set():
-    from automator.job import PostingJob
-    from automator.options import AccountOption, TitleOption, ParagraphBlock, Section
-
-    editor = MagicMock()
-    PostingJob \
-        .for_account(AccountOption(username="id", password="pw", meta={"blog_id": "blog"})) \
-        .with_title(TitleOption(fixed_title="테스트 포스트")) \
-        .with_body([Section(blocks=(ParagraphBlock(), ParagraphBlock()))]) \
-        .run(editor)
-
-    written = [c.args[0] for c in editor.insert_text.call_args_list]
-    assert len(written) == 2
-    assert all(w == _STUB_PARAGRAPHS[0] for w in written)
-
-
-@pytest.mark.unit
-def test_job_uses_stub_when_no_prompt():
-    from automator.job import PostingJob
-    from automator.options import AccountOption, TitleOption, ParagraphBlock, Section
-
-    editor = MagicMock()
-    PostingJob \
-        .for_account(AccountOption(username="id", password="pw", meta={"blog_id": "blog"})) \
-        .with_title(TitleOption(fixed_title="테스트 포스트")) \
-        .with_body([Section(blocks=(ParagraphBlock(),))]) \
-        .run(editor)
-
-    written = [c.args[0] for c in editor.insert_text.call_args_list]
-    assert len(written) == 1
-    assert written[0] == _STUB_PARAGRAPHS[0]
+# PostingJob integration tests removed — now covered by
+# tests/integration/test_content_builder.py

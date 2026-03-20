@@ -18,7 +18,7 @@ import tempfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from automator.editor import (
     PostStep,
@@ -40,6 +40,9 @@ from automator.options import (
     DividerBlock,
 )
 
+if TYPE_CHECKING:
+    from automator.ports import TextGenerator, ImageProcessor
+
 
 # ---------------------------------------------------------------------------
 # ContentContext
@@ -51,6 +54,8 @@ class ContentContext:
     paragraph_index:  int        = 0
     total_paragraphs: int        = 0
     tmp_files:        list[str]  = field(default_factory=list)
+    text_gen:         Any        = None
+    img_proc:         Any        = None
 
 
 # ---------------------------------------------------------------------------
@@ -78,7 +83,6 @@ class ParagraphHandler(BlockHandler):
     """ParagraphBlock -> [ParagraphStep]"""
 
     def to_steps(self, block: ParagraphBlock, ctx: ContentContext) -> list[PostStep]:
-        from automator.paragraph_generator import generate_paragraphs
         from automator.seo_prompt import build_prompt
 
         prompt = build_prompt(
@@ -86,7 +90,7 @@ class ParagraphHandler(BlockHandler):
             paragraph_index=ctx.paragraph_index,
             total_paragraphs=ctx.total_paragraphs,
         )
-        text = generate_paragraphs(prompt, 1)[0]
+        text = ctx.text_gen.generate(prompt, 1)[0]
         ctx.paragraph_index += 1
         return [ParagraphStep(text=text, newlines=block.newlines)]
 
@@ -101,11 +105,9 @@ class ImageHandler(BlockHandler):
         return [ImageStep(path=path)]
 
     def _process(self, block: ImageBlock, ctx: ContentContext) -> str:
-        from automator.image_processor import process_image, build_filename
-
         raw = Path(block.path).read_bytes()
-        processed = process_image(raw, block)
-        fname = build_filename("preview", 1, block.filename_keyword)
+        processed = ctx.img_proc.process_body(raw, block)
+        fname = ctx.img_proc.build_filename("preview", 1, block.filename_keyword)
         tmp = tempfile.NamedTemporaryFile(
             suffix=".jpg", prefix=fname.replace(".jpg", "_"), delete=False,
         )
@@ -125,11 +127,9 @@ class FeaturedImageHandler(BlockHandler):
         return [FeaturedImageStep(path=path)]
 
     def _process(self, block: FeaturedImageBlock, ctx: ContentContext) -> str:
-        from automator.image_processor import process_featured, build_filename
-
         raw = Path(block.path).read_bytes()
-        processed = process_featured(raw, block)
-        fname = build_filename("featured", 1, block.filename_keyword)
+        processed = ctx.img_proc.process_featured(raw, block)
+        fname = ctx.img_proc.build_filename("featured", 1, block.filename_keyword)
         tmp = tempfile.NamedTemporaryFile(
             suffix=".jpg", prefix=fname.replace(".jpg", "_"), delete=False,
         )

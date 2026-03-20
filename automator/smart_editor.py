@@ -23,6 +23,7 @@ from playwright.sync_api import Page
 
 from automator.editor import BlogEditor, CursorPosition
 from automator.selector_loader import SelectorLoader
+from automator.ports import SelectorSource
 from automator.browser_actions import (
     click_if_visible,
     click_polling,
@@ -45,19 +46,29 @@ class SmartEditorOne(BlogEditor):
     """
     Naver Smart Editor One implementation of BlogEditor.
 
-    Resolves selectors from editor.json and delegates all DOM work to
+    Resolves selectors via an injected SelectorSource (or falls back to
+    loading editor.json directly). Delegates all DOM work to
     browser_actions functions. No selector strings are hardcoded here.
 
     Args:
-        page:      An authenticated Playwright Page.
-        write_url: Blog write page URL (e.g. from account.meta['blog_id']).
-        dry_run:   If True (default), publish() is a no-op.
+        page:       An authenticated Playwright Page.
+        write_url:  Blog write page URL (e.g. from account.meta['blog_id']).
+        dry_run:    If True (default), publish() is a no-op.
+        sel_source: Optional SelectorSource for dependency injection.
+                    When None, loads selectors/naver/editor.json directly.
     """
 
-    def __init__(self, page: Page, write_url: str, dry_run: bool = True) -> None:
-        self._page      = page
-        self._write_url = write_url
-        self._dry_run   = dry_run
+    def __init__(
+        self,
+        page: Page,
+        write_url: str,
+        dry_run: bool = True,
+        sel_source: SelectorSource | None = None,
+    ) -> None:
+        self._page       = page
+        self._write_url  = write_url
+        self._dry_run    = dry_run
+        self._sel_source = sel_source
         self._sel_cache: SelectorLoader | None = None
 
     # ------------------------------------------------------------------
@@ -369,7 +380,10 @@ class SmartEditorOne(BlogEditor):
     def _sel(self) -> SelectorLoader:
         """Return cached SelectorLoader — loaded once, reused for the lifetime of the editor."""
         if self._sel_cache is None:
-            self._sel_cache = SelectorLoader.load(_EDITOR_JSON)
+            if self._sel_source is not None:
+                self._sel_cache = self._sel_source.load("editor")
+            else:
+                self._sel_cache = SelectorLoader.load(_EDITOR_JSON)
         return self._sel_cache
 
     def _frame(self):

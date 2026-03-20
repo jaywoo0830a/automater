@@ -98,7 +98,7 @@ case "${MODE}" in
 
   --unit)
     echo "── unit ─────────────────────────────────"
-    pytest -m unit -v
+    pytest tests/unit/ tests/integration/ tests/browser/ -m unit -v
     ;;
 
   --factory)
@@ -107,57 +107,63 @@ case "${MODE}" in
 
   --e2e)
     echo "── [1/3] unit ───────────────────────────"
-    pytest -m unit -v
+    pytest tests/unit/ tests/integration/ -m unit -v
     echo ""
     _run_factory_tests
     echo ""
     echo "── [3/3] e2e smoke ──────────────────────"
-    pytest tests/test_e2e_naver.py -m "e2e and not slow" -v
+    pytest tests/e2e/test_e2e_naver.py -m "e2e and not slow" -v
     ;;
 
   --all)
     echo "── [1/3] unit ───────────────────────────"
-    pytest -m unit -v
+    pytest tests/unit/ tests/integration/ -m unit -v
     echo ""
     _run_factory_tests
     echo ""
     echo "── [3/3] e2e ────────────────────────────"
-    pytest tests/test_e2e_naver.py -m "e2e and not slow" -v
+    pytest tests/e2e/test_e2e_naver.py -m "e2e and not slow" -v
     ;;
 
   --help|-h)
     cat << 'HELP'
 
-  bash ./run/test.sh               # unit tests
+  bash ./run/test.sh               # unit tests (all categories)
   bash ./run/test.sh --factory     # factory unit (MySQL container auto)
   bash ./run/test.sh --e2e         # unit + factory + e2e smoke
   bash ./run/test.sh --all         # everything
 
-  Test files (tests/):
-    test_post_step.py           PostStep.execute() self-dispatch
-    test_smart_editor.py        SmartEditorOne DOM wiring
-    test_title_generator.py     generate_title() + validate_template()
-    test_paragraph_generator.py generate_paragraphs()
-    test_image_processor.py     process_image() / process_featured()
-    test_seo_prompt.py          build_prompt()
-    test_block_handlers.py      BlockHandler image processing
-    test_layout.py              Section/Block validation
-    test_job_builder.py         PostingJob builder immutability
-    test_job_validation.py      PostingJob.validate()
-    test_job_execution.py       PostingJob.run() call sequence
-    test_publish_option.py      PublishOption schedule
-    test_seo_integration.py     SEO prompt in job context
-    test_browser_actions.py     Pure DOM functions
-    test_browser_config.py      BrowserSettings
-    test_browser_selectors.py   SelectorLoader
-    test_e2e_naver.py           E2E smoke (requires session)
+  tests/unit/                          Pure functions, no collaborators
+    test_title_generator.py            generate_title() + validate_template()
+    test_paragraph_generator.py        generate_paragraphs() stubs
+    test_seo_prompt.py                 build_prompt()
+    test_layout.py                     Section/Block validation
+    test_post_step.py                  PostStep.execute() dispatch
+    test_image_processor.py            process_image() / process_featured()
+    test_ports.py                      Port ABCs + test doubles
 
-  Test files (factory/tests/ — requires --factory):
-    test_user.py                User model + ownership
-    test_campaign_slots.py      ComboGenerator slot logic
-    test_keyword_picker.py      save_picks / load_picks
-    test_batch_dispatcher.py    BatchDispatcher
-    test_job_builder.py         Combination -> PostingJob
+  tests/integration/                   Collaborator wiring (injected stubs)
+    test_spec_builder.py               PostingSpec immutability
+    test_spec_validator.py             SpecValidator rules
+    test_content_builder.py            ContentBuilder block -> step pipeline
+    test_runner.py                     JobRunner editor call sequence
+    test_publish_option.py             Schedule resolution
+
+  tests/browser/                       Playwright mocks (no real browser)
+    test_smart_editor.py               SmartEditorOne DOM wiring
+    test_browser_actions.py            Pure DOM functions
+    test_browser_config.py             BrowserSettings
+    test_browser_selectors.py          SelectorLoader
+
+  tests/e2e/                           Real browser (requires session)
+    test_e2e_naver.py                  E2E smoke
+
+  factory/tests/ (--factory flag)      DB-backed (MySQL container)
+    test_user.py                       User model + ownership
+    test_campaign_slots.py             ComboGenerator slot logic
+    test_keyword_picker.py             save_picks / load_picks
+    test_batch_dispatcher.py           BatchDispatcher
+    test_job_builder.py                Combination -> PostingSpec
 
 HELP
     ;;

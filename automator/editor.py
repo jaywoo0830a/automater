@@ -192,8 +192,9 @@ class QuoteStep(PostStep):
 
 @dataclass
 class _PostContent:
-    """Internal: PostingJob._generate_content creates, _execute consumes."""
+    """Internal: ContentBuilder creates, JobRunner._execute consumes."""
     title:       str
     steps:       list[PostStep]  = field(default_factory=list)
     tags:        list[str]       = field(default_factory=list)
     schedule_at: datetime | None = None
+    tmp_files:   list[str]       = field(default_factory=list)

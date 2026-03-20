@@ -1,15 +1,15 @@
 """
 factory/job_builder.py
 -----------------------
-Translates DB models (Combination) into automator domain objects (PostingJob).
+Translates DB models (Combination) into a PostingSpec contract.
 
 This module owns the mapping rules between the factory schema and the
-automator builder API.  The rules are independently testable without
-multiprocessing or a browser.
+automator contracts. No automator internals are imported — only the
+shared contracts layer.
 
-    Combination  ──→  TitleOption   (via _build_title_option)
-                 ──→  Section[]     (via _build_body)
-                 ──→  PostingJob    (via build_posting_job)
+    Combination  -->  TitleOption   (via _build_title_option)
+                 -->  Section[]     (via _build_body)
+                 -->  PostingSpec   (via build_posting_spec)
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from automator.job import PostingJob
+from automator.contracts import PostingSpec
 from automator.options import (
     AccountOption,
     ParagraphBlock,
@@ -34,13 +34,13 @@ KST = timezone(timedelta(hours=9))
 # Public API
 # ---------------------------------------------------------------------------
 
-def build_posting_job(
+def build_posting_spec(
     combo:        Any,
     account_opt:  AccountOption,
     scheduled_at: datetime,
-) -> PostingJob:
+) -> PostingSpec:
     """
-    Build a ready-to-run PostingJob from a DB Combination row.
+    Build a PostingSpec from a DB Combination row.
 
     Args:
         combo:        factory.models.Combination instance.
@@ -48,7 +48,7 @@ def build_posting_job(
         scheduled_at: Batch-level scheduled datetime (KST-aware).
 
     Returns:
-        A fully configured PostingJob — call .run(editor) to execute.
+        A fully configured PostingSpec ready for JobRunner.run().
     """
     title_opt   = _build_title_option(combo)
     body        = _build_body(combo)
@@ -60,13 +60,12 @@ def build_posting_job(
             else scheduled_at
         ),
     )
-    return (
-        PostingJob
-        .for_account(account_opt)
-        .with_title(title_opt)
-        .with_body(body)
-        .with_publish(publish_opt)
-        .with_setting(RunSetting())
+    return PostingSpec(
+        account=account_opt,
+        title=title_opt,
+        body=tuple(body),
+        publish=publish_opt,
+        setting=RunSetting(),
     )
 
 
