@@ -1,1677 +1,104 @@
 openapi: 3.2.0
 info:
-  title: Automator Factory API
-  version: 2.0.0
+  title: Automater Factory API
+  version: 0.1.0
   description: |
-    블로그 자동화 캠페인 관리 API.
-
-    **리소스 계층**
-    ```
-    User (SPA login — owns Accounts + Campaigns)
-    Platform          (global, shared)
-    ├── Account       (user_id FK)
-    └── Campaign      (user_id FK)
-         ├── CampaignSlot
-         ├── SpacingRule
-         ├── KeywordPick
-         ├── CampaignPalette
-         │    └── PaletteItem
-         ├── Combination
-         └── Batch
-              └── BatchItem
-    KeywordCategory   (global, shared)
-    └── Keyword
-         └── Affix
-    ```
-
-    **인증**
-    - `POST /auth/register` — 회원가입
-    - `POST /auth/login`    — JWT 발급
-    - `GET  /auth/me`       — 내 정보 조회
-    - `POST /auth/change-password` — 비밀번호 변경
-
-    **도메인 액션**
-    - `POST /campaigns/{id}/combinations/seed`     — 키워드 카테시안 곱 생성
-    - `POST /campaigns/{id}/combinations/preview`  — 생성될 조합 수 미리보기
-    - `POST /campaigns/{id}/batches/dispatch`       — 가용 계정에 배치 할당
-    - `POST /campaigns/{id}/preview-title`          — 제목 생성 미리보기
-    - `POST /campaigns/{id}/clone`                  — 캠페인 깊은 복제
-    - `POST /batches/{id}/start`                    — 워커 프로세스 시작
-    - `POST /batches/{id}/cancel`                   — 실행 중 배치 중단
-    - `POST /batch-items/{id}/retry`                — 실패 항목 재시도
-    - `GET  /campaigns/{id}/stats`                  — 대시보드 집계
-
-    **실시간 업데이트**
-    - `WebSocket /ws/batches/{batchId}` — 배치 진행률 실시간 푸시
-      (OAS 3.2.0 paths로 표현하지 않음 — 별도 AsyncAPI 문서 참조)
+    SPA backend for blog automation campaign management.
+    Designed from current ERD + codebase.
+  license:
+    name: Proprietary
 
 servers:
-  - url: http://localhost:8000/api/v1
-    description: Local development
+  - url: /api/v1
 
-# ---------------------------------------------------------------------------
-# Tags — OAS 3.2.0 hierarchical tags
-# ---------------------------------------------------------------------------
+security:
+  - bearerAuth: []
+
 tags:
   - name: auth
-    summary: 인증 (로그인/회원가입)
-    kind: nav
-  - name: users
-    summary: 사용자 관리
-    kind: nav
+    description: Registration, login, profile
+  - name: admin
+    description: User management (admin only)
   - name: platforms
-    summary: 플랫폼 관리
-    kind: nav
+    description: Blog platforms (read-only reference)
   - name: accounts
-    summary: 계정 관리
-    parent: platforms
-    kind: nav
-  - name: keyword-categories
-    summary: 키워드 카테고리
-    kind: nav
+    description: Blog login accounts
   - name: keywords
-    summary: 키워드 마스터 데이터
-    parent: keyword-categories
-    kind: nav
-  - name: affixes
-    summary: 키워드 접사 (접두사/접미사)
-    parent: keywords
-    kind: nav
+    description: Categories, keywords, affixes
+  - name: layouts
+    description: Reusable post block layouts
+  - name: presets
+    description: Publish and run presets (JSON config)
   - name: campaigns
-    summary: 캠페인 관리
-    kind: nav
-  - name: campaign-slots
-    summary: 캠페인 슬롯 (카테고리 순서)
-    parent: campaigns
-    kind: nav
-  - name: spacing-rules
-    summary: 띄어쓰기 패턴
-    parent: campaigns
-    kind: nav
-  - name: keyword-picks
-    summary: 키워드 선택 필터
-    parent: campaigns
-    kind: nav
-  - name: palettes
-    summary: 샘플링 풀 (솔트, CTA)
-    parent: campaigns
-    kind: nav
+    description: Campaign setup, slots, palettes, picks, spacing rules
   - name: combinations
-    summary: 키워드 조합
-    parent: campaigns
-    kind: nav
+    description: Keyword Cartesian product generation
   - name: batches
-    summary: 실행 배치
-    parent: campaigns
-    kind: nav
-  - name: batch-items
-    summary: 배치 항목
-    parent: batches
-    kind: nav
-
-# ═══════════════════════════════════════════════════════════════════════════
-# Paths
-# ═══════════════════════════════════════════════════════════════════════════
-
-paths:
-
-  # ── Auth ─────────────────────────────────────────────────────────────────
-
-  /auth/register:
-    post:
-      tags: [auth]
-      operationId: register
-      summary: 회원가입
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RegisterRequest'
-      responses:
-        '201':
-          description: 가입 완료
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AuthResponse'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          $ref: '#/components/responses/ValidationError'
-
-  /auth/login:
-    post:
-      tags: [auth]
-      operationId: login
-      summary: 로그인
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/LoginRequest'
-      responses:
-        '200':
-          description: 로그인 성공
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AuthResponse'
-        '401':
-          description: 인증 실패
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-  /auth/me:
-    get:
-      tags: [auth]
-      operationId: getMe
-      summary: 현재 로그인된 사용자 조회
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-        '401':
-          description: 인증 필요
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-    patch:
-      tags: [auth]
-      operationId: updateMe
-      summary: 내 정보 수정
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UserUpdate'
-      responses:
-        '200':
-          description: 수정됨
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-        '401':
-          description: 인증 필요
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-  /auth/change-password:
-    post:
-      tags: [auth]
-      operationId: changePassword
-      summary: 비밀번호 변경
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ChangePasswordRequest'
-      responses:
-        '200':
-          description: 변경 완료
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [message]
-                properties:
-                  message:
-                    type: string
-        '401':
-          description: 현재 비밀번호 불일치
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-  # ── Users (admin only) ──────────────────────────────────────────────────
-
-  /users:
-    get:
-      tags: [users]
-      operationId: listUsers
-      summary: 사용자 목록 (admin)
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: role
-          in: query
-          schema:
-            $ref: '#/components/schemas/UserRole'
-        - name: status
-          in: query
-          schema:
-            $ref: '#/components/schemas/UserStatus'
-        - $ref: '#/components/parameters/PageOffset'
-        - $ref: '#/components/parameters/PageLimit'
-      responses:
-        '200':
-          description: 사용자 목록
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedUsers'
-        '403':
-          description: 관리자 권한 필요
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-  /users/{userId}:
-    parameters:
-      - $ref: '#/components/parameters/UserId'
-
-    get:
-      tags: [users]
-      operationId: getUser
-      summary: 사용자 단건 조회 (admin)
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-    patch:
-      tags: [users]
-      operationId: updateUser
-      summary: 사용자 수정 (admin — role/status 변경)
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AdminUserUpdate'
-      responses:
-        '200':
-          description: 수정됨
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  # ── Platforms ────────────────────────────────────────────────────────────
-
-  /platforms:
-    get:
-      tags: [platforms]
-      operationId: listPlatforms
-      summary: 플랫폼 목록 조회
-      parameters:
-        - $ref: '#/components/parameters/PageOffset'
-        - $ref: '#/components/parameters/PageLimit'
-      responses:
-        '200':
-          description: 플랫폼 목록
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedPlatforms'
-
-    post:
-      tags: [platforms]
-      operationId: createPlatform
-      summary: 플랫폼 생성
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PlatformCreate'
-      responses:
-        '201':
-          description: 생성됨
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Platform'
-        '409':
-          $ref: '#/components/responses/Conflict'
-
-  /platforms/{platformId}:
-    parameters:
-      - $ref: '#/components/parameters/PlatformId'
-
-    get:
-      tags: [platforms]
-      operationId: getPlatform
-      summary: 플랫폼 단건 조회
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Platform'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-    patch:
-      tags: [platforms]
-      operationId: updatePlatform
-      summary: 플랫폼 수정
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PlatformUpdate'
-      responses:
-        '200':
-          description: 수정됨
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Platform'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-    delete:
-      tags: [platforms]
-      operationId: deletePlatform
-      summary: 플랫폼 삭제
-      responses:
-        '204':
-          description: 삭제됨
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  # ── Accounts ─────────────────────────────────────────────────────────────
-
-  /platforms/{platformId}/accounts:
-    parameters:
-      - $ref: '#/components/parameters/PlatformId'
-
-    get:
-      tags: [accounts]
-      operationId: listAccounts
-      summary: 플랫폼별 계정 목록
-      parameters:
-        - name: status
-          in: query
-          schema:
-            $ref: '#/components/schemas/AccountStatus'
-        - $ref: '#/components/parameters/PageOffset'
-        - $ref: '#/components/parameters/PageLimit'
-      responses:
-        '200':
-          description: 계정 목록
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedAccounts'
-
-    post:
-      tags: [accounts]
-      operationId: createAccount
-      summary: 계정 생성
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AccountCreate'
-      responses:
-        '201':
-          description: 생성됨
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Account'
-        '409':
-          $ref: '#/components/responses/Conflict'
-
-  /accounts/{accountId}:
-    parameters:
-      - $ref: '#/components/parameters/AccountId'
-
-    get:
-      tags: [accounts]
-      operationId: getAccount
-      summary: 계정 단건 조회
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Account'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-    patch:
-      tags: [accounts]
-      operationId: updateAccount
-      summary: 계정 수정
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AccountUpdate'
-      responses:
-        '200':
-          description: 수정됨
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Account'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-    delete:
-      tags: [accounts]
-      operationId: deleteAccount
-      summary: 계정 삭제
-      responses:
-        '204':
-          description: 삭제됨
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  # ── Keyword Categories ──────────────────────────────────────────────────
-
-  /keyword-categories:
-    get:
-      tags: [keyword-categories]
-      operationId: listKeywordCategories
-      summary: 키워드 카테고리 목록
-      responses:
-        '200':
-          description: 카테고리 목록
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedKeywordCategories'
-
-    post:
-      tags: [keyword-categories]
-      operationId: createKeywordCategory
-      summary: 키워드 카테고리 생성
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/KeywordCategoryCreate'
-      responses:
-        '201':
-          description: 생성됨
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/KeywordCategory'
-        '409':
-          $ref: '#/components/responses/Conflict'
-
-  /keyword-categories/{categoryId}:
-    parameters:
-      - $ref: '#/components/parameters/CategoryId'
-
-    get:
-      tags: [keyword-categories]
-      operationId: getKeywordCategory
-      summary: 카테고리 단건 조회
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/KeywordCategory'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-    patch:
-      tags: [keyword-categories]
-      operationId: updateKeywordCategory
-      summary: 카테고리 수정
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/KeywordCategoryUpdate'
-      responses:
-        '200':
-          description: 수정됨
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/KeywordCategory'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-    delete:
-      tags: [keyword-categories]
-      operationId: deleteKeywordCategory
-      summary: 카테고리 삭제
-      responses:
-        '204':
-          description: 삭제됨
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  # ── Keywords ────────────────────────────────────────────────────────────
-
-  /keyword-categories/{categoryId}/keywords:
-    parameters:
-      - $ref: '#/components/parameters/CategoryId'
-
-    get:
-      tags: [keywords]
-      operationId: listKeywords
-      summary: 카테고리별 키워드 목록
-      parameters:
-        - name: active
-          in: query
-          schema:
-            type: boolean
-        - name: tier
-          in: query
-          schema:
-            type: integer
-        - $ref: '#/components/parameters/PageOffset'
-        - $ref: '#/components/parameters/PageLimit'
-      responses:
-        '200':
-          description: 키워드 목록
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedKeywords'
-
-    post:
-      tags: [keywords]
-      operationId: createKeyword
-      summary: 키워드 생성
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/KeywordCreate'
-      responses:
-        '201':
-          description: 생성됨
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Keyword'
-        '409':
-          $ref: '#/components/responses/Conflict'
-
-  /keywords/{keywordId}:
-    parameters:
-      - $ref: '#/components/parameters/KeywordId'
-
-    get:
-      tags: [keywords]
-      operationId: getKeyword
-      summary: 키워드 단건 조회 (affixes 포함)
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Keyword'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-    patch:
-      tags: [keywords]
-      operationId: updateKeyword
-      summary: 키워드 수정
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/KeywordUpdate'
-      responses:
-        '200':
-          description: 수정됨
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Keyword'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-    delete:
-      tags: [keywords]
-      operationId: deleteKeyword
-      summary: 키워드 삭제
-      responses:
-        '204':
-          description: 삭제됨
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  # ── Affixes (NEW) ───────────────────────────────────────────────────────
-
-  /keywords/{keywordId}/affixes:
-    parameters:
-      - $ref: '#/components/parameters/KeywordId'
-
-    get:
-      tags: [affixes]
-      operationId: listAffixes
-      summary: 키워드별 접사 목록
-      parameters:
-        - name: type
-          in: query
-          description: prefix 또는 suffix 필터
-          schema:
-            $ref: '#/components/schemas/AffixType'
-      responses:
-        '200':
-          description: 접사 목록
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Affix'
-
-    post:
-      tags: [affixes]
-      operationId: createAffix
-      summary: 접사 생성
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AffixCreate'
-      responses:
-        '201':
-          description: 생성됨
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Affix'
-        '409':
-          $ref: '#/components/responses/Conflict'
-
-    put:
-      tags: [affixes]
-      operationId: replaceAffixes
-      summary: 접사 일괄 교체
-      description: |
-        해당 키워드의 기존 접사를 전부 삭제하고 전달된 목록으로 교체한다.
-        CSV 일괄 import 시 사용. 배열 순서가 곧 sort_order.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                $ref: '#/components/schemas/AffixCreate'
-      responses:
-        '200':
-          description: 교체됨
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Affix'
-
-  /affixes/{affixId}:
-    parameters:
-      - $ref: '#/components/parameters/AffixId'
-
-    patch:
-      tags: [affixes]
-      operationId: updateAffix
-      summary: 접사 수정
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AffixUpdate'
-      responses:
-        '200':
-          description: 수정됨
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Affix'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-    delete:
-      tags: [affixes]
-      operationId: deleteAffix
-      summary: 접사 삭제
-      responses:
-        '204':
-          description: 삭제됨
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  # ── Campaigns ───────────────────────────────────────────────────────────
-
-  /campaigns:
-    get:
-      tags: [campaigns]
-      operationId: listCampaigns
-      summary: 캠페인 목록
-      parameters:
-        - name: platform_id
-          in: query
-          schema:
-            type: integer
-        - name: status
-          in: query
-          schema:
-            $ref: '#/components/schemas/CampaignStatus'
-        - $ref: '#/components/parameters/PageOffset'
-        - $ref: '#/components/parameters/PageLimit'
-      responses:
-        '200':
-          description: 캠페인 목록
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedCampaigns'
-
-    post:
-      tags: [campaigns]
-      operationId: createCampaign
-      summary: 캠페인 생성
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CampaignCreate'
-      responses:
-        '201':
-          description: 생성됨
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Campaign'
-
-  /campaigns/{campaignId}:
-    parameters:
-      - $ref: '#/components/parameters/CampaignId'
-
-    get:
-      tags: [campaigns]
-      operationId: getCampaign
-      summary: 캠페인 단건 조회 (palettes 포함)
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Campaign'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-    patch:
-      tags: [campaigns]
-      operationId: updateCampaign
-      summary: 캠페인 수정
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CampaignUpdate'
-      responses:
-        '200':
-          description: 수정됨
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Campaign'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-    delete:
-      tags: [campaigns]
-      operationId: deleteCampaign
-      summary: 캠페인 삭제
-      responses:
-        '204':
-          description: 삭제됨
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  # ── Campaign — domain actions (NEW) ─────────────────────────────────────
-
-  /campaigns/{campaignId}/preview-title:
-    parameters:
-      - $ref: '#/components/parameters/CampaignId'
-
-    post:
-      tags: [campaigns]
-      operationId: previewTitle
-      summary: 제목 생성 미리보기
-      description: |
-        generate_title()을 dry run하여 샘플 제목을 반환한다.
-        캠페인의 title_template, palettes(salt), 슬롯 키워드를 사용.
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                count:
-                  type: integer
-                  default: 5
-                  description: 생성할 샘플 제목 수
-      responses:
-        '200':
-          description: 샘플 제목 목록
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TitlePreviewResult'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '422':
-          $ref: '#/components/responses/ValidationError'
-
-  /campaigns/{campaignId}/stats:
-    parameters:
-      - $ref: '#/components/parameters/CampaignId'
-
-    get:
-      tags: [campaigns]
-      operationId: getCampaignStats
-      summary: 캠페인 대시보드 집계
-      description: |
-        한 번의 호출로 SPA 대시보드에 필요한 모든 집계값을 반환한다.
-      responses:
-        '200':
-          description: 집계 데이터
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CampaignStats'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /campaigns/{campaignId}/clone:
-    parameters:
-      - $ref: '#/components/parameters/CampaignId'
-
-    post:
-      tags: [campaigns]
-      operationId: cloneCampaign
-      summary: 캠페인 깊은 복제
-      description: |
-        캠페인과 연관된 슬롯, 스페이싱 규칙, 팔레트, 키워드 픽을 모두 복제한다.
-        조합(Combination)과 배치(Batch)는 복제하지 않는다.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [name]
-              properties:
-                name:
-                  type: string
-                  maxLength: 128
-                  description: 새 캠페인 이름
-      responses:
-        '201':
-          description: 복제된 캠페인
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Campaign'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  # ── Campaign Slots ─────────────────────────────────────────────────────
-
-  /campaigns/{campaignId}/slots:
-    parameters:
-      - $ref: '#/components/parameters/CampaignId'
-
-    get:
-      tags: [campaign-slots]
-      operationId: listCampaignSlots
-      summary: 캠페인 슬롯 목록
-      responses:
-        '200':
-          description: 슬롯 목록 (sort_order 순)
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/CampaignSlot'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-    put:
-      tags: [campaign-slots]
-      operationId: replaceCampaignSlots
-      summary: 캠페인 슬롯 일괄 교체
-      description: |
-        기존 슬롯을 전부 삭제하고 전달된 목록으로 교체한다.
-        배열 순서가 곧 sort_order.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                $ref: '#/components/schemas/CampaignSlotCreate'
-      responses:
-        '200':
-          description: 교체됨
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/CampaignSlot'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  # ── Spacing Rules ──────────────────────────────────────────────────────
-
-  /campaigns/{campaignId}/spacing-rules:
-    parameters:
-      - $ref: '#/components/parameters/CampaignId'
-
-    get:
-      tags: [spacing-rules]
-      operationId: listSpacingRules
-      summary: 띄어쓰기 규칙 목록
-      responses:
-        '200':
-          description: 규칙 목록
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/SpacingRule'
-
-    post:
-      tags: [spacing-rules]
-      operationId: createSpacingRule
-      summary: 띄어쓰기 규칙 생성
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SpacingRuleCreate'
-      responses:
-        '201':
-          description: 생성됨
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SpacingRule'
-
-  /spacing-rules/{ruleId}:
-    parameters:
-      - $ref: '#/components/parameters/RuleId'
-
-    patch:
-      tags: [spacing-rules]
-      operationId: updateSpacingRule
-      summary: 띄어쓰기 규칙 수정
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SpacingRuleUpdate'
-      responses:
-        '200':
-          description: 수정됨
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SpacingRule'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-    delete:
-      tags: [spacing-rules]
-      operationId: deleteSpacingRule
-      summary: 띄어쓰기 규칙 삭제
-      responses:
-        '204':
-          description: 삭제됨
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  # ── Keyword Picks ──────────────────────────────────────────────────────
-
-  /campaigns/{campaignId}/picks:
-    parameters:
-      - $ref: '#/components/parameters/CampaignId'
-
-    get:
-      tags: [keyword-picks]
-      operationId: loadPicks
-      summary: 캠페인 키워드 선택 현황 조회
-      description: |
-        카테고리 slug별 선택된 키워드 값 목록을 반환한다.
-        빈 배열 = 해당 카테고리의 전체 active 키워드 사용.
-      responses:
-        '200':
-          description: 카테고리별 선택 현황
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PicksMap'
-              example:
-                region: ["강남구", "수원시"]
-                subject: ["수학"]
-                learning_type: []
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /campaigns/{campaignId}/picks/{categorySlug}:
-    parameters:
-      - $ref: '#/components/parameters/CampaignId'
-      - $ref: '#/components/parameters/CategorySlug'
-
-    put:
-      tags: [keyword-picks]
-      operationId: savePicks
-      summary: 카테고리별 키워드 선택 저장
-      description: |
-        해당 카테고리의 기존 선택을 전부 교체한다.
-        빈 배열을 전달하면 선택을 초기화한다 (전체 사용).
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SavePicksRequest'
-      responses:
-        '200':
-          description: 저장 결과
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SavePicksResponse'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '422':
-          $ref: '#/components/responses/ValidationError'
-
-  # ── Palettes (NEW) ─────────────────────────────────────────────────────
-
-  /campaigns/{campaignId}/palettes:
-    parameters:
-      - $ref: '#/components/parameters/CampaignId'
-
-    get:
-      tags: [palettes]
-      operationId: listPalettes
-      summary: 캠페인 팔레트 목록
-      responses:
-        '200':
-          description: 팔레트 목록 (items 포함)
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/CampaignPalette'
-
-    post:
-      tags: [palettes]
-      operationId: createPalette
-      summary: 팔레트 생성
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CampaignPaletteCreate'
-      responses:
-        '201':
-          description: 생성됨
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CampaignPalette'
-        '409':
-          $ref: '#/components/responses/Conflict'
-
-  /palettes/{paletteId}:
-    parameters:
-      - $ref: '#/components/parameters/PaletteId'
-
-    get:
-      tags: [palettes]
-      operationId: getPalette
-      summary: 팔레트 단건 조회 (items 포함)
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CampaignPalette'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-    patch:
-      tags: [palettes]
-      operationId: updatePalette
-      summary: 팔레트 수정
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CampaignPaletteUpdate'
-      responses:
-        '200':
-          description: 수정됨
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CampaignPalette'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-    delete:
-      tags: [palettes]
-      operationId: deletePalette
-      summary: 팔레트 삭제
-      responses:
-        '204':
-          description: 삭제됨
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /palettes/{paletteId}/items:
-    parameters:
-      - $ref: '#/components/parameters/PaletteId'
-
-    put:
-      tags: [palettes]
-      operationId: replacePaletteItems
-      summary: 팔레트 항목 일괄 교체
-      description: |
-        기존 항목을 전부 삭제하고 전달된 목록으로 교체한다.
-        배열 순서가 곧 sort_order.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                $ref: '#/components/schemas/PaletteItemCreate'
-      responses:
-        '200':
-          description: 교체됨
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/PaletteItem'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  # ── Combinations ───────────────────────────────────────────────────────
-
-  /campaigns/{campaignId}/combinations:
-    parameters:
-      - $ref: '#/components/parameters/CampaignId'
-
-    get:
-      tags: [combinations]
-      operationId: listCombinations
-      summary: 조합 목록 조회
-      parameters:
-        - name: used
-          in: query
-          description: "true = 사용됨, false = 미사용, 생략 = 전체"
-          schema:
-            type: boolean
-        - $ref: '#/components/parameters/PageOffset'
-        - $ref: '#/components/parameters/PageLimit'
-      responses:
-        '200':
-          description: 조합 목록
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedCombinations'
-
-    delete:
-      tags: [combinations]
-      operationId: deleteUnusedCombinations
-      summary: 미사용 조합 일괄 삭제
-      description: "used_at IS NULL인 조합만 삭제한다."
-      responses:
-        '200':
-          description: 삭제 결과
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [deleted]
-                properties:
-                  deleted:
-                    type: integer
-
-  /campaigns/{campaignId}/combinations/seed:
-    parameters:
-      - $ref: '#/components/parameters/CampaignId'
-
-    post:
-      tags: [combinations]
-      operationId: seedCombinations
-      summary: 키워드 조합 생성 (카테시안 곱)
-      description: |
-        현재 캠페인의 슬롯 × 키워드 × 띄어쓰기 규칙의
-        카테시안 곱을 계산해 combinations 테이블에 삽입한다.
-        키워드 picks가 설정되어 있으면 해당 필터를 적용한다.
-      responses:
-        '201':
-          description: 생성 결과
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SeedResult'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '422':
-          $ref: '#/components/responses/ValidationError'
-
-  /campaigns/{campaignId}/combinations/preview:
-    parameters:
-      - $ref: '#/components/parameters/CampaignId'
-
-    post:
-      tags: [combinations]
-      operationId: previewSeed
-      summary: 조합 생성 미리보기 (dry run)
-      description: |
-        seed와 동일한 카테시안 곱을 계산하되 DB에 삽입하지 않는다.
-        생성될 조합 수와 축별 카운트를 반환한다.
-      responses:
-        '200':
-          description: 미리보기 결과
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SeedPreviewResult'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '422':
-          $ref: '#/components/responses/ValidationError'
-
-  # ── Batches ────────────────────────────────────────────────────────────
-
-  /campaigns/{campaignId}/batches:
-    parameters:
-      - $ref: '#/components/parameters/CampaignId'
-
-    get:
-      tags: [batches]
-      operationId: listBatches
-      summary: 배치 목록 조회
-      parameters:
-        - name: status
-          in: query
-          schema:
-            $ref: '#/components/schemas/BatchStatus'
-        - $ref: '#/components/parameters/PageOffset'
-        - $ref: '#/components/parameters/PageLimit'
-      responses:
-        '200':
-          description: 배치 목록
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedBatches'
-
-  /campaigns/{campaignId}/batches/dispatch:
-    parameters:
-      - $ref: '#/components/parameters/CampaignId'
-
-    post:
-      tags: [batches]
-      operationId: dispatchBatches
-      summary: 가용 계정에 배치 할당
-      description: |
-        미사용 조합을 40개씩 묶어 가용 계정에 배분한다.
-        쿨다운 기간이 지난 active 계정만 사용한다.
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DispatchRequest'
-      responses:
-        '201':
-          description: 할당 결과
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DispatchResult'
-
-  /batches/{batchId}:
-    parameters:
-      - $ref: '#/components/parameters/BatchId'
-
-    get:
-      tags: [batches]
-      operationId: getBatch
-      summary: 배치 단건 조회
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Batch'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /batches/{batchId}/start:
-    parameters:
-      - $ref: '#/components/parameters/BatchId'
-
-    post:
-      tags: [batches]
-      operationId: startBatch
-      summary: 배치 실행 시작
-      description: |
-        pending 상태의 배치를 running으로 전환하고 워커 프로세스를 시작한다.
-        이미 running/done/failed 상태이면 409를 반환한다.
-      responses:
-        '200':
-          description: 시작됨
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Batch'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-
-  /batches/{batchId}/cancel:
-    parameters:
-      - $ref: '#/components/parameters/BatchId'
-
-    post:
-      tags: [batches]
-      operationId: cancelBatch
-      summary: 배치 실행 중단
-      description: |
-        running 상태의 배치를 중단한다. 진행 중인 항목은 완료까지 대기 후 중단.
-        pending 미처리 항목은 failed로 전환된다.
-      responses:
-        '200':
-          description: 중단됨
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Batch'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-
-  # ── Batch Items ────────────────────────────────────────────────────────
-
-  /batches/{batchId}/items:
-    parameters:
-      - $ref: '#/components/parameters/BatchId'
-
-    get:
-      tags: [batch-items]
-      operationId: listBatchItems
-      summary: 배치 항목 목록
-      parameters:
-        - name: status
-          in: query
-          schema:
-            $ref: '#/components/schemas/BatchItemStatus'
-        - $ref: '#/components/parameters/PageOffset'
-        - $ref: '#/components/parameters/PageLimit'
-      responses:
-        '200':
-          description: 항목 목록
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedBatchItems'
-
-  /batch-items/{itemId}/retry:
-    parameters:
-      - $ref: '#/components/parameters/BatchItemId'
-
-    post:
-      tags: [batch-items]
-      operationId: retryBatchItem
-      summary: 실패 항목 재시도
-      description: |
-        failed 상태의 항목을 pending으로 되돌려 재실행 대기열에 넣는다.
-        failed가 아닌 항목에 대해서는 409를 반환한다.
-      responses:
-        '200':
-          description: 재시도 대기열에 추가됨
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BatchItem'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-
-# ═══════════════════════════════════════════════════════════════════════════
-# Components
-# ═══════════════════════════════════════════════════════════════════════════
+    description: Dispatch, execution, monitoring
+  - name: utility
+    description: Validation and metadata endpoints
 
 components:
-
-  # ── Security ────────────────────────────────────────────────────────────
-
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: JWT access token from /auth/login
-
-  # ── Parameters ──────────────────────────────────────────────────────────
 
   parameters:
-    UserId:
-      name: userId
+    pathId:
+      name: id
       in: path
       required: true
       schema:
         type: integer
-    PlatformId:
-      name: platformId
-      in: path
-      required: true
-      schema:
-        type: integer
-    AccountId:
-      name: accountId
-      in: path
-      required: true
-      schema:
-        type: integer
-    CategoryId:
-      name: categoryId
-      in: path
-      required: true
-      schema:
-        type: integer
-    KeywordId:
-      name: keywordId
-      in: path
-      required: true
-      schema:
-        type: integer
-    AffixId:
-      name: affixId
-      in: path
-      required: true
-      schema:
-        type: integer
-    CampaignId:
-      name: campaignId
-      in: path
-      required: true
-      schema:
-        type: integer
-    CategorySlug:
-      name: categorySlug
-      in: path
-      required: true
-      schema:
-        type: string
-        example: region
-    RuleId:
-      name: ruleId
-      in: path
-      required: true
-      schema:
-        type: integer
-    PaletteId:
-      name: paletteId
-      in: path
-      required: true
-      schema:
-        type: integer
-    BatchId:
-      name: batchId
-      in: path
-      required: true
-      schema:
-        type: integer
-    BatchItemId:
-      name: itemId
-      in: path
-      required: true
-      schema:
-        type: integer
-        format: int64
-    PageOffset:
-      name: offset
+    pageParam:
+      name: page
       in: query
       schema:
         type: integer
-        minimum: 0
-        default: 0
-    PageLimit:
-      name: limit
+        default: 1
+    perPageParam:
+      name: per_page
       in: query
       schema:
         type: integer
-        minimum: 1
-        maximum: 100
         default: 20
-
-  # ── Responses ───────────────────────────────────────────────────────────
-
-  responses:
-    NotFound:
-      description: 리소스를 찾을 수 없음
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
-    Conflict:
-      description: 중복 또는 상태 충돌
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
-    ValidationError:
-      description: 유효성 검증 실패
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
-
-  # ── Schemas ─────────────────────────────────────────────────────────────
+        maximum: 100
 
   schemas:
-
     Error:
       type: object
-      required: [code, message]
       properties:
-        code:
-          type: string
-        message:
+        error:
           type: string
         details:
-          type: object
-          additionalProperties: true
+          type: array
+          items:
+            type: object
 
-    # ── User + Auth ─────────────────────────────────────────────────────
+    Paginated:
+      type: object
+      properties:
+        page:
+          type: integer
+        per_page:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
 
-    UserRole:
-      type: string
-      enum: [admin, operator]
-
-    UserStatus:
-      type: string
-      enum: [active, disabled]
+    TokenPair:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
 
     User:
       type: object
-      required: [id, email, display_name, role, status, created_at]
       properties:
         id:
           type: integer
@@ -1681,9 +108,11 @@ components:
         display_name:
           type: string
         role:
-          $ref: '#/components/schemas/UserRole'
+          type: string
+          enum: [admin, operator]
         status:
-          $ref: '#/components/schemas/UserStatus'
+          type: string
+          enum: [active, disabled]
         created_at:
           type: string
           format: date-time
@@ -1691,94 +120,8 @@ components:
           type: ["string", "null"]
           format: date-time
 
-    UserUpdate:
-      type: object
-      properties:
-        display_name:
-          type: string
-          maxLength: 64
-
-    AdminUserUpdate:
-      type: object
-      properties:
-        display_name:
-          type: string
-          maxLength: 64
-        role:
-          $ref: '#/components/schemas/UserRole'
-        status:
-          $ref: '#/components/schemas/UserStatus'
-
-    PaginatedUsers:
-      type: object
-      required: [items, total]
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/User'
-        total:
-          type: integer
-
-    RegisterRequest:
-      type: object
-      required: [email, password]
-      properties:
-        email:
-          type: string
-          format: email
-          maxLength: 256
-        password:
-          type: string
-          minLength: 8
-          maxLength: 128
-        display_name:
-          type: string
-          maxLength: 64
-          default: ""
-
-    LoginRequest:
-      type: object
-      required: [email, password]
-      properties:
-        email:
-          type: string
-          format: email
-        password:
-          type: string
-
-    AuthResponse:
-      type: object
-      required: [access_token, user]
-      properties:
-        access_token:
-          type: string
-          description: JWT access token
-        token_type:
-          type: string
-          default: bearer
-        expires_in:
-          type: integer
-          description: Token TTL in seconds
-        user:
-          $ref: '#/components/schemas/User'
-
-    ChangePasswordRequest:
-      type: object
-      required: [current_password, new_password]
-      properties:
-        current_password:
-          type: string
-        new_password:
-          type: string
-          minLength: 8
-          maxLength: 128
-
-    # ── Platform ────────────────────────────────────────────────────────
-
     Platform:
       type: object
-      required: [id, name, slug, base_url, status, created_at]
       properties:
         id:
           type: integer
@@ -1788,63 +131,12 @@ components:
           type: string
         base_url:
           type: string
+          format: uri
         status:
           type: string
-        created_at:
-          type: string
-          format: date-time
-
-    PlatformCreate:
-      type: object
-      required: [name, slug]
-      properties:
-        name:
-          type: string
-          maxLength: 64
-        slug:
-          type: string
-          maxLength: 32
-        base_url:
-          type: string
-          maxLength: 256
-          default: ""
-
-    PlatformUpdate:
-      type: object
-      properties:
-        name:
-          type: string
-          maxLength: 64
-        slug:
-          type: string
-          maxLength: 32
-        base_url:
-          type: string
-          maxLength: 256
-        status:
-          type: string
-          maxLength: 16
-
-    PaginatedPlatforms:
-      type: object
-      required: [items, total]
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/Platform'
-        total:
-          type: integer
-
-    # ── Account ─────────────────────────────────────────────────────────
-
-    AccountStatus:
-      type: string
-      enum: [active, cooling, disabled]
 
     Account:
       type: object
-      required: [id, user_id, platform_id, username, cooldown_days, status, created_at]
       properties:
         id:
           type: integer
@@ -1854,67 +146,23 @@ components:
           type: integer
         username:
           type: string
-        extra:
-          type: ["object", "null"]
-          additionalProperties: true
+        meta:
+          type: object
+        cooldown_days:
+          type: integer
         last_used_at:
           type: ["string", "null"]
           format: date-time
-        cooldown_days:
-          type: integer
         status:
-          $ref: '#/components/schemas/AccountStatus'
+          type: string
+        note:
+          type: ["string", "null"]
         created_at:
           type: string
           format: date-time
 
-    AccountCreate:
-      type: object
-      required: [username, password_enc]
-      properties:
-        username:
-          type: string
-          maxLength: 128
-        password_enc:
-          type: string
-          maxLength: 512
-        extra:
-          type: object
-          additionalProperties: true
-        cooldown_days:
-          type: integer
-          default: 14
-
-    AccountUpdate:
-      type: object
-      properties:
-        password_enc:
-          type: string
-          maxLength: 512
-        extra:
-          type: ["object", "null"]
-          additionalProperties: true
-        cooldown_days:
-          type: integer
-        status:
-          $ref: '#/components/schemas/AccountStatus'
-
-    PaginatedAccounts:
-      type: object
-      required: [items, total]
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/Account'
-        total:
-          type: integer
-
-    # ── KeywordCategory ─────────────────────────────────────────────────
-
     KeywordCategory:
       type: object
-      required: [id, name, slug, created_at]
       properties:
         id:
           type: integer
@@ -1922,47 +170,9 @@ components:
           type: string
         slug:
           type: string
-        created_at:
-          type: string
-          format: date-time
-
-    KeywordCategoryCreate:
-      type: object
-      required: [name, slug]
-      properties:
-        name:
-          type: string
-          maxLength: 64
-        slug:
-          type: string
-          maxLength: 32
-
-    KeywordCategoryUpdate:
-      type: object
-      properties:
-        name:
-          type: string
-          maxLength: 64
-        slug:
-          type: string
-          maxLength: 32
-
-    PaginatedKeywordCategories:
-      type: object
-      required: [items, total]
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/KeywordCategory'
-        total:
-          type: integer
-
-    # ── Keyword (updated — includes affixes) ────────────────────────────
 
     Keyword:
       type: object
-      required: [id, category_id, value, display_value, tier, active, sort_order, created_at]
       properties:
         id:
           type: integer
@@ -1980,129 +190,107 @@ components:
           type: boolean
         sort_order:
           type: integer
+        metadata:
+          type: ["object", "null"]
+        children:
+          type: array
+          items:
+            $ref: "#/components/schemas/Keyword"
         affixes:
           type: array
           items:
-            $ref: '#/components/schemas/Affix'
-          description: 이 키워드에 연결된 접사 목록 (읽기 전용)
-        created_at:
-          type: string
-          format: date-time
-
-    KeywordCreate:
-      type: object
-      required: [value]
-      properties:
-        parent_id:
-          type: ["integer", "null"]
-        value:
-          type: string
-          maxLength: 128
-        display_value:
-          type: string
-          maxLength: 128
-          default: ""
-        tier:
-          type: integer
-          default: 1
-        active:
-          type: boolean
-          default: true
-        sort_order:
-          type: integer
-          default: 0
-
-    KeywordUpdate:
-      type: object
-      properties:
-        parent_id:
-          type: ["integer", "null"]
-        value:
-          type: string
-          maxLength: 128
-        display_value:
-          type: string
-          maxLength: 128
-        tier:
-          type: integer
-        active:
-          type: boolean
-        sort_order:
-          type: integer
-
-    PaginatedKeywords:
-      type: object
-      required: [items, total]
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/Keyword'
-        total:
-          type: integer
-
-    # ── Affix (NEW) ─────────────────────────────────────────────────────
-
-    AffixType:
-      type: string
-      enum: [prefix, suffix]
+            $ref: "#/components/schemas/Affix"
 
     Affix:
       type: object
-      required: [id, keyword_id, type, value, sort_order, active, created_at]
       properties:
         id:
           type: integer
         keyword_id:
           type: integer
         type:
-          $ref: '#/components/schemas/AffixType'
+          type: string
+          enum: [prefix, suffix]
         value:
           type: string
         sort_order:
           type: integer
         active:
           type: boolean
+
+    PostLayout:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        slots:
+          type: array
+          items:
+            $ref: "#/components/schemas/LayoutSlot"
         created_at:
           type: string
           format: date-time
 
-    AffixCreate:
-      type: object
-      required: [type, value]
-      properties:
-        type:
-          $ref: '#/components/schemas/AffixType'
-        value:
-          type: string
-          maxLength: 128
-        sort_order:
-          type: integer
-          default: 0
-        active:
-          type: boolean
-          default: true
-
-    AffixUpdate:
+    LayoutSlot:
       type: object
       properties:
-        value:
-          type: string
-          maxLength: 128
+        id:
+          type: integer
+        layout_id:
+          type: integer
         sort_order:
           type: integer
-        active:
-          type: boolean
+        block_type:
+          type: string
+          enum: [heading, paragraph, image, featured, list, quote, divider]
+        config:
+          type: ["object", "null"]
+          description: Block fields with {placeholder} support
 
-    # ── Campaign (updated — includes palettes) ──────────────────────────
+    PublishPreset:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        config:
+          type: object
+          description: Entire PublishOption content as JSON
+        created_at:
+          type: string
+          format: date-time
 
-    CampaignStatus:
-      type: string
-      enum: [active, paused, archived]
+    RunPreset:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        config:
+          type: object
+          description: Entire RunSetting content as JSON
+        created_at:
+          type: string
+          format: date-time
 
     Campaign:
       type: object
-      required: [id, user_id, platform_id, name, title_template, status, created_at]
       properties:
         id:
           type: integer
@@ -2110,6 +298,12 @@ components:
           type: integer
         platform_id:
           type: integer
+        layout_id:
+          type: ["integer", "null"]
+        publish_preset_id:
+          type: ["integer", "null"]
+        run_preset_id:
+          type: ["integer", "null"]
         name:
           type: string
         description:
@@ -2118,183 +312,33 @@ components:
           type: string
         config:
           type: ["object", "null"]
-          additionalProperties: true
         status:
-          $ref: '#/components/schemas/CampaignStatus'
-        palettes:
-          type: array
-          items:
-            $ref: '#/components/schemas/CampaignPalette'
-          description: 캠페인 팔레트 목록 (읽기 전용)
+          type: string
+          enum: [active, paused, archived]
         created_at:
           type: string
           format: date-time
-
-    CampaignCreate:
-      type: object
-      required: [platform_id, name]
-      properties:
-        platform_id:
-          type: integer
-        name:
-          type: string
-          maxLength: 128
-        description:
-          type: ["string", "null"]
-        title_template:
-          type: string
-          maxLength: 256
-          default: ""
-        config:
-          type: ["object", "null"]
-          additionalProperties: true
-
-    CampaignUpdate:
-      type: object
-      properties:
-        name:
-          type: string
-          maxLength: 128
-        description:
-          type: ["string", "null"]
-        title_template:
-          type: string
-          maxLength: 256
-        config:
-          type: ["object", "null"]
-          additionalProperties: true
-        status:
-          $ref: '#/components/schemas/CampaignStatus'
-
-    PaginatedCampaigns:
-      type: object
-      required: [items, total]
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/Campaign'
-        total:
-          type: integer
-
-    # ── CampaignSlot ────────────────────────────────────────────────────
+        layout:
+          $ref: "#/components/schemas/PostLayout"
+        publish_preset:
+          $ref: "#/components/schemas/PublishPreset"
+        run_preset:
+          $ref: "#/components/schemas/RunPreset"
 
     CampaignSlot:
       type: object
-      required: [campaign_id, category_id, sort_order, created_at]
       properties:
         campaign_id:
           type: integer
         category_id:
           type: integer
-        category_slug:
-          type: string
-          description: 조인된 카테고리 slug (읽기 전용)
         sort_order:
           type: integer
-        created_at:
-          type: string
-          format: date-time
-
-    CampaignSlotCreate:
-      type: object
-      required: [category_id]
-      properties:
-        category_id:
-          type: integer
-
-    # ── SpacingRule ──────────────────────────────────────────────────────
-
-    SpacingRule:
-      type: object
-      required: [id, campaign_id, pattern, active, created_at]
-      properties:
-        id:
-          type: integer
-        campaign_id:
-          type: integer
-        pattern:
-          type: object
-          additionalProperties:
-            type: integer
-            enum: [0, 1]
-          description: "{slug: 뒤에_공백(0|1)}"
-        description:
-          type: string
-        active:
-          type: boolean
-        created_at:
-          type: string
-          format: date-time
-
-    SpacingRuleCreate:
-      type: object
-      required: [pattern]
-      properties:
-        pattern:
-          type: object
-          additionalProperties:
-            type: integer
-            enum: [0, 1]
-        description:
-          type: string
-          maxLength: 128
-          default: ""
-        active:
-          type: boolean
-          default: true
-
-    SpacingRuleUpdate:
-      type: object
-      properties:
-        pattern:
-          type: object
-          additionalProperties:
-            type: integer
-            enum: [0, 1]
-        description:
-          type: string
-          maxLength: 128
-        active:
-          type: boolean
-
-    # ── Keyword Picks ───────────────────────────────────────────────────
-
-    PicksMap:
-      type: object
-      additionalProperties:
-        type: array
-        items:
-          type: string
-      description: "{category_slug: [keyword_value, ...]}"
-
-    SavePicksRequest:
-      type: object
-      required: [values]
-      properties:
-        values:
-          type: array
-          items:
-            type: string
-
-    SavePicksResponse:
-      type: object
-      required: [category_slug, saved_count]
-      properties:
-        category_slug:
-          type: string
-        saved_count:
-          type: integer
-
-    # ── CampaignPalette + PaletteItem (NEW) ─────────────────────────────
-
-    PaletteStrategy:
-      type: string
-      enum: [random, sequential]
+        category:
+          $ref: "#/components/schemas/KeywordCategory"
 
     CampaignPalette:
       type: object
-      required: [id, campaign_id, slug, strategy, created_at]
       properties:
         id:
           type: integer
@@ -2302,41 +346,16 @@ components:
           type: integer
         slug:
           type: string
-          description: "salt_prefix | salt_suffix | cta"
         strategy:
-          $ref: '#/components/schemas/PaletteStrategy'
+          type: string
+          enum: [random, sequential]
         items:
           type: array
           items:
-            $ref: '#/components/schemas/PaletteItem'
-          description: 팔레트 항목 목록 (읽기 전용)
-        created_at:
-          type: string
-          format: date-time
-
-    CampaignPaletteCreate:
-      type: object
-      required: [slug]
-      properties:
-        slug:
-          type: string
-          maxLength: 64
-        strategy:
-          $ref: '#/components/schemas/PaletteStrategy'
-          default: random
-
-    CampaignPaletteUpdate:
-      type: object
-      properties:
-        slug:
-          type: string
-          maxLength: 64
-        strategy:
-          $ref: '#/components/schemas/PaletteStrategy'
+            $ref: "#/components/schemas/PaletteItem"
 
     PaletteItem:
       type: object
-      required: [id, palette_id, value, sort_order, active, created_at]
       properties:
         id:
           type: integer
@@ -2348,30 +367,26 @@ components:
           type: integer
         active:
           type: boolean
-        created_at:
-          type: string
-          format: date-time
 
-    PaletteItemCreate:
+    SpacingRule:
       type: object
-      required: [value]
-      properties:
-        value:
-          type: string
-          maxLength: 256
-        active:
-          type: boolean
-          default: true
-
-    # ── Combination ─────────────────────────────────────────────────────
-
-    Combination:
-      type: object
-      required: [id, campaign_id, created_at]
       properties:
         id:
           type: integer
-          format: int64
+        campaign_id:
+          type: integer
+        pattern:
+          type: object
+        description:
+          type: string
+        active:
+          type: boolean
+
+    Combination:
+      type: object
+      properties:
+        id:
+          type: integer
         campaign_id:
           type: integer
         spacing_rule_id:
@@ -2379,8 +394,7 @@ components:
         keywords:
           type: array
           items:
-            $ref: '#/components/schemas/Keyword'
-          description: 이 조합에 포함된 키워드 목록
+            $ref: "#/components/schemas/Keyword"
         used_at:
           type: ["string", "null"]
           format: date-time
@@ -2388,113 +402,8 @@ components:
           type: string
           format: date-time
 
-    PaginatedCombinations:
-      type: object
-      required: [items, total]
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/Combination'
-        total:
-          type: integer
-        pending:
-          type: integer
-          description: 미사용 조합 수
-
-    SeedResult:
-      type: object
-      required: [inserted]
-      properties:
-        inserted:
-          type: integer
-          description: 생성된 조합 수
-        picks_applied:
-          $ref: '#/components/schemas/PicksMap'
-
-    SeedPreviewResult:
-      type: object
-      required: [total, keyword_groups, spacing_rules]
-      properties:
-        total:
-          type: integer
-          description: 생성될 조합 수
-        keyword_groups:
-          type: integer
-          description: 키워드 그룹 수
-        spacing_rules:
-          type: integer
-          description: 활성 띄어쓰기 규칙 수
-        picks_applied:
-          $ref: '#/components/schemas/PicksMap'
-
-    # ── Title preview (NEW) ─────────────────────────────────────────────
-
-    TitlePreviewResult:
-      type: object
-      required: [titles, template]
-      properties:
-        template:
-          type: string
-          description: 사용된 title_template
-        titles:
-          type: array
-          items:
-            type: string
-          description: 생성된 샘플 제목 목록
-
-    # ── Campaign stats (NEW) ────────────────────────────────────────────
-
-    CampaignStats:
-      type: object
-      required: [campaign_id]
-      properties:
-        campaign_id:
-          type: integer
-        combinations_total:
-          type: integer
-          description: 전체 조합 수
-        combinations_pending:
-          type: integer
-          description: 미사용 조합 수
-        combinations_used:
-          type: integer
-          description: 사용된 조합 수
-        batches_total:
-          type: integer
-        batches_pending:
-          type: integer
-        batches_running:
-          type: integer
-        batches_done:
-          type: integer
-        batches_failed:
-          type: integer
-        items_total:
-          type: integer
-        items_done:
-          type: integer
-        items_failed:
-          type: integer
-        posts_today:
-          type: integer
-          description: 오늘 발행된 포스트 수
-        accounts_available:
-          type: integer
-          description: 쿨다운 지난 active 계정 수
-        accounts_cooling:
-          type: integer
-          description: 쿨다운 중인 계정 수
-
-    # ── Batch ───────────────────────────────────────────────────────────
-
-    BatchStatus:
-      type: string
-      enum: [pending, running, done, failed, cancelled]
-
     Batch:
       type: object
-      required: [id, campaign_id, account_id, scheduled_at, status, created_at]
       properties:
         id:
           type: integer
@@ -2506,7 +415,8 @@ components:
           type: string
           format: date-time
         status:
-          $ref: '#/components/schemas/BatchStatus'
+          type: string
+          enum: [pending, running, completed, failed, cancelled]
         worker_pid:
           type: ["integer", "null"]
         created_at:
@@ -2518,74 +428,25 @@ components:
         completed_at:
           type: ["string", "null"]
           format: date-time
-        items_total:
-          type: integer
-          description: 전체 항목 수 (읽기 전용)
-        items_done:
-          type: integer
-          description: 완료 항목 수 (읽기 전용)
-        items_failed:
-          type: integer
-          description: 실패 항목 수 (읽기 전용)
-
-    DispatchRequest:
-      type: object
-      properties:
-        schedule_base:
-          type: string
-          format: date-time
-          description: 배치 시작 기준 시각 (KST). 생략 시 현재 + 2시간.
-
-    DispatchResult:
-      type: object
-      required: [batches_created, accounts_used, combos_assigned]
-      properties:
-        batches_created:
-          type: integer
-        accounts_used:
-          type: integer
-        combos_assigned:
-          type: integer
-        scheduled_times:
-          type: array
-          items:
-            type: string
-            format: date-time
-
-    PaginatedBatches:
-      type: object
-      required: [items, total]
-      properties:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/Batch'
-        total:
-          type: integer
-
-    # ── BatchItem ───────────────────────────────────────────────────────
-
-    BatchItemStatus:
-      type: string
-      enum: [pending, done, failed]
+            $ref: "#/components/schemas/BatchItem"
 
     BatchItem:
       type: object
-      required: [id, batch_id, combination_id, status, created_at]
       properties:
         id:
           type: integer
-          format: int64
         batch_id:
           type: integer
         combination_id:
           type: integer
-          format: int64
         status:
-          $ref: '#/components/schemas/BatchItemStatus'
+          type: string
+          enum: [pending, running, completed, failed]
         result_url:
           type: ["string", "null"]
-          maxLength: 512
         error_message:
           type: ["string", "null"]
         created_at:
@@ -2595,13 +456,1692 @@ components:
           type: ["string", "null"]
           format: date-time
 
-    PaginatedBatchItems:
+    CampaignStats:
       type: object
-      required: [items, total]
       properties:
-        items:
+        total_combinations:
+          type: integer
+        pending_combinations:
+          type: integer
+        total_batches:
+          type: integer
+        completed_batches:
+          type: integer
+        failed_items:
+          type: integer
+        success_rate:
+          type: number
+
+    DispatchResult:
+      type: object
+      properties:
+        batches_created:
+          type: integer
+        accounts_used:
+          type: integer
+        combos_assigned:
+          type: integer
+
+    BlockTypeInfo:
+      type: object
+      properties:
+        type:
+          type: string
+        label:
+          type: string
+        config_schema:
+          type: object
+
+    RenderedBlock:
+      type: object
+      properties:
+        block_type:
+          type: string
+        rendered_config:
+          type: object
+
+    TemplateValidation:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        tokens:
           type: array
           items:
-            $ref: '#/components/schemas/BatchItem'
-        total:
-          type: integer
+            type: string
+        error:
+          type: ["string", "null"]
+
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+# ==========================================================================
+# Paths
+# ==========================================================================
+paths:
+
+  # ── Auth ─────────────────────────────────────────────────────────────────
+  /auth/register:
+    post:
+      tags: [auth]
+      operationId: register
+      summary: Create a new user account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+                display_name:
+                  type: string
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Get JWT tokens
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Token pair
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenPair"
+
+  /auth/me:
+    get:
+      tags: [auth]
+      operationId: getMe
+      summary: Current user profile
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    patch:
+      tags: [auth]
+      operationId: updateMe
+      summary: Update own profile
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                display_name:
+                  type: string
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /auth/password:
+    put:
+      tags: [auth]
+      operationId: changePassword
+      summary: Change own password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, new_password]
+              properties:
+                current_password:
+                  type: string
+                new_password:
+                  type: string
+                  minLength: 8
+      responses:
+        "204":
+          description: Password changed
+
+  # ── Admin ────────────────────────────────────────────────────────────────
+  /admin/users:
+    get:
+      tags: [admin]
+      operationId: listUsers
+      parameters:
+        - $ref: "#/components/parameters/pageParam"
+        - $ref: "#/components/parameters/perPageParam"
+      responses:
+        "200":
+          description: Paginated user list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/User"
+
+  /admin/users/{id}:
+    get:
+      tags: [admin]
+      operationId: getUser
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "200":
+          description: User detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    patch:
+      tags: [admin]
+      operationId: updateUser
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role:
+                  type: string
+                  enum: [admin, operator]
+                status:
+                  type: string
+                  enum: [active, disabled]
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  # ── Platforms ────────────────────────────────────────────────────────────
+  /platforms:
+    get:
+      tags: [platforms]
+      operationId: listPlatforms
+      summary: All supported blog platforms
+      responses:
+        "200":
+          description: Platform list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Platform"
+
+  # ── Accounts ─────────────────────────────────────────────────────────────
+  /accounts:
+    get:
+      tags: [accounts]
+      operationId: listAccounts
+      summary: My blog accounts
+      parameters:
+        - name: platform_id
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, disabled, cooldown]
+      responses:
+        "200":
+          description: Account list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Account"
+    post:
+      tags: [accounts]
+      operationId: createAccount
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [platform_id, username, password]
+              properties:
+                platform_id:
+                  type: integer
+                username:
+                  type: string
+                password:
+                  type: string
+                meta:
+                  type: object
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+
+  /accounts/{id}:
+    get:
+      tags: [accounts]
+      operationId: getAccount
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "200":
+          description: Account detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+    patch:
+      tags: [accounts]
+      operationId: updateAccount
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+                meta:
+                  type: object
+                cooldown_days:
+                  type: integer
+                status:
+                  type: string
+                note:
+                  type: string
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+    delete:
+      tags: [accounts]
+      operationId: deleteAccount
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "204":
+          description: Deleted
+
+  # ── Keyword Categories ──────────────────────────────────────────────────
+  /keyword-categories:
+    get:
+      tags: [keywords]
+      operationId: listCategories
+      summary: All keyword categories
+      responses:
+        "200":
+          description: Category list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/KeywordCategory"
+    post:
+      tags: [keywords]
+      operationId: createCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, slug]
+              properties:
+                name:
+                  type: string
+                slug:
+                  type: string
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeywordCategory"
+
+  /keyword-categories/{id}:
+    patch:
+      tags: [keywords]
+      operationId: updateCategory
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeywordCategory"
+    delete:
+      tags: [keywords]
+      operationId: deleteCategory
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "204":
+          description: Deleted
+
+  # ── Keywords ─────────────────────────────────────────────────────────────
+  /keyword-categories/{id}/keywords:
+    get:
+      tags: [keywords]
+      operationId: listKeywords
+      summary: Keywords in a category
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+        - name: tree
+          in: query
+          description: Return as nested tree
+          schema:
+            type: boolean
+            default: false
+        - name: active
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Keyword list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Keyword"
+    post:
+      tags: [keywords]
+      operationId: createKeyword
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value:
+                  type: string
+                display_value:
+                  type: string
+                parent_id:
+                  type: ["integer", "null"]
+                tier:
+                  type: integer
+                  default: 1
+                metadata:
+                  type: object
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Keyword"
+
+  /keywords/{id}:
+    get:
+      tags: [keywords]
+      operationId: getKeyword
+      summary: Keyword with children and affixes
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "200":
+          description: Keyword detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Keyword"
+    patch:
+      tags: [keywords]
+      operationId: updateKeyword
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                value:
+                  type: string
+                display_value:
+                  type: string
+                parent_id:
+                  type: ["integer", "null"]
+                tier:
+                  type: integer
+                active:
+                  type: boolean
+                sort_order:
+                  type: integer
+                metadata:
+                  type: object
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Keyword"
+    delete:
+      tags: [keywords]
+      operationId: deleteKeyword
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "204":
+          description: Deleted
+
+  # ── Affixes ──────────────────────────────────────────────────────────────
+  /keywords/{id}/affixes:
+    get:
+      tags: [keywords]
+      operationId: listAffixes
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "200":
+          description: Affix list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Affix"
+    post:
+      tags: [keywords]
+      operationId: createAffix
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, value]
+              properties:
+                type:
+                  type: string
+                  enum: [prefix, suffix]
+                value:
+                  type: string
+                sort_order:
+                  type: integer
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Affix"
+
+  /affixes/{id}:
+    patch:
+      tags: [keywords]
+      operationId: updateAffix
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                value:
+                  type: string
+                sort_order:
+                  type: integer
+                active:
+                  type: boolean
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Affix"
+    delete:
+      tags: [keywords]
+      operationId: deleteAffix
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "204":
+          description: Deleted
+
+  # ── Post Layouts ─────────────────────────────────────────────────────────
+  /layouts:
+    get:
+      tags: [layouts]
+      operationId: listLayouts
+      summary: My post layouts
+      responses:
+        "200":
+          description: Layout list without slots
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PostLayout"
+    post:
+      tags: [layouts]
+      operationId: createLayout
+      summary: Create layout with optional initial slots
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                slots:
+                  type: array
+                  items:
+                    type: object
+                    required: [sort_order, block_type]
+                    properties:
+                      sort_order:
+                        type: integer
+                      block_type:
+                        type: string
+                        enum: [heading, paragraph, image, featured, list, quote, divider]
+                      config:
+                        type: object
+      responses:
+        "201":
+          description: Created with slots
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostLayout"
+
+  /layouts/{id}:
+    get:
+      tags: [layouts]
+      operationId: getLayout
+      summary: Layout with all slots
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "200":
+          description: Layout with slots
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostLayout"
+    patch:
+      tags: [layouts]
+      operationId: updateLayout
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostLayout"
+    delete:
+      tags: [layouts]
+      operationId: deleteLayout
+      summary: Delete layout (CASCADE deletes slots)
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "204":
+          description: Deleted
+
+  /layouts/{id}/slots:
+    put:
+      tags: [layouts]
+      operationId: replaceSlots
+      summary: Replace all slots at once (drag-and-drop save)
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                required: [sort_order, block_type]
+                properties:
+                  sort_order:
+                    type: integer
+                  block_type:
+                    type: string
+                    enum: [heading, paragraph, image, featured, list, quote, divider]
+                  config:
+                    type: object
+      responses:
+        "200":
+          description: New slot list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LayoutSlot"
+
+  /layouts/{id}/preview:
+    post:
+      tags: [layouts]
+      operationId: previewLayout
+      summary: Render layout with sample keywords
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                values:
+                  type: object
+                  description: "slug to value map, e.g. {region: '강남', subject: '수학'}"
+      responses:
+        "200":
+          description: Rendered block list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RenderedBlock"
+
+  # ── Publish Presets ──────────────────────────────────────────────────────
+  /publish-presets:
+    get:
+      tags: [presets]
+      operationId: listPublishPresets
+      summary: My publish presets
+      responses:
+        "200":
+          description: Preset list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PublishPreset"
+    post:
+      tags: [presets]
+      operationId: createPublishPreset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, config]
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                config:
+                  type: object
+                  description: PublishOption fields as JSON
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublishPreset"
+
+  /publish-presets/{id}:
+    get:
+      tags: [presets]
+      operationId: getPublishPreset
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "200":
+          description: Preset detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublishPreset"
+    patch:
+      tags: [presets]
+      operationId: updatePublishPreset
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                config:
+                  type: object
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublishPreset"
+    delete:
+      tags: [presets]
+      operationId: deletePublishPreset
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "204":
+          description: Deleted
+
+  # ── Run Presets ──────────────────────────────────────────────────────────
+  /run-presets:
+    get:
+      tags: [presets]
+      operationId: listRunPresets
+      summary: My run presets
+      responses:
+        "200":
+          description: Preset list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RunPreset"
+    post:
+      tags: [presets]
+      operationId: createRunPreset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, config]
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                config:
+                  type: object
+                  description: RunSetting fields as JSON
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunPreset"
+
+  /run-presets/{id}:
+    get:
+      tags: [presets]
+      operationId: getRunPreset
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "200":
+          description: Preset detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunPreset"
+    patch:
+      tags: [presets]
+      operationId: updateRunPreset
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                config:
+                  type: object
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunPreset"
+    delete:
+      tags: [presets]
+      operationId: deleteRunPreset
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "204":
+          description: Deleted
+
+  # ── Campaigns ────────────────────────────────────────────────────────────
+  /campaigns:
+    get:
+      tags: [campaigns]
+      operationId: listCampaigns
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, paused, archived]
+        - name: platform_id
+          in: query
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/pageParam"
+        - $ref: "#/components/parameters/perPageParam"
+      responses:
+        "200":
+          description: Paginated campaign list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Campaign"
+    post:
+      tags: [campaigns]
+      operationId: createCampaign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [platform_id, name]
+              properties:
+                platform_id:
+                  type: integer
+                name:
+                  type: string
+                description:
+                  type: string
+                title_template:
+                  type: string
+                layout_id:
+                  type: ["integer", "null"]
+                publish_preset_id:
+                  type: ["integer", "null"]
+                run_preset_id:
+                  type: ["integer", "null"]
+                config:
+                  type: object
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+
+  /campaigns/{id}:
+    get:
+      tags: [campaigns]
+      operationId: getCampaign
+      summary: Full detail with presets, slots, palettes, stats
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "200":
+          description: Campaign with nested associations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+    patch:
+      tags: [campaigns]
+      operationId: updateCampaign
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                title_template:
+                  type: string
+                layout_id:
+                  type: ["integer", "null"]
+                publish_preset_id:
+                  type: ["integer", "null"]
+                run_preset_id:
+                  type: ["integer", "null"]
+                status:
+                  type: string
+                  enum: [active, paused, archived]
+                config:
+                  type: object
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+    delete:
+      tags: [campaigns]
+      operationId: deleteCampaign
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "204":
+          description: Deleted
+
+  /campaigns/{id}/clone:
+    post:
+      tags: [campaigns]
+      operationId: cloneCampaign
+      summary: Deep-copy (slots, palettes, picks — not combos/batches)
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+      responses:
+        "201":
+          description: Cloned campaign
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+
+  /campaigns/{id}/stats:
+    get:
+      tags: [campaigns]
+      operationId: getCampaignStats
+      summary: Aggregated stats for dashboard
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "200":
+          description: Campaign stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignStats"
+
+  /campaigns/{id}/preview-title:
+    post:
+      tags: [campaigns]
+      operationId: previewTitle
+      summary: Dry-run title generation
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                values:
+                  type: object
+                seed:
+                  type: integer
+      responses:
+        "200":
+          description: Generated title
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  title:
+                    type: string
+
+  # ── Campaign Slots ──────────────────────────────────────────────────────
+  /campaigns/{id}/slots:
+    get:
+      tags: [campaigns]
+      operationId: listCampaignSlots
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "200":
+          description: Slot list with categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CampaignSlot"
+    put:
+      tags: [campaigns]
+      operationId: replaceCampaignSlots
+      summary: Set category ordering (full replace)
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                required: [category_id, sort_order]
+                properties:
+                  category_id:
+                    type: integer
+                  sort_order:
+                    type: integer
+      responses:
+        "200":
+          description: New slot list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CampaignSlot"
+
+  # ── Campaign Picks ──────────────────────────────────────────────────────
+  /campaigns/{id}/picks:
+    get:
+      tags: [campaigns]
+      operationId: listPicks
+      summary: Selected keywords by category slug
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "200":
+          description: Picks grouped by slug
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: array
+                  items:
+                    type: string
+    put:
+      tags: [campaigns]
+      operationId: savePicks
+      summary: Set picks for one category
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category_slug, values]
+              properties:
+                category_slug:
+                  type: string
+                values:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: Saved count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+
+  # ── Campaign Palettes ───────────────────────────────────────────────────
+  /campaigns/{id}/palettes:
+    get:
+      tags: [campaigns]
+      operationId: listPalettes
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "200":
+          description: Palette list with items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CampaignPalette"
+    post:
+      tags: [campaigns]
+      operationId: createPalette
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slug]
+              properties:
+                slug:
+                  type: string
+                strategy:
+                  type: string
+                  enum: [random, sequential]
+                  default: random
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [value]
+                    properties:
+                      value:
+                        type: string
+                      sort_order:
+                        type: integer
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignPalette"
+
+  /palettes/{id}:
+    get:
+      tags: [campaigns]
+      operationId: getPalette
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "200":
+          description: Palette with items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignPalette"
+    patch:
+      tags: [campaigns]
+      operationId: updatePalette
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                strategy:
+                  type: string
+                  enum: [random, sequential]
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignPalette"
+    delete:
+      tags: [campaigns]
+      operationId: deletePalette
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "204":
+          description: Deleted
+
+  /palettes/{id}/items:
+    put:
+      tags: [campaigns]
+      operationId: replacePaletteItems
+      summary: Replace all items at once
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                required: [value]
+                properties:
+                  value:
+                    type: string
+                  sort_order:
+                    type: integer
+                  active:
+                    type: boolean
+                    default: true
+      responses:
+        "200":
+          description: New item list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PaletteItem"
+
+  # ── Campaign Spacing Rules ──────────────────────────────────────────────
+  /campaigns/{id}/spacing-rules:
+    get:
+      tags: [campaigns]
+      operationId: listSpacingRules
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "200":
+          description: Rule list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SpacingRule"
+    post:
+      tags: [campaigns]
+      operationId: createSpacingRule
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pattern]
+              properties:
+                pattern:
+                  type: object
+                description:
+                  type: string
+                active:
+                  type: boolean
+                  default: true
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpacingRule"
+
+  /spacing-rules/{id}:
+    patch:
+      tags: [campaigns]
+      operationId: updateSpacingRule
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                pattern:
+                  type: object
+                description:
+                  type: string
+                active:
+                  type: boolean
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpacingRule"
+    delete:
+      tags: [campaigns]
+      operationId: deleteSpacingRule
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "204":
+          description: Deleted
+
+  # ── Combinations ─────────────────────────────────────────────────────────
+  /campaigns/{id}/combinations:
+    get:
+      tags: [combinations]
+      operationId: listCombinations
+      summary: Browse generated combinations
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, used]
+        - $ref: "#/components/parameters/pageParam"
+        - $ref: "#/components/parameters/perPageParam"
+      responses:
+        "200":
+          description: Paginated combination list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Combination"
+
+  /campaigns/{id}/combinations/preview:
+    get:
+      tags: [combinations]
+      operationId: previewSeed
+      summary: How many combinations would be generated
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "200":
+          description: Combination count preview
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total:
+                    type: integer
+                  by_category:
+                    type: object
+                    additionalProperties:
+                      type: integer
+
+  /campaigns/{id}/combinations/seed:
+    post:
+      tags: [combinations]
+      operationId: seedCombinations
+      summary: Generate Cartesian product
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "200":
+          description: Created count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created:
+                    type: integer
+
+  /campaigns/{id}/combinations/clear:
+    post:
+      tags: [combinations]
+      operationId: clearCombinations
+      summary: Delete all pending combinations
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "200":
+          description: Deleted count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: integer
+
+  # ── Batches ──────────────────────────────────────────────────────────────
+  /campaigns/{id}/batches:
+    get:
+      tags: [batches]
+      operationId: listBatches
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, running, completed, failed, cancelled]
+        - $ref: "#/components/parameters/pageParam"
+        - $ref: "#/components/parameters/perPageParam"
+      responses:
+        "200":
+          description: Paginated batch list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Batch"
+
+  /campaigns/{id}/batches/dispatch:
+    post:
+      tags: [batches]
+      operationId: dispatchBatches
+      summary: Assign pending combinations to accounts
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [schedule_base]
+              properties:
+                schedule_base:
+                  type: string
+                  format: date-time
+      responses:
+        "200":
+          description: Dispatch result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DispatchResult"
+
+  /batches/{id}:
+    get:
+      tags: [batches]
+      operationId: getBatch
+      summary: Batch detail with items
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "200":
+          description: Batch with items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Batch"
+
+  /batches/{id}/start:
+    post:
+      tags: [batches]
+      operationId: startBatch
+      summary: Start the batch worker process
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "200":
+          description: Worker started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  worker_pid:
+                    type: integer
+
+  /batches/{id}/cancel:
+    post:
+      tags: [batches]
+      operationId: cancelBatch
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "200":
+          description: Batch cancelled
+
+  /batch-items/{id}/retry:
+    post:
+      tags: [batches]
+      operationId: retryBatchItem
+      summary: Reset a failed item to pending
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "200":
+          description: Item reset to pending
+
+  # ── Utility ──────────────────────────────────────────────────────────────
+  /validate/title-template:
+    post:
+      tags: [utility]
+      operationId: validateTitleTemplate
+      summary: Check template syntax
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [template]
+              properties:
+                template:
+                  type: string
+      responses:
+        "200":
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemplateValidation"
+
+  /block-types:
+    get:
+      tags: [utility]
+      operationId: listBlockTypes
+      summary: Available block types for the layout editor
+      security: []
+      responses:
+        "200":
+          description: Block type registry
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BlockTypeInfo"
