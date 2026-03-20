@@ -175,3 +175,76 @@ def test_list_interpolation():
         keyword="강남 수학",
     )
     assert block.overlay_text == ["강남", "수학"]
+
+
+# ---------------------------------------------------------------------------
+# media_id resolution
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+def test_image_media_id_resolved_to_path():
+    """media_id in config is resolved to path via resolver."""
+    resolver = lambda mid: f"/uploads/{mid}/photo.jpg"
+    block = create_block(
+        "image",
+        {"media_id": 42},
+        media_resolver=resolver,
+    )
+    assert isinstance(block, ImageBlock)
+    assert block.path == "/uploads/42/photo.jpg"
+
+
+@pytest.mark.unit
+def test_featured_media_id_with_overlay():
+    """Featured block resolves media_id and keeps overlay_text."""
+    resolver = lambda mid: f"/uploads/{mid}/thumb.jpg"
+    block = create_block(
+        "featured",
+        {"media_id": 7, "overlay_text": "{keyword}"},
+        values={"region": "강남"},
+        keyword="강남 수학",
+        media_resolver=resolver,
+    )
+    assert isinstance(block, FeaturedImageBlock)
+    assert block.path == "/uploads/7/thumb.jpg"
+    assert block.overlay_text == "강남 수학"
+
+
+@pytest.mark.unit
+def test_media_id_without_resolver_raises():
+    """media_id present but no resolver → ValueError."""
+    with pytest.raises(ValueError, match="media_resolver"):
+        create_block("image", {"media_id": 1})
+
+
+@pytest.mark.unit
+def test_media_id_stripped_from_config():
+    """media_id itself is not passed to the Block dataclass."""
+    resolver = lambda mid: "/resolved.jpg"
+    block = create_block("image", {"media_id": 1}, media_resolver=resolver)
+    assert not hasattr(block, "media_id")
+    assert block.path == "/resolved.jpg"
+
+
+@pytest.mark.unit
+def test_path_takes_precedence_over_media_id():
+    """Explicit path in config is used even if media_id is present."""
+    resolver = lambda mid: "/resolved.jpg"
+    block = create_block(
+        "image",
+        {"path": "/explicit.jpg", "media_id": 99},
+        media_resolver=resolver,
+    )
+    assert block.path == "/explicit.jpg"
+
+
+@pytest.mark.unit
+def test_non_image_block_ignores_media_id():
+    """media_id in non-image block is filtered out by _filter_fields."""
+    block = create_block(
+        "paragraph",
+        {"prompt": "text", "media_id": 5},
+        media_resolver=lambda mid: "/x.jpg",
+    )
+    assert isinstance(block, ParagraphBlock)
+    assert block.prompt == "text"

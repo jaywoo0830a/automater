@@ -8,12 +8,14 @@ Dynamic composition:
     campaign.publish_preset  -> PublishOption (JSON config)
     campaign.run_preset      -> RunSetting (JSON config)
     All three nullable — null means use system defaults.
+
+    media_resolver           -> resolves media_id in slot config to file path
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Callable
 
 from automator.contracts import PostingSpec
 from automator.block_factory import create_block
@@ -33,15 +35,20 @@ KST = timezone(timedelta(hours=9))
 # ---------------------------------------------------------------------------
 
 def build_posting_spec(
-    combo:        Any,
-    account_opt:  AccountOption,
-    scheduled_at: datetime,
+    combo:          Any,
+    account_opt:    AccountOption,
+    scheduled_at:   datetime,
+    media_resolver: Callable[[int], str] | None = None,
 ) -> PostingSpec:
     """
     Build a PostingSpec from a DB Combination row.
 
-    Reads campaign.layout, campaign.publish_preset, campaign.run_preset
-    if they exist. Falls back to defaults when any is None.
+    Args:
+        combo:          Combination ORM instance.
+        account_opt:    AccountOption for the batch's account.
+        scheduled_at:   Batch-level scheduled datetime (KST-aware).
+        media_resolver: Resolves media_id -> absolute file path.
+                        Required when layout slots use media_id.
     """
     campaign = combo.campaign
     scheduled_kst = (
@@ -54,7 +61,7 @@ def build_posting_spec(
 
     layout = getattr(campaign, "layout", None)
     body = (
-        _build_body_from_layout(layout, combo)
+        _build_body_from_layout(layout, combo, media_resolver)
         if layout is not None
         else _build_body_default(combo)
     )
@@ -101,12 +108,16 @@ def _build_title(combo: Any) -> TitleOption:
 # Body — from PostLayout or fallback
 # ---------------------------------------------------------------------------
 
-def _build_body_from_layout(layout: Any, combo: Any) -> list[Section]:
+def _build_body_from_layout(
+    layout: Any,
+    combo: Any,
+    media_resolver: Callable[[int], str] | None = None,
+) -> list[Section]:
     """
     Convert PostLayout.slots into a Section with Block dataclasses.
 
     Each LayoutSlot's config JSON may contain {keyword}, {region}, etc.
-    These are interpolated with the combination's keyword values.
+    for text interpolation, and media_id for image resolution.
     """
     values = _build_values(combo)
     keyword = " ".join(values.values())
@@ -118,6 +129,7 @@ def _build_body_from_layout(layout: Any, combo: Any) -> list[Section]:
             config=dict(slot.config) if slot.config else {},
             values=values,
             keyword=keyword,
+            media_resolver=media_resolver,
         )
         blocks.append(block)
 

@@ -448,3 +448,18 @@ class BlockTypeInfo(BaseModel):
     type: str
     label: str
     config_schema: dict[str, Any] = {}
+
+
+# ---------------------------------------------------------------------------
+# Media
+# ---------------------------------------------------------------------------
+
+class MediaOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    user_id: int
+    original_name: str
+    content_type: str
+    storage_path: str
+    size_bytes: int
+    created_at: datetime

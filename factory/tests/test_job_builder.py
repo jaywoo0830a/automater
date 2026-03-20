@@ -195,6 +195,44 @@ class TestBuildBodyFromLayout:
         assert isinstance(blocks[0], HeadingBlock)
         assert isinstance(blocks[1], ParagraphBlock)
 
+    def test_image_slot_with_media_id(self):
+        """media_id in image slot is resolved to path via resolver."""
+        resolver = lambda mid: f"/uploads/{mid}/photo.jpg"
+        layout = _layout(
+            _slot(0, "paragraph", {"keyword": "{keyword}"}),
+            _slot(1, "image", {"media_id": 42}),
+        )
+        combo = _combo(keywords=[_keyword("region", "강남", cat_id=1)])
+        blocks = _build_body_from_layout(layout, combo, media_resolver=resolver)[0].blocks
+        assert len(blocks) == 2
+        assert isinstance(blocks[1], ImageBlock)
+        assert blocks[1].path == "/uploads/42/photo.jpg"
+
+    def test_featured_slot_with_media_id_and_overlay(self):
+        """Featured block resolves media_id and interpolates overlay."""
+        resolver = lambda mid: f"/uploads/{mid}/thumb.jpg"
+        layout = _layout(
+            _slot(0, "featured", {"media_id": 7, "overlay_text": "{keyword}"}),
+        )
+        combo = _combo(keywords=[_keyword("region", "강남", cat_id=1)])
+        blocks = _build_body_from_layout(layout, combo, media_resolver=resolver)[0].blocks
+        from automator.options import FeaturedImageBlock
+        assert isinstance(blocks[0], FeaturedImageBlock)
+        assert blocks[0].path == "/uploads/7/thumb.jpg"
+        assert blocks[0].overlay_text == "강남"
+
+    def test_mixed_path_and_media_id(self):
+        """Layout can mix explicit path and media_id slots."""
+        resolver = lambda mid: f"/uploads/{mid}/img.jpg"
+        layout = _layout(
+            _slot(0, "image", {"path": "/explicit.jpg"}),
+            _slot(1, "image", {"media_id": 10}),
+        )
+        combo = _combo(keywords=[_keyword("region", "강남", cat_id=1)])
+        blocks = _build_body_from_layout(layout, combo, media_resolver=resolver)[0].blocks
+        assert blocks[0].path == "/explicit.jpg"
+        assert blocks[1].path == "/uploads/10/img.jpg"
+
 
 # ---------------------------------------------------------------------------
 # build_posting_spec — full composition
@@ -267,3 +305,23 @@ class TestBuildPostingSpec:
         spec = build_posting_spec(combo, _account(), naive)
         assert spec.publish.at.tzinfo is not None
         assert spec.publish.at.utcoffset() == timedelta(hours=9)
+
+    def test_layout_with_media_id_and_resolver(self):
+        """Full pipeline: layout with media_id resolves via media_resolver."""
+        resolver = lambda mid: f"/uploads/{mid}/file.jpg"
+        layout = _layout(
+            _slot(0, "heading", {"level": 2, "text": "{keyword}"}),
+            _slot(1, "image", {"media_id": 42}),
+            _slot(2, "featured", {"media_id": 99, "overlay_text": "{keyword}"}),
+        )
+        combo = _combo(
+            keywords=[_keyword("region", "강남", cat_id=1)],
+            layout=layout,
+        )
+        scheduled = datetime.now(tz=KST) + timedelta(hours=2)
+        spec = build_posting_spec(combo, _account(), scheduled, media_resolver=resolver)
+        blocks = spec.body[0].blocks
+        assert len(blocks) == 3
+        assert blocks[1].path == "/uploads/42/file.jpg"
+        assert blocks[2].path == "/uploads/99/file.jpg"
+        assert blocks[2].overlay_text == "강남"

@@ -9,6 +9,7 @@ Table map:
     User                  → users                  (SPA login, owns accounts/campaigns)
     Platform              → platforms
     Account               → accounts               (user_id FK)
+    Media                 → media                   (user-uploaded files)
     KeywordCategory       → keyword_categories
     Keyword               → keywords
     Affix                 → affixes                (keyword derivation rules)
@@ -105,6 +106,7 @@ class User(Base):
     layouts:         Mapped[list["PostLayout"]]      = relationship("PostLayout",    back_populates="owner")
     publish_presets: Mapped[list["PublishPreset"]]   = relationship("PublishPreset", back_populates="owner")
     run_presets:     Mapped[list["RunPreset"]]       = relationship("RunPreset",     back_populates="owner")
+    media:           Mapped[list["Media"]]           = relationship("Media",         back_populates="owner")
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +154,25 @@ class Account(Base):
     owner:    Mapped["User"]          = relationship("User",     back_populates="accounts")
     platform: Mapped["Platform"]      = relationship("Platform", back_populates="accounts")
     batches:  Mapped[list["Batch"]]   = relationship("Batch",    back_populates="account")
+
+
+# ---------------------------------------------------------------------------
+# Media — user-uploaded files (images, thumbnails)
+# ---------------------------------------------------------------------------
+
+class Media(Base):
+    __tablename__ = "media"
+
+    id:            Mapped[int]      = mapped_column(Integer,     primary_key=True, autoincrement=True)
+    user_id:       Mapped[int]      = mapped_column(Integer,     ForeignKey("users.id"), nullable=False)
+    original_name: Mapped[str]      = mapped_column(String(256), nullable=False)
+    content_type:  Mapped[str]      = mapped_column(String(64),  nullable=False)
+    storage_path:  Mapped[str]      = mapped_column(String(512), nullable=False, unique=True)
+    size_bytes:    Mapped[int]      = mapped_column(Integer,     nullable=False)
+    created_at:    Mapped[datetime] = mapped_column(DateTime,    nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    # relationships
+    owner: Mapped["User"] = relationship("User", back_populates="media")
 
 
 # ---------------------------------------------------------------------------

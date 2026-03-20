@@ -2,6 +2,9 @@
 api/deps.py
 ------------
 FastAPI dependencies: DB session, JWT auth, current user.
+
+Uses bcrypt (direct) for password hashing and PyJWT for tokens.
+No passlib, no python-jose — both are unmaintained.
 """
 
 from __future__ import annotations
@@ -10,11 +13,10 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
+import bcrypt
+import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
-from passlib.context import CryptContext
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from factory.db import get_engine
@@ -25,7 +27,6 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 _bearer = HTTPBearer(auto_error=False)
 
 _engine = None
@@ -45,13 +46,23 @@ def get_db():
         yield session
 
 
+# ---------------------------------------------------------------------------
+# Password hashing — bcrypt direct API
+# ---------------------------------------------------------------------------
+
 def hash_password(plain: str) -> str:
-    return pwd_context.hash(plain)
+    """Hash a plaintext password with bcrypt."""
+    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    """Verify a plaintext password against a bcrypt hash."""
+    return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
 
+
+# ---------------------------------------------------------------------------
+# JWT — PyJWT direct API
+# ---------------------------------------------------------------------------
 
 def create_access_token(user_id: int) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -68,10 +79,14 @@ def _decode_token(token: str) -> int:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = int(payload["sub"])
-    except (JWTError, KeyError, ValueError) as exc:
+    except (jwt.InvalidTokenError, KeyError, ValueError) as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
     return user_id
 
+
+# ---------------------------------------------------------------------------
+# FastAPI dependencies
+# ---------------------------------------------------------------------------
 
 def get_current_user(
     creds: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],

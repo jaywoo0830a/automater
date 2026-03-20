@@ -15,7 +15,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routes import auth, admin, platforms, accounts, keywords, layouts, presets, campaigns, combinations, batches, utility
+from api.routes import auth, admin, platforms, accounts, keywords, layouts, presets, campaigns, combinations, batches, utility, media
 
 
 def create_app() -> FastAPI:
@@ -45,6 +45,7 @@ def create_app() -> FastAPI:
     app.include_router(combinations.router)
     app.include_router(batches.router)
     app.include_router(utility.router)
+    app.include_router(media.router)
 
     return app
 

@@ -37,6 +37,8 @@ tags:
     description: Dispatch, execution, monitoring
   - name: utility
     description: Validation and metadata endpoints
+  - name: media
+    description: User-uploaded files (images, thumbnails)
 
 components:
   securitySchemes:
@@ -511,6 +513,25 @@ components:
             type: string
         error:
           type: ["string", "null"]
+
+    Media:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        original_name:
+          type: string
+        content_type:
+          type: string
+        storage_path:
+          type: string
+        size_bytes:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
 
   responses:
     NotFound:
@@ -2145,3 +2166,96 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/BlockTypeInfo"
+
+  # ── Media ────────────────────────────────────────────────────────────────
+  /media:
+    get:
+      tags: [media]
+      operationId: listMedia
+      summary: My uploaded media files
+      parameters:
+        - name: content_type
+          in: query
+          schema:
+            type: string
+        - $ref: "#/components/parameters/pageParam"
+        - $ref: "#/components/parameters/perPageParam"
+      responses:
+        "200":
+          description: Media list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Media"
+    post:
+      tags: [media]
+      operationId: uploadMedia
+      summary: Upload an image file
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Media record created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Media"
+
+  /media/{id}:
+    get:
+      tags: [media]
+      operationId: getMedia
+      summary: Get media metadata
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "200":
+          description: Media detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Media"
+    delete:
+      tags: [media]
+      operationId: deleteMedia
+      summary: Delete media record and file
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "204":
+          description: Deleted
+
+  /media/{id}/file:
+    get:
+      tags: [media]
+      operationId: serveMedia
+      summary: Serve the actual file for download/display
+      parameters:
+        - $ref: "#/components/parameters/pathId"
+      responses:
+        "200":
+          description: File content
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
