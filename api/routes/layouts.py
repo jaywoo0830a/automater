@@ -69,10 +69,9 @@ def get_layout(id: int, db: Db, user: CurrentUser):
 @router.patch("/{id}", response_model=LayoutOut)
 def update_layout(id: int, body: LayoutUpdate, db: Db, user: CurrentUser):
     layout = _own(db, user, id)
-    if body.name is not None:
-        layout.name = body.name
-    if body.description is not None:
-        layout.description = body.description
+    for field in ("name", "description"):
+        if field in body.model_fields_set:
+            setattr(layout, field, getattr(body, field))
     db.commit()
     db.refresh(layout)
     return layout

@@ -168,6 +168,7 @@ case "${MODE}" in
     test_campaign_slots.py             ComboGenerator slot logic
     test_keyword_picker.py             save_picks / load_picks
     test_batch_dispatcher.py           BatchDispatcher
+    test_batch_worker.py               BatchWorker execution pipeline
     test_job_builder.py                Combination -> PostingSpec (dynamic)
 
 HELP

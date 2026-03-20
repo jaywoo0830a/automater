@@ -37,10 +37,9 @@ def update_user(id: int, body: AdminUserUpdate, db: Db, _: AdminUser):
     user = db.get(User, id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    if body.role is not None:
-        user.role = body.role
-    if body.status is not None:
-        user.status = body.status
+    for field in ("role", "status"):
+        if field in body.model_fields_set:
+            setattr(user, field, getattr(body, field))
     db.commit()
     db.refresh(user)
     return user

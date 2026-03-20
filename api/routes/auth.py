@@ -53,8 +53,9 @@ def get_me(user: CurrentUser):
 
 @router.patch("/me", response_model=UserOut)
 def update_me(body: UserUpdate, user: CurrentUser, db: Db):
-    if body.display_name is not None:
-        user.display_name = body.display_name
+    for field in ("display_name",):
+        if field in body.model_fields_set:
+            setattr(user, field, getattr(body, field))
     db.commit()
     db.refresh(user)
     return user

@@ -99,7 +99,7 @@ class AccountOut(BaseModel):
     user_id: int
     platform_id: int
     username: str
-    meta: dict[str, Any] | None = None
+    meta: dict[str, Any] | None = Field(None, validation_alias="extra")
     cooldown_days: int
     last_used_at: datetime | None = None
     status: str

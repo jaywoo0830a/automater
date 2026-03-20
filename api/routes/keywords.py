@@ -40,8 +40,9 @@ def update_category(id: int, body: CategoryUpdate, db: Db, _: CurrentUser):
     cat = db.get(KeywordCategory, id)
     if not cat:
         raise HTTPException(status_code=404, detail="Category not found")
-    if body.name is not None:
-        cat.name = body.name
+    for field in ("name",):
+        if field in body.model_fields_set:
+            setattr(cat, field, getattr(body, field))
     db.commit()
     db.refresh(cat)
     return cat
@@ -120,10 +121,9 @@ def update_keyword(id: int, body: KeywordUpdate, db: Db, _: CurrentUser):
     if not kw:
         raise HTTPException(status_code=404, detail="Keyword not found")
     for field in ("value", "display_value", "parent_id", "tier", "active", "sort_order"):
-        val = getattr(body, field, None)
-        if val is not None:
-            setattr(kw, field, val)
-    if body.metadata is not None:
+        if field in body.model_fields_set:
+            setattr(kw, field, getattr(body, field))
+    if "metadata" in body.model_fields_set:
         kw.metadata_ = body.metadata
     db.commit()
     db.refresh(kw)
@@ -166,9 +166,8 @@ def update_affix(id: int, body: AffixUpdate, db: Db, _: CurrentUser):
     if not affix:
         raise HTTPException(status_code=404, detail="Affix not found")
     for field in ("value", "sort_order", "active"):
-        val = getattr(body, field, None)
-        if val is not None:
-            setattr(affix, field, val)
+        if field in body.model_fields_set:
+            setattr(affix, field, getattr(body, field))
     db.commit()
     db.refresh(affix)
     return affix

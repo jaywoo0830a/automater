@@ -57,15 +57,13 @@ def get_account(id: int, db: Db, user: CurrentUser):
 @router.patch("/{id}", response_model=AccountOut)
 def update_account(id: int, body: AccountUpdate, db: Db, user: CurrentUser):
     acc = _own(db, user, id)
-    for field in ("password", "meta", "cooldown_days", "status", "note"):
-        val = getattr(body, field, None)
-        if val is not None:
-            if field == "password":
-                acc.password_enc = val
-            elif field == "meta":
-                acc.extra = val
-            else:
-                setattr(acc, field, val)
+    if "password" in body.model_fields_set:
+        acc.password_enc = body.password
+    if "meta" in body.model_fields_set:
+        acc.extra = body.meta
+    for field in ("cooldown_days", "status", "note"):
+        if field in body.model_fields_set:
+            setattr(acc, field, getattr(body, field))
     db.commit()
     db.refresh(acc)
     return acc

@@ -96,9 +96,8 @@ def update_campaign(id: int, body: CampaignUpdate, db: Db, user: CurrentUser):
     c = _own_campaign(db, user, id)
     for field in ("name", "description", "title_template", "layout_id",
                   "publish_preset_id", "run_preset_id", "status", "config"):
-        val = getattr(body, field, None)
-        if val is not None:
-            setattr(c, field, val)
+        if field in body.model_fields_set:
+            setattr(c, field, getattr(body, field))
     db.commit()
     db.refresh(c)
     return c
@@ -333,9 +332,8 @@ def update_spacing_rule(id: int, body: SpacingRuleUpdate, db: Db, user: CurrentU
         raise HTTPException(status_code=404, detail="Spacing rule not found")
     _own_campaign(db, user, rule.campaign_id)
     for field in ("pattern", "description", "active"):
-        val = getattr(body, field, None)
-        if val is not None:
-            setattr(rule, field, val)
+        if field in body.model_fields_set:
+            setattr(rule, field, getattr(body, field))
     db.commit()
     db.refresh(rule)
     return rule
