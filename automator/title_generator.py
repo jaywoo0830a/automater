@@ -31,7 +31,6 @@ from __future__ import annotations
 
 import random
 import re
-from pathlib import Path
 
 from automator.options import TitleOption
 

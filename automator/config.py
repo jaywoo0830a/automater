@@ -84,8 +84,6 @@ def _load_browser_settings() -> BrowserSettings:
 # Module-level singleton
 browser_settings = _load_browser_settings()
 
-# Backward-compatibility alias (old code imported `settings`)
-settings = browser_settings
 
 
 # ---------------------------------------------------------------------------

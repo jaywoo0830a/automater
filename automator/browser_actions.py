@@ -678,6 +678,17 @@ def dismiss(locator, panel_locator=None, timeout_ms: int = 6_000) -> bool:
     return clicked
 
 
+def dismiss_polling(locator, panel_locator=None, timeout_ms: int = 6_000) -> bool:
+    """
+    Poll-click locator, then optionally wait for panel to hide.
+
+    Use this for race-condition overlays that appear at unpredictable times.
+    """
+    clicked = click_polling(locator, timeout_ms)
+    if clicked and panel_locator is not None:
+        wait_until_hidden(panel_locator)
+    return clicked
+
 
 def dismiss_parallel(locators: list, timeout_ms: int = 8_000) -> list[bool]:
     """
@@ -709,17 +720,6 @@ def dismiss_parallel(locators: list, timeout_ms: int = 8_000) -> list[bool]:
         remaining = still_pending
 
     return results
-
-def dismiss_polling(locator, panel_locator=None, timeout_ms: int = 6_000) -> bool:
-    """
-    Poll-click locator, then optionally wait for panel to hide.
-
-    Use this for race-condition overlays that appear at unpredictable times.
-    """
-    clicked = click_polling(locator, timeout_ms)
-    if clicked and panel_locator is not None:
-        wait_until_hidden(panel_locator)
-    return clicked
 
 
 # ---------------------------------------------------------------------------

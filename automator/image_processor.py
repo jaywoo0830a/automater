@@ -35,9 +35,13 @@ def _decimal_to_dms_rational(value: float) -> list[tuple[int, int]]:
     return [(degrees, 1), (minutes, 1), (seconds, 10000)]
 
 
-def _gps_ref(value: float, axis: str) -> bytes:
-    if axis == "lat":
-        return b"N" if value >= 0 else b"S"
+def _latitude_ref(value: float) -> bytes:
+    """Return GPS latitude reference: b'N' for positive, b'S' for negative."""
+    return b"N" if value >= 0 else b"S"
+
+
+def _longitude_ref(value: float) -> bytes:
+    """Return GPS longitude reference: b'E' for positive, b'W' for negative."""
     return b"E" if value >= 0 else b"W"
 
 
@@ -122,12 +126,12 @@ def _apply_pixel_jitter(img: Image.Image, enabled: bool) -> Image.Image:
     return img
 
 
-def _apply_size_jitter(img: Image.Image, n: int) -> Image.Image:
-    if n == 0:
+def _apply_size_jitter(img: Image.Image, jitter_px: int) -> Image.Image:
+    if jitter_px == 0:
         return img
     w, h  = img.size
-    new_w = max(1, w + random.randint(-n, n))
-    new_h = max(1, h + random.randint(-n, n))
+    new_w = max(1, w + random.randint(-jitter_px, jitter_px))
+    new_h = max(1, h + random.randint(-jitter_px, jitter_px))
     if (new_w, new_h) == (w, h):
         return img
     return img.resize((new_w, new_h), Image.LANCZOS)
@@ -278,9 +282,9 @@ def _encode_with_exif(
             zeroth[piexif.ImageIFD.ImageDescription] = keyword.encode("utf-8")
 
         if gps_lat is not None and gps_lng is not None:
-            gps[piexif.GPSIFD.GPSLatitudeRef]  = _gps_ref(gps_lat, "lat")
+            gps[piexif.GPSIFD.GPSLatitudeRef]  = _latitude_ref(gps_lat)
             gps[piexif.GPSIFD.GPSLatitude]     = _decimal_to_dms_rational(gps_lat)
-            gps[piexif.GPSIFD.GPSLongitudeRef] = _gps_ref(gps_lng, "lng")
+            gps[piexif.GPSIFD.GPSLongitudeRef] = _longitude_ref(gps_lng)
             gps[piexif.GPSIFD.GPSLongitude]    = _decimal_to_dms_rational(gps_lng)
 
         exif_bytes = piexif.dump({"0th": zeroth, "GPS": gps, "Exif": {}, "1st": {}})

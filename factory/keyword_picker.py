@@ -20,7 +20,6 @@ from factory.models import (
     CampaignKeywordPick,
     CampaignSlot,
     Keyword,
-    KeywordCategory,
 )
 
 # Re-export the type alias so callers can type-hint without importing models

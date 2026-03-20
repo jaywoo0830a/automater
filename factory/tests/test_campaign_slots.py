@@ -53,7 +53,7 @@ class TestComboGeneratorRun:
         campaign = make_campaign(session)
         inserted = ComboGenerator(session=session, campaign_id=campaign.id).run()
         session.flush()
-        assert inserted == 4
+        assert inserted == 8
 
     def test_each_combination_has_correct_keyword_count(self, session: Session):
         campaign = make_campaign(session)

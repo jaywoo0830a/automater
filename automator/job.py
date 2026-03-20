@@ -142,7 +142,14 @@ class PostingJob:
     # ------------------------------------------------------------------
 
     def validate(self) -> None:
-        """설정 오류를 사전에 검출한다."""
+        """Detect configuration errors before execution."""
+        self._validate_account()
+        self._validate_title()
+        validate_sections(self._body)
+        self._validate_publish()
+        self._validate_setting()
+
+    def _validate_account(self) -> None:
         if self._account is None:
             raise ValueError(
                 "PostingJob requires an AccountOption. "
@@ -153,54 +160,58 @@ class PostingJob:
         if not self._account.password.strip():
             raise ValueError("AccountOption.password must not be empty")
 
+    def _validate_title(self) -> None:
         if self._title is not None and not self._title.fixed_title:
             if self._title.template:
                 validate_template(self._title.template)
 
-        validate_sections(self._body)
+    def _validate_publish(self) -> None:
+        if self._publish is None:
+            return
 
-        if self._publish is not None:
-            pub = self._publish
-            if pub.min_tags > pub.max_tags:
-                raise ValueError("PublishOption.min_tags must be <= max_tags")
-            if not (0 <= pub.backlink_ratio <= 100):
-                raise ValueError("PublishOption.backlink_ratio must be 0–100")
-            if not (0 <= pub.internal_link_ratio <= 100):
-                raise ValueError("PublishOption.internal_link_ratio must be 0–100")
+        pub = self._publish
+        if pub.min_tags > pub.max_tags:
+            raise ValueError("PublishOption.min_tags must be <= max_tags")
+        if not (0 <= pub.backlink_ratio <= 100):
+            raise ValueError("PublishOption.backlink_ratio must be 0–100")
+        if not (0 <= pub.internal_link_ratio <= 100):
+            raise ValueError("PublishOption.internal_link_ratio must be 0–100")
 
-            mode = pub.mode
-            if mode != "immediate":
-                if pub.at is None:
-                    raise ValueError(
-                        f"PublishOption.at 은 mode='{mode}'일 때 필수입니다."
-                    )
-                if pub.at.tzinfo is None:
-                    raise ValueError(
-                        "PublishOption.at 은 timezone-aware datetime 이어야 합니다. "
-                        "예: datetime(2025, 6, 1, 9, 0, tzinfo=KST)"
-                    )
-                now      = datetime.now(tz=KST)
-                earliest = (
-                    pub.at - timedelta(minutes=pub.jitter_minutes)
-                    if mode == "random_window"
-                    else pub.at
-                )
-                if earliest <= now:
-                    raise ValueError(
-                        "PublishOption.at 은 현재 시각보다 미래여야 합니다. "
-                        f"(earliest={earliest.isoformat()}, now={now.isoformat()})"
-                    )
-            if mode == "random_window" and pub.jitter_minutes <= 0:
+        mode = pub.mode
+        if mode != "immediate":
+            if pub.at is None:
                 raise ValueError(
-                    f"PublishOption.jitter_minutes 은 양수여야 합니다. "
-                    f"(got {pub.jitter_minutes})"
+                    f"PublishOption.at 은 mode='{mode}'일 때 필수입니다."
                 )
+            if pub.at.tzinfo is None:
+                raise ValueError(
+                    "PublishOption.at 은 timezone-aware datetime 이어야 합니다. "
+                    "예: datetime(2025, 6, 1, 9, 0, tzinfo=KST)"
+                )
+            now      = datetime.now(tz=KST)
+            earliest = (
+                pub.at - timedelta(minutes=pub.jitter_minutes)
+                if mode == "random_window"
+                else pub.at
+            )
+            if earliest <= now:
+                raise ValueError(
+                    "PublishOption.at 은 현재 시각보다 미래여야 합니다. "
+                    f"(earliest={earliest.isoformat()}, now={now.isoformat()})"
+                )
+        if mode == "random_window" and pub.jitter_minutes <= 0:
+            raise ValueError(
+                f"PublishOption.jitter_minutes 은 양수여야 합니다. "
+                f"(got {pub.jitter_minutes})"
+            )
 
-        if self._setting is not None:
-            if self._setting.post_interval < 0:
-                raise ValueError("RunSetting.post_interval must be >= 0")
-            if self._setting.max_daily_posts < 1:
-                raise ValueError("RunSetting.max_daily_posts must be >= 1")
+    def _validate_setting(self) -> None:
+        if self._setting is None:
+            return
+        if self._setting.post_interval < 0:
+            raise ValueError("RunSetting.post_interval must be >= 0")
+        if self._setting.max_daily_posts < 1:
+            raise ValueError("RunSetting.max_daily_posts must be >= 1")
 
     # ------------------------------------------------------------------
     # Content generation

@@ -34,7 +34,7 @@ from automator.editor import (
     ParagraphStep, ImageStep, ThumbnailStep, PostStep,
 )
 from automator.selector_loader import SelectorLoader
-from automator.browser_actions import (  # noqa: E402 (after path setup)
+from automator.browser_actions import (
     click_if_visible,
     click_polling,
     dismiss_polling,
