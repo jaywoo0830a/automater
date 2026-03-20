@@ -93,4 +93,4 @@ def test_content_type_detection():
     assert LocalStorage.guess_content_type("icon.png") == "image/png"
     assert LocalStorage.guess_content_type("pic.webp") == "image/webp"
     assert LocalStorage.guess_content_type("pic.gif") == "image/gif"
-    assert LocalStorage.guess_content_type("unknown.xyz") == "application/octet-stream"
+    assert LocalStorage.guess_content_type("unknown.zzzzz") == "application/octet-stream"
