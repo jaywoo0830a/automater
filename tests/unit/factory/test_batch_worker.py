@@ -1,5 +1,5 @@
 """
-factory/tests/test_batch_worker.py
+tests/unit/factory/test_batch_worker.py
 -------------------------------------
 BatchWorker — executes a batch of PostingSpecs through BlogEditor.
 
@@ -146,24 +146,6 @@ def editor_factory(recording_editor):
 # ---------------------------------------------------------------------------
 
 class TestBatchWorker:
-
-    def test_debug_title_generation(self, runner, editor_factory):
-        """Debug: verify title template matches available keywords."""
-        campaign = _campaign()  # template="{region}"
-        combo = _combination(101, [_keyword("region", "강남", 1)], campaign)
-
-        # Trace the exact path that fails
-        from factory.job_builder import _build_values, _build_title
-        values = _build_values(combo)
-        assert "region" in values, f"values missing 'region': {values}"
-
-        title_opt = _build_title(combo)
-        assert title_opt.template == "{region}", f"template: {title_opt.template}"
-        assert "region" in title_opt.values, f"title values: {title_opt.values}"
-
-        from automator.title_generator import generate_title
-        title = generate_title(title_opt)
-        assert title == "강남", f"generated: {title}"
 
     def test_processes_all_items(self, runner, editor_factory):
         campaign = _campaign()

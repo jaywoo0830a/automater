@@ -1,5 +1,5 @@
 """
-factory/tests/test_keyword_picker.py
+tests/integration/factory/test_keyword_picker.py
 --------------------------------------
 CampaignKeywordPicker 단위 테스트.
 SQLAlchemy 2.0 select() 스타일로 DB 상태를 검증한다.
@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from factory.keyword_picker import CampaignKeywordPicker
 from factory.models import CampaignKeywordPick, Keyword
-from factory.tests.conftest import make_campaign
+from tests.integration.factory.conftest import make_campaign
 
 
 class TestSavePicks:

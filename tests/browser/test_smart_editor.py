@@ -31,14 +31,12 @@ def editor(mock_page):
 # open()
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
 def test_open_navigates_to_write_url(editor, mock_page):
     with patch.object(editor, "_wait_for_editor_ready"):
         editor.open()
     mock_page.goto.assert_called_once_with(_WRITE_URL)
 
 
-@pytest.mark.unit
 def test_open_raises_on_login_redirect(editor, mock_page):
     mock_page.url = "https://nid.naver.com/nidlogin.login"
     with patch.object(editor, "_wait_for_editor_ready"), \
@@ -46,7 +44,6 @@ def test_open_raises_on_login_redirect(editor, mock_page):
         editor.open()
 
 
-@pytest.mark.unit
 def test_open_raises_on_login_keyword_in_url(editor, mock_page):
     mock_page.url = "https://naver.com?redirect=login&next=..."
     with patch.object(editor, "_wait_for_editor_ready"), \
@@ -58,7 +55,6 @@ def test_open_raises_on_login_keyword_in_url(editor, mock_page):
 # insert_text()
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
 def test_insert_text_calls_keyboard_type(editor, mock_page):
     with patch.object(editor, "_frame") as mock_frame, \
          patch.object(editor, "_sel") as mock_sel:
@@ -72,7 +68,6 @@ def test_insert_text_calls_keyboard_type(editor, mock_page):
 # upload_file()
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
 def test_upload_file_raises_for_missing_file(editor):
     with pytest.raises(FileNotFoundError):
         editor.upload_file("/nonexistent/image.jpg")
@@ -82,7 +77,6 @@ def test_upload_file_raises_for_missing_file(editor):
 # set_representative_media()
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
 def test_set_rep_image_raises_for_negative_index(editor):
     with pytest.raises(ValueError):
         editor.set_representative_media(-1)
@@ -92,7 +86,6 @@ def test_set_rep_image_raises_for_negative_index(editor):
 # publish()
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
 def test_publish_dry_run_opens_popover_but_skips_confirm(editor, mock_page):
     with patch.object(editor, "_click_publish_trigger"), \
          patch.object(editor, "_click_publish_confirm") as mock_confirm:
@@ -104,7 +97,6 @@ def test_publish_dry_run_opens_popover_but_skips_confirm(editor, mock_page):
 # _round_minute_to_10()
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
 def test_round_minute_to_10_floors_to_nearest_ten():
     assert SmartEditorOne._round_minute_to_10(0)  == "00"
     assert SmartEditorOne._round_minute_to_10(9)  == "00"

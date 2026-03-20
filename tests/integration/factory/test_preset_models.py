@@ -1,5 +1,5 @@
 """
-factory/tests/test_preset_models.py
+tests/integration/factory/test_preset_models.py
 --------------------------------------
 PostLayout, LayoutSlot, PublishPreset, RunPreset model tests.
 

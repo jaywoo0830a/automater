@@ -17,7 +17,6 @@ from automator.options import (
 # Registry coverage
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
 def test_all_block_types_registered():
     """Every concrete Block type has a factory entry."""
     assert "paragraph" in FACTORIES
@@ -29,7 +28,6 @@ def test_all_block_types_registered():
     assert "divider" in FACTORIES
 
 
-@pytest.mark.unit
 def test_unknown_type_raises():
     with pytest.raises(KeyError, match="unknown_type"):
         create_block("unknown_type", {})
@@ -39,7 +37,6 @@ def test_unknown_type_raises():
 # Basic creation (no interpolation)
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
 def test_paragraph_from_config():
     block = create_block("paragraph", {"prompt": "test prompt", "tone": "review"})
     assert isinstance(block, ParagraphBlock)
@@ -47,7 +44,6 @@ def test_paragraph_from_config():
     assert block.tone == "review"
 
 
-@pytest.mark.unit
 def test_heading_from_config():
     block = create_block("heading", {"level": 2, "text": "Section title"})
     assert isinstance(block, HeadingBlock)
@@ -55,33 +51,28 @@ def test_heading_from_config():
     assert block.text == "Section title"
 
 
-@pytest.mark.unit
 def test_image_from_config():
     block = create_block("image", {"path": "/tmp/a.jpg", "alt": "photo"})
     assert isinstance(block, ImageBlock)
     assert block.path == "/tmp/a.jpg"
 
 
-@pytest.mark.unit
 def test_featured_from_config():
     block = create_block("featured", {"path": "/tmp/b.jpg", "overlay_text": "text"})
     assert isinstance(block, FeaturedImageBlock)
 
 
-@pytest.mark.unit
 def test_list_from_config():
     block = create_block("list", {"items": ("a", "b"), "ordered": True})
     assert isinstance(block, ListBlock)
     assert block.ordered is True
 
 
-@pytest.mark.unit
 def test_quote_from_config():
     block = create_block("quote", {"text": "wisdom", "attribution": "author"})
     assert isinstance(block, QuoteBlock)
 
 
-@pytest.mark.unit
 def test_divider_from_empty_config():
     block = create_block("divider", {})
     assert isinstance(block, DividerBlock)
@@ -91,7 +82,6 @@ def test_divider_from_empty_config():
 # Placeholder interpolation
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
 def test_keyword_placeholder():
     """'{keyword}' in config is replaced with the full keyword string."""
     block = create_block(
@@ -103,7 +93,6 @@ def test_keyword_placeholder():
     assert block.keyword == "강남 수학"
 
 
-@pytest.mark.unit
 def test_slug_placeholder():
     """'{region}' is replaced with the value for that slug."""
     block = create_block(
@@ -115,7 +104,6 @@ def test_slug_placeholder():
     assert block.text == "강남 수학 guide"
 
 
-@pytest.mark.unit
 def test_mixed_placeholders():
     """Multiple placeholder types in the same value."""
     block = create_block(
@@ -127,7 +115,6 @@ def test_mixed_placeholders():
     assert block.prompt == "강남에서 강남 수학 홍보"
 
 
-@pytest.mark.unit
 def test_unresolved_placeholder_preserved():
     """Unknown placeholder like {unknown} stays as-is."""
     block = create_block(
@@ -139,7 +126,6 @@ def test_unresolved_placeholder_preserved():
     assert block.text == "{unknown} title"
 
 
-@pytest.mark.unit
 def test_non_string_values_unchanged():
     """Non-string config values pass through without interpolation."""
     block = create_block(
@@ -154,7 +140,6 @@ def test_non_string_values_unchanged():
 # Unknown config keys are ignored (forward compatibility)
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
 def test_unknown_config_keys_ignored():
     """Keys not in the dataclass are silently dropped."""
     block = create_block(
@@ -165,7 +150,6 @@ def test_unknown_config_keys_ignored():
     assert block.prompt == "test"
 
 
-@pytest.mark.unit
 def test_list_interpolation():
     """Placeholders inside list items are also interpolated."""
     block = create_block(
@@ -181,7 +165,6 @@ def test_list_interpolation():
 # media_id resolution
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
 def test_image_media_id_resolved_to_path():
     """media_id in config is resolved to path via resolver."""
     resolver = lambda mid: f"/uploads/{mid}/photo.jpg"
@@ -194,7 +177,6 @@ def test_image_media_id_resolved_to_path():
     assert block.path == "/uploads/42/photo.jpg"
 
 
-@pytest.mark.unit
 def test_featured_media_id_with_overlay():
     """Featured block resolves media_id and keeps overlay_text."""
     resolver = lambda mid: f"/uploads/{mid}/thumb.jpg"
@@ -210,14 +192,12 @@ def test_featured_media_id_with_overlay():
     assert block.overlay_text == "강남 수학"
 
 
-@pytest.mark.unit
 def test_media_id_without_resolver_raises():
     """media_id present but no resolver → ValueError."""
     with pytest.raises(ValueError, match="media_resolver"):
         create_block("image", {"media_id": 1})
 
 
-@pytest.mark.unit
 def test_media_id_stripped_from_config():
     """media_id itself is not passed to the Block dataclass."""
     resolver = lambda mid: "/resolved.jpg"
@@ -226,7 +206,6 @@ def test_media_id_stripped_from_config():
     assert block.path == "/resolved.jpg"
 
 
-@pytest.mark.unit
 def test_path_takes_precedence_over_media_id():
     """Explicit path in config is used even if media_id is present."""
     resolver = lambda mid: "/resolved.jpg"
@@ -238,7 +217,6 @@ def test_path_takes_precedence_over_media_id():
     assert block.path == "/explicit.jpg"
 
 
-@pytest.mark.unit
 def test_non_image_block_ignores_media_id():
     """media_id in non-image block is filtered out by _filter_fields."""
     block = create_block(

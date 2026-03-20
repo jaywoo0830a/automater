@@ -1,5 +1,5 @@
 """
-factory/tests/test_campaign_slots.py
+tests/integration/factory/test_combo_generator.py
 --------------------------------------
 ComboGenerator 단위 테스트.
 build_combos() 는 순수 함수이므로 DB 없이 검증한다.
@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from factory.combo_generator import ComboGenerator, ComboSpec, build_combos
 from factory.models import Combination, Keyword, SpacingRule
-from factory.tests.conftest import make_campaign
+from tests.integration.factory.conftest import make_campaign
 
 
 # ---------------------------------------------------------------------------

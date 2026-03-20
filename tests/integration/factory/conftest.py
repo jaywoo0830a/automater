@@ -1,5 +1,5 @@
 """
-factory/tests/conftest.py
+tests/integration/factory/conftest.py
 --------------------------
 SQLAlchemy 2.0 공식 패턴 기반 테스트 픽스처.
 

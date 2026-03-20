@@ -16,32 +16,27 @@ from automator.config import Geolocation, _load_browser_settings
 # Geolocation.from_string
 # ===========================================================================
 
-@pytest.mark.unit
 def test_geolocation_parses_valid():
     geo = Geolocation.from_string("37.5665,126.9780")
     assert geo.latitude  == pytest.approx(37.5665)
     assert geo.longitude == pytest.approx(126.9780)
 
 
-@pytest.mark.unit
 def test_geolocation_parses_negative():
     geo = Geolocation.from_string("-33.8688,151.2093")
     assert geo.latitude < 0
 
 
-@pytest.mark.unit
 def test_geolocation_parses_with_spaces():
     geo = Geolocation.from_string(" 37.5665 , 126.9780 ")
     assert geo.latitude == pytest.approx(37.5665)
 
 
-@pytest.mark.unit
 def test_geolocation_raises_on_invalid():
     with pytest.raises(ValueError):
         Geolocation.from_string("not,valid")
 
 
-@pytest.mark.unit
 def test_geolocation_raises_on_single_value():
     with pytest.raises(ValueError):
         Geolocation.from_string("37.5665")
@@ -51,7 +46,6 @@ def test_geolocation_raises_on_single_value():
 # BrowserSettings
 # ===========================================================================
 
-@pytest.mark.unit
 def test_browser_settings_korean_defaults(monkeypatch):
     monkeypatch.delenv("LOCALE",    raising=False)
     monkeypatch.delenv("TIMEZONE",  raising=False)
@@ -65,7 +59,6 @@ def test_browser_settings_korean_defaults(monkeypatch):
     assert s.language == "ko"
 
 
-@pytest.mark.unit
 def test_browser_settings_reads_env(monkeypatch):
     monkeypatch.setenv("LOCALE",    "en_US")
     monkeypatch.setenv("TIMEZONE",  "America/New_York")
@@ -79,7 +72,6 @@ def test_browser_settings_reads_env(monkeypatch):
     assert s.user_agent == "TestAgent/1.0"
 
 
-@pytest.mark.unit
 def test_browser_settings_empty_user_agent_is_none(monkeypatch):
     monkeypatch.setenv("USER_AGENT", "")
     s = _load_browser_settings()
@@ -90,35 +82,30 @@ def test_browser_settings_empty_user_agent_is_none(monkeypatch):
 # get_app_env / is_production (ENV 환경변수 기반)
 # ===========================================================================
 
-@pytest.mark.unit
 def test_get_app_env_returns_test(monkeypatch):
     monkeypatch.setenv("ENV", "test")
     from automator.config import get_app_env
     assert get_app_env() == "test"
 
 
-@pytest.mark.unit
 def test_get_app_env_returns_dev(monkeypatch):
     monkeypatch.setenv("ENV", "dev")
     from automator.config import get_app_env
     assert get_app_env() == "dev"
 
 
-@pytest.mark.unit
 def test_get_app_env_returns_production(monkeypatch):
     monkeypatch.setenv("ENV", "production")
     from automator.config import get_app_env
     assert get_app_env() == "production"
 
 
-@pytest.mark.unit
 def test_get_app_env_defaults_to_dev_when_unset(monkeypatch):
     monkeypatch.delenv("ENV", raising=False)
     from automator.config import get_app_env
     assert get_app_env() == "dev"
 
 
-@pytest.mark.unit
 def test_get_app_env_unknown_value_warns_and_falls_back(monkeypatch):
     import warnings
     monkeypatch.setenv("ENV", "staging")
@@ -130,21 +117,18 @@ def test_get_app_env_unknown_value_warns_and_falls_back(monkeypatch):
     assert any("Unknown ENV" in str(x.message) for x in w)
 
 
-@pytest.mark.unit
 def test_is_production_false_for_test(monkeypatch):
     monkeypatch.setenv("ENV", "test")
     from automator.config import is_production
     assert is_production() is False
 
 
-@pytest.mark.unit
 def test_is_production_false_for_dev(monkeypatch):
     monkeypatch.setenv("ENV", "dev")
     from automator.config import is_production
     assert is_production() is False
 
 
-@pytest.mark.unit
 def test_is_production_true_for_production(monkeypatch):
     monkeypatch.setenv("ENV", "production")
     from automator.config import is_production

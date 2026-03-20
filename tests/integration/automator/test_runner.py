@@ -82,7 +82,6 @@ def rec():
 # Basic flow
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
 def test_run_calls_open_title_publish(runner, rec):
     """Minimum run: open -> title -> content -> publish."""
     runner.run(_spec(), rec)
@@ -92,7 +91,6 @@ def test_run_calls_open_title_publish(runner, rec):
     assert actions[-1] == "publish"
 
 
-@pytest.mark.unit
 def test_run_with_paragraphs(runner, rec):
     """ParagraphBlocks produce insert_text calls."""
     spec = _spec(body=(Section(blocks=(
@@ -104,7 +102,6 @@ def test_run_with_paragraphs(runner, rec):
     assert len(inserts) == 2
 
 
-@pytest.mark.unit
 def test_run_with_heading(runner, rec):
     """HeadingBlock produces insert_text call."""
     spec = _spec(body=(Section(blocks=(
@@ -116,7 +113,6 @@ def test_run_with_heading(runner, rec):
     assert inserts[0][1] == "Section Title"
 
 
-@pytest.mark.unit
 def test_cursor_between_steps(runner, rec):
     """cursor("end") is called between content steps."""
     spec = _spec(body=(Section(blocks=(
@@ -128,7 +124,6 @@ def test_cursor_between_steps(runner, rec):
     assert len(cursors) >= 1
 
 
-@pytest.mark.unit
 def test_publish_schedule_at(runner, rec):
     """Fixed schedule passes datetime to editor.publish()."""
     future = datetime.now(tz=KST) + timedelta(hours=2)
@@ -138,7 +133,6 @@ def test_publish_schedule_at(runner, rec):
     assert pub_call[1] == future
 
 
-@pytest.mark.unit
 def test_empty_body_gets_stub_paragraph(runner, rec):
     """Empty body generates a stub paragraph."""
     runner.run(_spec(body=()), rec)

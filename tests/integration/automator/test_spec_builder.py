@@ -22,14 +22,12 @@ def _account():
     return AccountOption(username="id", password="pw", meta={"blog_id": "blog"})
 
 
-@pytest.mark.unit
 def test_spec_requires_account():
     """PostingSpec needs an account."""
     spec = PostingSpec(account=_account())
     assert spec.account.username == "id"
 
 
-@pytest.mark.unit
 def test_spec_defaults():
     """Omitted fields get sensible defaults."""
     spec = PostingSpec(account=_account())
@@ -38,7 +36,6 @@ def test_spec_defaults():
     assert spec.setting.headless is True
 
 
-@pytest.mark.unit
 def test_spec_is_frozen():
     """PostingSpec is immutable."""
     spec = PostingSpec(account=_account())
@@ -46,7 +43,6 @@ def test_spec_is_frozen():
         spec.account = _account()
 
 
-@pytest.mark.unit
 def test_spec_with_full_body():
     """PostingSpec accepts a body tuple of Sections."""
     body = (
@@ -58,7 +54,6 @@ def test_spec_with_full_body():
     assert isinstance(spec.body[0].blocks[0], ParagraphBlock)
 
 
-@pytest.mark.unit
 def test_two_specs_independent():
     """Two specs from same data are independent objects."""
     a = PostingSpec(account=_account(), title=TitleOption(fixed_title="A"))

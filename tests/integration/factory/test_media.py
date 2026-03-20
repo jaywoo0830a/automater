@@ -1,5 +1,5 @@
 """
-factory/tests/test_media.py
+tests/integration/factory/test_media.py
 ------------------------------
 Media model tests.
 

@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 # run/test.sh — 테스트 실행
 #
-# factory 테스트는 .env 의 TEST_DB_* 값으로 MySQL 컨테이너를 자동 기동한다.
-# 테스트 종료 후 컨테이너는 자동 제거된다 (trap EXIT).
+# 자동 마킹: conftest.py가 디렉토리 기반으로 마커를 붙입니다.
+#   tests/unit/          → @pytest.mark.unit
+#   tests/integration/   → @pytest.mark.integration
+#   tests/browser/       → @pytest.mark.browser
+#   tests/e2e/           → @pytest.mark.e2e
 #
 # 사용법:
-#   bash ./run/test.sh               # unit 전체
-#   bash ./run/test.sh --factory     # factory 단위 테스트 (MySQL 컨테이너 자동)
-#   bash ./run/test.sh --e2e
-#   bash ./run/test.sh --all
+#   bash ./run/test.sh                 # unit 전체 (DB 불필요)
+#   bash ./run/test.sh --integration   # integration/factory (MySQL 자동)
+#   bash ./run/test.sh --e2e           # unit + integration + e2e smoke
+#   bash ./run/test.sh --all           # everything
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -81,13 +84,13 @@ _stop_test_db() {
     echo "  ✅ 컨테이너 제거 완료"
 }
 
-_run_factory_tests() {
+_run_integration_factory() {
     trap _stop_test_db EXIT
     _start_test_db
     echo ""
-    echo "── factory unit ─────────────────────────"
+    echo "── integration/factory ─────────────────"
     echo "  TEST_DB_URL=${TEST_DB_URL}"
-    pytest factory/tests/ -v
+    pytest tests/integration/factory/ -v
 }
 
 # ── 모드 선택 ─────────────────────────────────────────────────────────────────
@@ -97,79 +100,99 @@ MODE="${1:---unit}"
 case "${MODE}" in
 
   --unit)
-    echo "── unit ─────────────────────────────────"
-    pytest tests/unit/ tests/integration/ tests/browser/ -m unit -v
+    echo "── unit/api ──────────────────────────────"
+    pytest tests/unit/api/ -v
+    echo ""
+    echo "── unit/automator ────────────────────────"
+    pytest tests/unit/automator/ -v
+    echo ""
+    echo "── unit/factory ─────────────────────────"
+    pytest tests/unit/factory/ -v
+    echo ""
+    echo "── integration/automator ────────────────"
+    pytest tests/integration/automator/ -v
+    echo ""
+    echo "── browser ──────────────────────────────"
+    pytest tests/browser/ -v
     ;;
 
-  --factory)
-    _run_factory_tests
+  --integration)
+    _run_integration_factory
     ;;
 
   --e2e)
-    echo "── [1/3] unit ───────────────────────────"
-    pytest tests/unit/ tests/integration/ -m unit -v
+    echo "── [1/3] unit + integration/automator + browser ──"
+    pytest tests/unit/ tests/integration/automator/ tests/browser/ -v
     echo ""
-    _run_factory_tests
+    echo "── [2/3] integration/factory ─────────────"
+    _run_integration_factory
     echo ""
-    echo "── [3/3] e2e smoke ──────────────────────"
-    pytest tests/e2e/test_e2e_naver.py -m "e2e and not slow" -v
+    echo "── [3/3] e2e smoke ────────────────────────"
+    pytest tests/e2e/ -m "e2e and not slow" -v
     ;;
 
   --all)
-    echo "── [1/3] unit ───────────────────────────"
-    pytest tests/unit/ tests/integration/ -m unit -v
+    echo "── [1/3] unit + integration/automator + browser ──"
+    pytest tests/unit/ tests/integration/automator/ tests/browser/ -v
     echo ""
-    _run_factory_tests
+    echo "── [2/3] integration/factory ─────────────"
+    _run_integration_factory
     echo ""
-    echo "── [3/3] e2e ────────────────────────────"
-    pytest tests/e2e/test_e2e_naver.py -m "e2e and not slow" -v
+    echo "── [3/3] e2e ──────────────────────────────"
+    pytest tests/e2e/ -v
     ;;
 
   --help|-h)
     cat << 'HELP'
 
-  bash ./run/test.sh               # unit tests (all categories)
-  bash ./run/test.sh --factory     # factory unit (MySQL container auto)
-  bash ./run/test.sh --e2e         # unit + factory + e2e smoke
-  bash ./run/test.sh --all         # everything
+  bash ./run/test.sh                 # unit (DB 불필요, 가장 빠름)
+  bash ./run/test.sh --integration   # integration/factory (MySQL 자동)
+  bash ./run/test.sh --e2e           # unit + integration + e2e smoke
+  bash ./run/test.sh --all           # everything
 
-  tests/unit/                          Pure functions, no collaborators
-    test_title_generator.py            generate_title() + validate_template()
-    test_paragraph_generator.py        generate_paragraphs() stubs
-    test_seo_prompt.py                 build_prompt()
-    test_layout.py                     Section/Block validation
-    test_post_step.py                  PostStep.execute() dispatch
-    test_image_processor.py            process_image() / process_featured()
-    test_ports.py                      Port ABCs + test doubles
-    test_block_factory.py              block_type -> Block with interpolation
-    test_preset_loader.py              JSON config -> frozen dataclass
-    test_storage.py                    LocalStorage file operations
+  ── tests/unit/api/                  API 라우트 단위 테스트
+      test_auth.py                    register, login, me, password
+      test_utility.py                 validateTitleTemplate, listBlockTypes
 
-  tests/integration/                   Collaborator wiring (injected stubs)
-    test_spec_builder.py               PostingSpec immutability
-    test_spec_validator.py             SpecValidator rules
-    test_content_builder.py            ContentBuilder block -> step pipeline
-    test_runner.py                     JobRunner editor call sequence
-    test_publish_option.py             Schedule resolution
+  ── tests/unit/automator/            Automator 순수 단위 테스트
+      test_title_generator.py         generate_title + validate_template
+      test_paragraph_generator.py     generate_paragraphs stubs
+      test_seo_prompt.py              build_prompt
+      test_layout.py                  Section/Block validation
+      test_post_step.py               PostStep.execute dispatch
+      test_image_processor.py         process_image / process_featured
+      test_ports.py                   Port ABCs + test doubles
+      test_block_factory.py           block_type → Block + media_id resolution
+      test_preset_loader.py           JSON config → frozen dataclass
 
-  tests/browser/                       Playwright mocks (no real browser)
-    test_smart_editor.py               SmartEditorOne DOM wiring
-    test_browser_actions.py            Pure DOM functions
-    test_browser_config.py             BrowserSettings
-    test_browser_selectors.py          SelectorLoader
+  ── tests/unit/factory/              Factory 순수 단위 테스트 (DB 불필요)
+      test_job_builder.py             Combination → PostingSpec 합성
+      test_batch_worker.py            BatchWorker 실행 파이프라인
+      test_storage.py                 LocalStorage 파일 작업
 
-  tests/e2e/                           Real browser (requires session)
-    test_e2e_naver.py                  E2E smoke
+  ── tests/integration/automator/     Automator 통합 테스트
+      test_spec_builder.py            PostingSpec immutability
+      test_spec_validator.py          SpecValidator rules
+      test_content_builder.py         ContentBuilder block → step
+      test_runner.py                  JobRunner editor call sequence
+      test_publish_option.py          Schedule resolution
 
-  factory/tests/ (--factory flag)      DB-backed (MySQL container)
-    test_user.py                       User model + ownership
-    test_preset_models.py              PostLayout/PublishPreset/RunPreset
-    test_media.py                      Media model + ownership
-    test_campaign_slots.py             ComboGenerator slot logic
-    test_keyword_picker.py             save_picks / load_picks
-    test_batch_dispatcher.py           BatchDispatcher
-    test_batch_worker.py               BatchWorker execution pipeline
-    test_job_builder.py                Combination -> PostingSpec (dynamic)
+  ── tests/integration/factory/       Factory 통합 테스트 (MySQL 필요)
+      test_user.py                    User model + ownership
+      test_preset_models.py           PostLayout/PublishPreset/RunPreset
+      test_media.py                   Media model + ownership
+      test_combo_generator.py         ComboGenerator slot logic
+      test_keyword_picker.py          save_picks / load_picks
+      test_batch_dispatcher.py        BatchDispatcher
+
+  ── tests/browser/                   Playwright mocks (no real browser)
+      test_smart_editor.py            SmartEditorOne DOM wiring
+      test_browser_actions.py         Pure DOM functions
+      test_browser_config.py          BrowserSettings
+      test_browser_selectors.py       SelectorLoader
+
+  ── tests/e2e/                       Real browser (requires session)
+      test_e2e_naver.py               E2E smoke
 
 HELP
     ;;

@@ -156,3 +156,25 @@ def pytest_addoption(parser):
 @pytest.fixture
 def real_run(request) -> bool:
     return request.config.getoption("--real-run")
+
+
+# ---------------------------------------------------------------------------
+# Auto-mark tests by directory — no need for @pytest.mark.X on functions
+# ---------------------------------------------------------------------------
+
+_PATH_MARKERS = {
+    "/unit/":        "unit",
+    "/integration/": "integration",
+    "/browser/":     "browser",
+    "/e2e/":         "e2e",
+}
+
+
+def pytest_collection_modifyitems(items):
+    """Apply markers based on test file location."""
+    for item in items:
+        path = str(item.fspath)
+        for fragment, marker_name in _PATH_MARKERS.items():
+            if fragment in path:
+                item.add_marker(getattr(pytest.mark, marker_name))
+                break

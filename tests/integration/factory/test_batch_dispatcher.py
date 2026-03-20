@@ -1,5 +1,5 @@
 """
-factory/tests/test_batch_dispatcher.py
+tests/integration/factory/test_batch_dispatcher.py
 ----------------------------------------
 BatchDispatcher 단위 테스트.
 SQLAlchemy 2.0 select() 스타일로 DB 상태를 검증한다.
@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from factory.dispatcher import BatchDispatcher, BATCH_SIZE
 from factory.models import Account, Batch, BatchItem, Combination, Platform, User
-from factory.tests.conftest import make_campaign
+from tests.integration.factory.conftest import make_campaign
 
 KST           = timezone(timedelta(hours=9))
 SCHEDULE_BASE = datetime(2026, 3, 20, 10, 0, tzinfo=KST)

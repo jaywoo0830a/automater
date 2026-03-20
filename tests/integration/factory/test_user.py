@@ -1,5 +1,5 @@
 """
-factory/tests/test_user.py
+tests/integration/factory/test_user.py
 ----------------------------
 User model — ownership boundaries and auth fields.
 """

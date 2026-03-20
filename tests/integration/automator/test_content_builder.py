@@ -48,7 +48,6 @@ def builder():
 # Paragraph blocks
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
 def test_paragraph_block_generates_step(builder):
     post = builder.build(_spec(ParagraphBlock(prompt="test")))
     para_steps = [s for s in post.steps if isinstance(s, ParagraphStep)]
@@ -56,7 +55,6 @@ def test_paragraph_block_generates_step(builder):
     assert para_steps[0].text  # non-empty stub text
 
 
-@pytest.mark.unit
 def test_multiple_paragraphs(builder):
     post = builder.build(_spec(
         ParagraphBlock(prompt="A"),
@@ -71,25 +69,21 @@ def test_multiple_paragraphs(builder):
 # Heading / List / Quote / Divider
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
 def test_heading_block(builder):
     post = builder.build(_spec(HeadingBlock(level=2, text="Title")))
     assert any(isinstance(s, HeadingStep) and s.text == "Title" for s in post.steps)
 
 
-@pytest.mark.unit
 def test_list_block(builder):
     post = builder.build(_spec(ListBlock(items=("A", "B"), ordered=True)))
     assert any(isinstance(s, ListStep) for s in post.steps)
 
 
-@pytest.mark.unit
 def test_quote_block(builder):
     post = builder.build(_spec(QuoteBlock(text="wisdom", attribution="author")))
     assert any(isinstance(s, QuoteStep) for s in post.steps)
 
 
-@pytest.mark.unit
 def test_divider_block_produces_no_step(builder):
     post = builder.build(_spec(DividerBlock()))
     assert len(post.steps) == 0
@@ -99,7 +93,6 @@ def test_divider_block_produces_no_step(builder):
 # Image blocks (with real temp file)
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
 def test_image_block_with_file(builder, tmp_path):
     img = tmp_path / "test.jpg"
     from PIL import Image
@@ -113,7 +106,6 @@ def test_image_block_with_file(builder, tmp_path):
     assert len(post.tmp_files) == 1
 
 
-@pytest.mark.unit
 def test_featured_image_marks_representative(builder, tmp_path):
     img = tmp_path / "feat.jpg"
     from PIL import Image
@@ -131,7 +123,6 @@ def test_featured_image_marks_representative(builder, tmp_path):
 # SEO keyword integration
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
 def test_keyword_triggers_seo_prompt(builder):
     """ParagraphBlock with keyword uses build_prompt() internally."""
     post = builder.build(_spec(ParagraphBlock(keyword="강남 수학 과외")))
@@ -143,7 +134,6 @@ def test_keyword_triggers_seo_prompt(builder):
 # Empty body
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
 def test_empty_body_generates_stub(builder):
     post = builder.build(_spec())
     assert len(post.steps) == 1
@@ -154,13 +144,11 @@ def test_empty_body_generates_stub(builder):
 # Title and schedule
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
 def test_title_in_post_content(builder):
     post = builder.build(_spec(ParagraphBlock(prompt="x")))
     assert post.title == "T"
 
 
-@pytest.mark.unit
 def test_immediate_schedule_is_none(builder):
     post = builder.build(_spec())
     assert post.schedule_at is None

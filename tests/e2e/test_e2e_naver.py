@@ -90,7 +90,6 @@ def _schedule(hours_ahead: int = 2) -> datetime:
 # E2E: Editor loads
 # ---------------------------------------------------------------------------
 
-@pytest.mark.e2e
 def test_editor_iframe_is_visible(page: Page, account: AccountOption):
     page.goto(f"https://blog.naver.com/{account.meta['blog_id']}?Redirect=Write&")
     page.frame_locator(_MAIN_FRAME) \
@@ -102,7 +101,6 @@ def test_editor_iframe_is_visible(page: Page, account: AccountOption):
 # Pipeline: text only
 # ---------------------------------------------------------------------------
 
-@pytest.mark.e2e
 @pytest.mark.slow
 def test_pipeline_text_only(editor: SmartEditorOne, account: AccountOption):
     """텍스트 블록만 있는 포스트 — 이미지 불필요."""
@@ -122,7 +120,6 @@ def test_pipeline_text_only(editor: SmartEditorOne, account: AccountOption):
 # Pipeline: all options (dry_run)
 # ---------------------------------------------------------------------------
 
-@pytest.mark.e2e
 @pytest.mark.slow
 def test_pipeline_all_options(editor: SmartEditorOne, account: AccountOption):
     """
@@ -166,7 +163,6 @@ def test_pipeline_all_options(editor: SmartEditorOne, account: AccountOption):
 # Real publish — --real-run 플래그로만 실행
 # ---------------------------------------------------------------------------
 
-@pytest.mark.e2e
 @pytest.mark.slow
 def test_pipeline_real_publish(page: Page, account: AccountOption, real_run: bool):
     """

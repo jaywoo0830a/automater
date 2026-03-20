@@ -1,5 +1,5 @@
 """
-factory/tests/test_job_builder.py
+tests/unit/factory/test_job_builder.py
 -----------------------------------
 job_builder unit tests — Combination -> PostingSpec conversion rules.
 

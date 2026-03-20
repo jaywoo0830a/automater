@@ -30,7 +30,6 @@ def option() -> TitleOption:
 # validate_template
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
 @pytest.mark.parametrize("tmpl", [
     "{region} {subject} {learning_type} {salt}",
     "{salt} {region} {subject} {learning_type}",
@@ -43,7 +42,6 @@ def test_validate_template_valid(tmpl):
     validate_template(tmpl)
 
 
-@pytest.mark.unit
 @pytest.mark.parametrize("tmpl,match", [
     ("",                                     "empty"),
     ("   ",                                  "empty"),
@@ -57,7 +55,6 @@ def test_validate_template_invalid(tmpl, match):
         validate_template(tmpl)
 
 
-@pytest.mark.unit
 def test_invalid_template_raises_on_generation():
     with pytest.raises(ValueError):
         generate_title(TitleOption(template="", prefix_salts=PREFIX_SALTS))
@@ -67,12 +64,10 @@ def test_invalid_template_raises_on_generation():
 # fixed_title
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
 def test_fixed_title_bypasses_template():
     assert generate_title(TitleOption(fixed_title="강남 수학 과외")) == "강남 수학 과외"
 
 
-@pytest.mark.unit
 def test_fixed_title_is_deterministic():
     opt = TitleOption(fixed_title="강남 수학 과외")
     assert generate_title(opt) == generate_title(opt)
@@ -82,7 +77,6 @@ def test_fixed_title_is_deterministic():
 # values substitution
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
 def test_generate_substitutes_values(option):
     title = generate_title(option)
     assert "강남" in title
@@ -90,13 +84,11 @@ def test_generate_substitutes_values(option):
     assert "과외" in title
 
 
-@pytest.mark.unit
 def test_generate_includes_salt(option):
     title = generate_title(option)
     assert any(s in title for s in ALL_SALTS), f"솔트 없음: {title!r}"
 
 
-@pytest.mark.unit
 def test_generate_without_salt_token():
     title = generate_title(TitleOption(
         template      = "{region} {subject} {learning_type}",
@@ -107,7 +99,6 @@ def test_generate_without_salt_token():
     assert title == "강남 수학 과외"
 
 
-@pytest.mark.unit
 def test_generate_raises_on_missing_value():
     with pytest.raises(KeyError):
         generate_title(TitleOption(
@@ -118,20 +109,17 @@ def test_generate_raises_on_missing_value():
         ))
 
 
-@pytest.mark.unit
 def test_generate_produces_varied_titles(option):
     titles = {generate_title(option) for _ in range(20)}
     assert len(titles) > 1
 
 
-@pytest.mark.unit
 def test_fixed_seed_produces_same_title(option):
     rng1 = random.Random(42)
     rng2 = random.Random(42)
     assert generate_title(option, rng=rng1) == generate_title(option, rng=rng2)
 
 
-@pytest.mark.unit
 def test_empty_salts_produces_empty_salt_token():
     title = generate_title(TitleOption(
         template = "{region} {salt}",
@@ -144,7 +132,6 @@ def test_empty_salts_produces_empty_salt_token():
 # Salt pool selection by {salt} position
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
 def test_suffix_salt_used_when_salt_is_last():
     suffix_set = set(SUFFIX_SALTS)
     for _ in range(30):
@@ -157,7 +144,6 @@ def test_suffix_salt_used_when_salt_is_last():
         assert any(title.endswith(s) for s in suffix_set)
 
 
-@pytest.mark.unit
 def test_prefix_salt_used_when_salt_is_first():
     prefix_set = set(PREFIX_SALTS)
     for _ in range(30):
@@ -170,7 +156,6 @@ def test_prefix_salt_used_when_salt_is_first():
         assert any(title.startswith(s) for s in prefix_set)
 
 
-@pytest.mark.unit
 def test_all_salts_used_when_salt_is_middle():
     seen = set()
     for _ in range(50):
@@ -190,7 +175,6 @@ def test_all_salts_used_when_salt_is_middle():
 # Multi-dimension templates
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
 def test_three_dimension_template():
     title = generate_title(TitleOption(
         template     = "{region} {target_audience} {subject} {salt}",
@@ -202,7 +186,6 @@ def test_three_dimension_template():
     assert "영어회화" in title
 
 
-@pytest.mark.unit
 def test_five_dimension_template():
     title = generate_title(TitleOption(
         template = "{region} {school} {grade} {subject} {learning_type} {salt}",

@@ -23,7 +23,6 @@ from automator.paragraph_generator import (
 # ENV-based behavior
 # ===========================================================================
 
-@pytest.mark.unit
 def test_dev_env_does_not_require_api_key(monkeypatch):
     monkeypatch.setenv("ENV", "dev")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
@@ -31,7 +30,6 @@ def test_dev_env_does_not_require_api_key(monkeypatch):
     assert len(result) == 1
 
 
-@pytest.mark.unit
 def test_test_env_does_not_require_api_key(monkeypatch):
     monkeypatch.setenv("ENV", "test")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
@@ -39,7 +37,6 @@ def test_test_env_does_not_require_api_key(monkeypatch):
     assert len(result) == 1
 
 
-@pytest.mark.unit
 def test_production_env_requires_api_key(monkeypatch):
     monkeypatch.setenv("ENV", "production")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
@@ -47,7 +44,6 @@ def test_production_env_requires_api_key(monkeypatch):
         generate_paragraphs("p", 1)
 
 
-@pytest.mark.unit
 def test_explicit_key_overrides_env(monkeypatch):
     monkeypatch.setenv("ENV", "production")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
@@ -60,23 +56,19 @@ def test_explicit_key_overrides_env(monkeypatch):
 # Stub generation (non-production)
 # ===========================================================================
 
-@pytest.mark.unit
 def test_generate_returns_correct_count_dev(monkeypatch):
     monkeypatch.setenv("ENV", "dev")
     assert len(generate_paragraphs("p", 3)) == 3
 
 
-@pytest.mark.unit
 def test_generate_zero_returns_empty():
     assert generate_paragraphs("p", 0) == []
 
 
-@pytest.mark.unit
 def test_generate_negative_returns_empty():
     assert generate_paragraphs("p", -1) == []
 
 
-@pytest.mark.unit
 def test_generate_uses_stub_in_dev(monkeypatch):
     monkeypatch.setenv("ENV", "dev")
     result = generate_paragraphs("any prompt", 2)
@@ -84,14 +76,12 @@ def test_generate_uses_stub_in_dev(monkeypatch):
     assert result[1] == _STUB_PARAGRAPHS[1]
 
 
-@pytest.mark.unit
 def test_stub_cycles_beyond_paragraph_count(monkeypatch):
     monkeypatch.setenv("ENV", "dev")
     result = generate_paragraphs("p", len(_STUB_PARAGRAPHS) + 1)
     assert result[-1] == _STUB_PARAGRAPHS[0]
 
 
-@pytest.mark.unit
 def test_generate_does_not_call_api_in_dev():
     with patch("automator.paragraph_generator._call_api") as mock_api:
         generate_paragraphs("p", 1)
@@ -102,38 +92,32 @@ def test_generate_does_not_call_api_in_dev():
 # _parse — JSON array extraction
 # ===========================================================================
 
-@pytest.mark.unit
 def test_parse_json_array():
     result = _parse('["a", "b", "c"]', 3)
     assert result == ["a", "b", "c"]
 
 
-@pytest.mark.unit
 def test_parse_strips_markdown_fences():
     result = _parse('```json\n["a", "b"]\n```', 2)
     assert result == ["a", "b"]
 
 
-@pytest.mark.unit
 def test_parse_pads_short_response():
     result = _parse('["only one"]', 3)
     assert len(result) == 3
     assert result[0] == "only one"
 
 
-@pytest.mark.unit
 def test_parse_truncates_long_response():
     result = _parse('["a", "b", "c", "d"]', 2)
     assert result == ["a", "b"]
 
 
-@pytest.mark.unit
 def test_parse_raises_on_no_json():
     with pytest.raises(ValueError, match="No JSON"):
         _parse("no json here", 1)
 
 
-@pytest.mark.unit
 def test_parse_raises_on_non_list():
     with pytest.raises(ValueError, match="No JSON array"):
         _parse('{"key": "value"}', 1)
@@ -143,14 +127,12 @@ def test_parse_raises_on_non_list():
 # RateLimitError — 429 handling
 # ===========================================================================
 
-@pytest.mark.unit
 def test_rate_limit_error_is_exception():
     assert issubclass(RateLimitError, Exception)
     err = RateLimitError("test")
     assert str(err) == "test"
 
 
-@pytest.mark.unit
 def test_call_api_converts_429_to_rate_limit_error(monkeypatch):
     monkeypatch.setenv("ENV", "production")
     monkeypatch.setenv("GEMINI_API_KEY", "fake")
@@ -161,7 +143,6 @@ def test_call_api_converts_429_to_rate_limit_error(monkeypatch):
             generate_paragraphs("p", 1)
 
 
-@pytest.mark.unit
 def test_non_429_errors_propagate(monkeypatch):
     monkeypatch.setenv("ENV", "production")
     monkeypatch.setenv("GEMINI_API_KEY", "fake")

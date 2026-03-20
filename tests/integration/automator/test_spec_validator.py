@@ -38,13 +38,11 @@ def v():
 # Account validation
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
 def test_empty_username_rejected(v):
     with pytest.raises(ValueError, match="username"):
         v.validate(_spec(account=_account(username="  ")))
 
 
-@pytest.mark.unit
 def test_empty_password_rejected(v):
     with pytest.raises(ValueError, match="password"):
         v.validate(_spec(account=_account(password="")))
@@ -54,13 +52,11 @@ def test_empty_password_rejected(v):
 # Title validation
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
 def test_bad_template_rejected(v):
     with pytest.raises(ValueError, match="token"):
         v.validate(_spec(title=TitleOption(template="{}")))
 
 
-@pytest.mark.unit
 def test_valid_template_passes(v):
     v.validate(_spec(title=TitleOption(template="{region} {subject}")))
 
@@ -69,7 +65,6 @@ def test_valid_template_passes(v):
 # Section layout
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
 def test_two_featured_images_rejected(v):
     body = (Section(blocks=(FeaturedImageBlock(), FeaturedImageBlock())),)
     with pytest.raises(ValueError, match="FeaturedImageBlock"):
@@ -80,13 +75,11 @@ def test_two_featured_images_rejected(v):
 # Publish validation
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
 def test_fixed_schedule_without_at_rejected(v):
     with pytest.raises(ValueError, match="at"):
         v.validate(_spec(publish=PublishOption(mode="fixed")))
 
 
-@pytest.mark.unit
 def test_fixed_schedule_naive_datetime_rejected(v):
     with pytest.raises(ValueError, match="timezone"):
         v.validate(_spec(publish=PublishOption(
@@ -95,13 +88,11 @@ def test_fixed_schedule_naive_datetime_rejected(v):
         )))
 
 
-@pytest.mark.unit
 def test_valid_fixed_schedule_passes(v):
     future = datetime.now(tz=KST) + timedelta(hours=2)
     v.validate(_spec(publish=PublishOption(mode="fixed", at=future)))
 
 
-@pytest.mark.unit
 def test_tags_min_greater_than_max_rejected(v):
     with pytest.raises(ValueError, match="min_tags"):
         v.validate(_spec(publish=PublishOption(min_tags=25, max_tags=10)))
@@ -111,19 +102,16 @@ def test_tags_min_greater_than_max_rejected(v):
 # RunSetting validation
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
 def test_negative_post_interval_rejected(v):
     with pytest.raises(ValueError, match="post_interval"):
         v.validate(_spec(setting=RunSetting(post_interval=-1)))
 
 
-@pytest.mark.unit
 def test_zero_max_daily_posts_rejected(v):
     with pytest.raises(ValueError, match="max_daily_posts"):
         v.validate(_spec(setting=RunSetting(max_daily_posts=0)))
 
 
-@pytest.mark.unit
 def test_valid_spec_passes(v):
     """A fully valid spec does not raise."""
     v.validate(_spec(
