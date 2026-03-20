@@ -76,13 +76,9 @@ def build_posting_job(
 
 def _build_values(combo: Any) -> dict[str, str]:
     """Build slug → value dict from combination's keywords."""
-    has_suffix: bool = bool((combo.config or {}).get("has_suffix", 1))
     values: dict[str, str] = {}
     for kw in sorted(combo.keywords, key=lambda k: getattr(k.category, "id", 0)):
-        slug        = kw.category.slug
-        full_val    = kw.value
-        display_val = kw.display_value
-        values[slug] = full_val if (has_suffix or not display_val) else display_val
+        values[kw.category.slug] = kw.value
     return values
 
 

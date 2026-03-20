@@ -20,13 +20,14 @@ from __future__ import annotations
 
 import os
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from factory.db import create_schema, drop_schema
 from factory.models import (
     Base, Platform, Campaign, KeywordCategory,
     Keyword, CampaignSlot, SpacingRule,
+    Affix, CampaignPalette, PaletteItem,
 )
 
 
@@ -110,7 +111,6 @@ def make_campaign(
         platform_id    = platform.id,
         name           = "Test Campaign",
         title_template = "{region} {subject} {learning_type}",
-        config         = {"has_suffix_options": [0, 1]},
         status         = "active",
     )
     session.add(campaign)
@@ -148,6 +148,36 @@ def make_campaign(
             description = "test rule",
             active      = True,
         ))
+        session.flush()
+
+        # Affix examples — keyword derivation rules
+        gangnam = session.scalars(
+            select(Keyword).where(Keyword.value == "강남구")
+        ).first()
+        if gangnam:
+            session.add_all([
+                Affix(keyword_id=gangnam.id, type="suffix", value="구", sort_order=0),
+                Affix(keyword_id=gangnam.id, type="suffix", value="동", sort_order=1),
+                Affix(keyword_id=gangnam.id, type="prefix", value="동", sort_order=0),
+            ])
+            session.flush()
+
+        # Palette examples — runtime sampling pools (replaces salts.json)
+        salt_prefix = CampaignPalette(
+            campaign_id=campaign.id, slug="salt_prefix", strategy="random",
+        )
+        salt_suffix = CampaignPalette(
+            campaign_id=campaign.id, slug="salt_suffix", strategy="random",
+        )
+        session.add_all([salt_prefix, salt_suffix])
+        session.flush()
+
+        session.add_all([
+            PaletteItem(palette_id=salt_prefix.id, value="검증된",   sort_order=0),
+            PaletteItem(palette_id=salt_prefix.id, value="전문",     sort_order=1),
+            PaletteItem(palette_id=salt_suffix.id, value="강력 추천", sort_order=0),
+            PaletteItem(palette_id=salt_suffix.id, value="즉시 가능", sort_order=1),
+        ])
         session.flush()
 
     return campaign

@@ -9,7 +9,11 @@ Builder
 
     job = (
         base
-        .with_title(TitleOption(template="{region} {subject} {salt}", values={...}))
+        .with_title(TitleOption(
+            template="{region} {subject} {salt}",
+            values={...},
+            suffix_salts=("강력 추천", "즉시 가능"),
+        ))
         .with_body([
             Section(blocks=(
                 HeadingBlock(level=2, text="강남 수학 과외 안내"),

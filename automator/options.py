@@ -87,24 +87,30 @@ class TitleOption:
     Template format
     ---------------
     Python str.format()-style {slug} tokens.
-    {salt} → random salt from salts.json.
+    {salt} → random salt from prefix_salts / suffix_salts.
+
+    Salt data is supplied directly — no file I/O.
+    Typically loaded from CampaignPalette(slug="salt_prefix" / "salt_suffix")
+    before constructing this option.
 
     Examples:
         TitleOption(
             template="{region} {subject} {salt}",
             values={"region": "강남", "subject": "수학"},
+            suffix_salts=("강력 추천", "즉시 가능"),
         )
         TitleOption(fixed_title="강남 수학 과외 추천")
     """
-    template:         str        = ""
-    values:           dict       = field(default_factory=dict)
-    salt_preset:      str        = ""
-    fixed_title:      str        = ""
-    has_space:        bool       = True
-    add_affix:        bool       = False
-    randomize_chars:  bool       = False
-    ai_preset_prompt: str        = ""
-    seed:             int | None = None
+    template:         str              = ""
+    values:           dict             = field(default_factory=dict)
+    prefix_salts:     tuple[str, ...]  = ()
+    suffix_salts:     tuple[str, ...]  = ()
+    fixed_title:      str              = ""
+    has_space:        bool             = True
+    add_affix:        bool             = False
+    randomize_chars:  bool             = False
+    ai_preset_prompt: str              = ""
+    seed:             int | None       = None
 
 
 # ---------------------------------------------------------------------------

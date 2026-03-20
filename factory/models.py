@@ -10,10 +10,13 @@ Table map:
     Account               → accounts
     KeywordCategory       → keyword_categories
     Keyword               → keywords
+    Affix                 → affixes              (keyword derivation rules)
     Campaign              → campaigns
     CampaignSlot          → campaign_slots
     SpacingRule           → spacing_rules
     CampaignKeywordPick   → campaign_keyword_picks
+    CampaignPalette       → campaign_palettes    (runtime sampling pools)
+    PaletteItem           → palette_items
     combination_keywords  → combination_keywords  (association table)
     Combination           → combinations
     Batch                 → batches
@@ -173,6 +176,9 @@ class Keyword(Base):
     picks: Mapped[list["CampaignKeywordPick"]] = relationship(
         "CampaignKeywordPick", back_populates="keyword"
     )
+    affixes: Mapped[list["Affix"]] = relationship(
+        "Affix", back_populates="keyword", order_by="Affix.sort_order"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -201,6 +207,9 @@ class Campaign(Base):
     batches:       Mapped[list["Batch"]]          = relationship("Batch",         back_populates="campaign")
     picks:         Mapped[list["CampaignKeywordPick"]] = relationship(
         "CampaignKeywordPick", back_populates="campaign"
+    )
+    palettes:      Mapped[list["CampaignPalette"]]     = relationship(
+        "CampaignPalette", back_populates="campaign", order_by="CampaignPalette.slug"
     )
 
 
@@ -330,3 +339,66 @@ class BatchItem(Base):
     # relationships
     batch:       Mapped["Batch"]       = relationship("Batch",       back_populates="items")
     combination: Mapped["Combination"] = relationship("Combination", back_populates="batch_items")
+
+
+# ---------------------------------------------------------------------------
+# Affix — prefix/suffix derivation rules for a keyword stem
+# ---------------------------------------------------------------------------
+
+class Affix(Base):
+    __tablename__ = "affixes"
+    __table_args__ = (
+        UniqueConstraint("keyword_id", "type", "value", name="uq_keyword_affix"),
+    )
+
+    id:         Mapped[int]      = mapped_column(Integer,    primary_key=True, autoincrement=True)
+    keyword_id: Mapped[int]      = mapped_column(Integer,    ForeignKey("keywords.id", ondelete="CASCADE"), nullable=False)
+    type:       Mapped[str]      = mapped_column(String(16), nullable=False)  # "prefix" | "suffix"
+    value:      Mapped[str]      = mapped_column(String(64), nullable=False)
+    sort_order: Mapped[int]      = mapped_column(Integer,    nullable=False, default=0)
+    active:     Mapped[bool]     = mapped_column(Boolean,    nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime,   nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    # relationships
+    keyword: Mapped["Keyword"] = relationship("Keyword", back_populates="affixes")
+
+
+# ---------------------------------------------------------------------------
+# CampaignPalette — runtime sampling pool (replaces salts.json)
+# ---------------------------------------------------------------------------
+
+class CampaignPalette(Base):
+    __tablename__ = "campaign_palettes"
+    __table_args__ = (
+        UniqueConstraint("campaign_id", "slug", name="uq_campaign_palette"),
+    )
+
+    id:          Mapped[int]      = mapped_column(Integer,    primary_key=True, autoincrement=True)
+    campaign_id: Mapped[int]      = mapped_column(Integer,    ForeignKey("campaigns.id", ondelete="CASCADE"), nullable=False)
+    slug:        Mapped[str]      = mapped_column(String(64), nullable=False)  # "salt_prefix", "salt_suffix", "cta"
+    strategy:    Mapped[str]      = mapped_column(String(16), nullable=False, default="random")  # "random" | "sequential"
+    created_at:  Mapped[datetime] = mapped_column(DateTime,   nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    # relationships
+    campaign: Mapped["Campaign"]         = relationship("Campaign", back_populates="palettes")
+    items:    Mapped[list["PaletteItem"]] = relationship(
+        "PaletteItem", back_populates="palette", order_by="PaletteItem.sort_order"
+    )
+
+
+# ---------------------------------------------------------------------------
+# PaletteItem — individual value in a palette
+# ---------------------------------------------------------------------------
+
+class PaletteItem(Base):
+    __tablename__ = "palette_items"
+
+    id:         Mapped[int]      = mapped_column(Integer,     primary_key=True, autoincrement=True)
+    palette_id: Mapped[int]      = mapped_column(Integer,     ForeignKey("campaign_palettes.id", ondelete="CASCADE"), nullable=False)
+    value:      Mapped[str]      = mapped_column(String(256), nullable=False)
+    sort_order: Mapped[int]      = mapped_column(Integer,     nullable=False, default=0)
+    active:     Mapped[bool]     = mapped_column(Boolean,     nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime,    nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    # relationships
+    palette: Mapped["CampaignPalette"] = relationship("CampaignPalette", back_populates="items")

@@ -1,36 +1,37 @@
 """
 automator/title_generator.py
 -----------------------------
-TitleGenerator: TitleOption → 제목 문자열
+TitleGenerator: TitleOption → title string.
 
-Template 형식
--------------
-Python str.format() 스타일 {slug} 토큰.
+Template format
+---------------
+Python str.format() style {slug} tokens.
 
     "{region} {subject} {learning_type} {salt}"  → "강남 수학 과외 강력 추천"
     "{salt} {region} {subject} {learning_type}"  → "검증된 강남 수학 과외"
-    "{region} {target_audience} {subject} {salt}"→ "원주 성인 영어회화 추천"
 
-{salt} 는 특수 토큰 — 위치에 따라 pool 이 결정된다:
-    첫 번째 토큰 → prefix_salts
-    마지막 토큰  → suffix_salts
-    중간 토큰   → all_salts (prefix ∪ suffix)
+{salt} is a special token — the pool is determined by its position:
+    first token  → prefix_salts
+    last token   → suffix_salts
+    middle token → all_salts (prefix ∪ suffix)
+
+Salt data comes from TitleOption.prefix_salts / suffix_salts,
+which are typically loaded from CampaignPalette before construction.
 
 Usage:
     gen = TitleGenerator(TitleOption(
         template = "{region} {subject} {learning_type} {salt}",
         values   = {"region": "강남", "subject": "수학", "learning_type": "과외"},
+        suffix_salts = ("강력 추천", "즉시 가능"),
     ))
     title = gen.generate()  # e.g. "강남 수학 과외 강력 추천"
 """
 
 from __future__ import annotations
 
-import json
 import random
 import re
 from pathlib import Path
-from typing import Any
 
 from automator.options import TitleOption
 
@@ -38,36 +39,7 @@ from automator.options import TitleOption
 # Defaults
 # ---------------------------------------------------------------------------
 
-_PRESET_DIR          = Path(__file__).parent.parent / "presets" / "title"
-_DEFAULT_SALT_PRESET = _PRESET_DIR / "salts.json"
-_TOKEN_RE            = re.compile(r"\{(\w*)\}")
-
-
-# ---------------------------------------------------------------------------
-# Loader
-# ---------------------------------------------------------------------------
-
-def _load_json(path: Path) -> Any:
-    if not path.exists():
-        raise FileNotFoundError(f"Preset file not found: {path}")
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def load_salts(path: str | Path = "") -> dict[str, list[str]]:
-    """
-    Load salt strings from salts.json.
-
-    Returns dict with keys "prefix", "suffix", "all".
-    """
-    p      = Path(path) if path else _DEFAULT_SALT_PRESET
-    raw    = _load_json(p)
-    prefix = raw["prefix_salts"]
-    suffix = raw["suffix_salts"]
-    return {
-        "prefix": prefix,
-        "suffix": suffix,
-        "all":    list(dict.fromkeys(prefix + suffix)),
-    }
+_TOKEN_RE = re.compile(r"\{(\w*)\}")
 
 
 # ---------------------------------------------------------------------------
@@ -121,8 +93,11 @@ class TitleGenerator:
     """
     Generates a blog post title from a TitleOption.
 
+    Salt data is read directly from TitleOption.prefix_salts / suffix_salts.
+    No file I/O — the caller is responsible for loading palette data from DB.
+
     Args:
-        option: TitleOption with template, values, and optional salt_preset.
+        option: TitleOption with template, values, and optional salt tuples.
         rng:    Optional random.Random for deterministic tests.
     """
 
@@ -136,22 +111,22 @@ class TitleGenerator:
 
         if not option.fixed_title:
             if not option.template or not option.template.strip():
-                # salt_preset 이 지정됐다면 template 을 쓰려는 의도 → 에러
-                if option.salt_preset:
+                # Salt data supplied but no template → user error
+                if option.prefix_salts or option.suffix_salts:
                     raise ValueError(
-                        "template must not be empty when salt_preset is set. "
+                        "template must not be empty when salts are provided. "
                         "Use fixed_title for a literal title, or provide a template."
                     )
-                # salt_preset 도 없으면 TitleOption() 기본값 — 제목 없음으로 처리
-                self._prefix_salts = []
-                self._suffix_salts = []
-                self._all_salts    = []
+                self._prefix_salts: list[str] = []
+                self._suffix_salts: list[str] = []
+                self._all_salts:    list[str] = []
             else:
                 validate_template(option.template)
-                salt_data          = load_salts(option.salt_preset)
-                self._prefix_salts = salt_data["prefix"]
-                self._suffix_salts = salt_data["suffix"]
-                self._all_salts    = salt_data["all"]
+                self._prefix_salts = list(option.prefix_salts)
+                self._suffix_salts = list(option.suffix_salts)
+                self._all_salts    = list(dict.fromkeys(
+                    list(option.prefix_salts) + list(option.suffix_salts)
+                ))
 
     def generate(self) -> str:
         """
@@ -171,7 +146,11 @@ class TitleGenerator:
         sub    = dict(self._opt.values)
 
         if "salt" in tokens:
-            sub["salt"] = self._rng.choice(self._pick_salt_pool(tokens))
+            pool = self._pick_salt_pool(tokens)
+            if pool:
+                sub["salt"] = self._rng.choice(pool)
+            else:
+                sub["salt"] = ""
 
         return self._opt.template.format(**sub)
 

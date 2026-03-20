@@ -43,7 +43,7 @@ def _add_account(session: Session, *, last_used_at=None, cooldown_days=14, statu
 
 def _add_combinations(session: Session, campaign, n: int) -> list[Combination]:
     combos = [
-        Combination(campaign_id=campaign.id, used_at=None, config={"has_suffix": 0})
+        Combination(campaign_id=campaign.id, used_at=None)
         for _ in range(n)
     ]
     session.add_all(combos)

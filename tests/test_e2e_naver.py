@@ -141,6 +141,7 @@ def test_pipeline_all_options(editor: SmartEditorOne, account: AccountOption):
         .with_title(TitleOption(
             template="{region} {subject} {learning_type} {salt}",
             values={"region": "강남", "subject": "수학", "learning_type": "과외"},
+            suffix_salts=("강력 추천", "즉시 가능"),
         ))
         .with_body([Section(blocks=tuple(blocks))])
         .with_publish(PublishOption(mode="fixed", at=_schedule()))
@@ -193,6 +194,7 @@ def test_pipeline_real_publish(page: Page, account: AccountOption, real_run: boo
         .with_title(TitleOption(
             template="{region} {subject} {learning_type} {salt}",
             values={"region": "강남", "subject": "수학", "learning_type": "과외"},
+            suffix_salts=("강력 추천", "즉시 가능"),
         ))
         .with_body([Section(blocks=tuple(blocks))])
         .with_publish(PublishOption(mode="fixed", at=_schedule()))

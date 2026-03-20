@@ -22,27 +22,25 @@ from factory.tests.conftest import make_campaign
 class TestBuildCombos:
 
     def test_total_count(self):
-        """2×2×2 × 3 spacing × 2 has_suffix = 48"""
-        assert len(build_combos([[1, 2], [3, 4], [5, 6]], [10, 20, 30], [0, 1])) == 48
+        """2×2×2 × 3 spacing = 24"""
+        assert len(build_combos([[1, 2], [3, 4], [5, 6]], [10, 20, 30])) == 24
 
     def test_returns_combo_spec_instances(self):
-        for combo in build_combos([[1], [2]], [10], [0]):
+        for combo in build_combos([[1], [2]], [10]):
             assert isinstance(combo, ComboSpec)
             assert isinstance(combo.keyword_ids, list)
             assert isinstance(combo.spacing_rule_id, int)
-            assert isinstance(combo.has_suffix, int)
 
     def test_no_duplicates(self):
-        combos = build_combos([[1, 2], [3, 4]], [10, 20], [0, 1])
-        keys   = [(tuple(c.keyword_ids), c.spacing_rule_id, c.has_suffix) for c in combos]
+        combos = build_combos([[1, 2], [3, 4]], [10, 20])
+        keys   = [(tuple(c.keyword_ids), c.spacing_rule_id) for c in combos]
         assert len(keys) == len(set(keys))
 
     def test_empty_keyword_group_returns_empty(self):
-        assert build_combos([[], [1]], [10], [0]) == []
+        assert build_combos([[], [1]], [10]) == []
 
     def test_empty_spacing_rules_returns_empty(self):
-        assert build_combos([[1], [2]], [], [0]) == []
-
+        assert build_combos([[1], [2]], []) == []
 
 # ---------------------------------------------------------------------------
 # ComboGenerator.run() — 실제 DB
@@ -51,11 +49,11 @@ class TestBuildCombos:
 class TestComboGeneratorRun:
 
     def test_inserted_count_matches_cartesian_product(self, session: Session):
-        """region(2) × subject(2) × lt(2) × spacing(1) × has_suffix(2) = 16"""
+        """region(2) × subject(2) × lt(2) × spacing(1) = 8"""
         campaign = make_campaign(session)
         inserted = ComboGenerator(session=session, campaign_id=campaign.id).run()
         session.flush()
-        assert inserted == 16
+        assert inserted == 4
 
     def test_each_combination_has_correct_keyword_count(self, session: Session):
         campaign = make_campaign(session)
@@ -67,7 +65,7 @@ class TestComboGeneratorRun:
         ).all():
             assert len(combo.keywords) == 3
 
-    def test_config_stores_has_suffix(self, session: Session):
+    def test_combination_has_spacing_rule(self, session: Session):
         campaign = make_campaign(session)
         ComboGenerator(session=session, campaign_id=campaign.id).run()
         session.flush()
@@ -75,7 +73,7 @@ class TestComboGeneratorRun:
         for combo in session.scalars(
             select(Combination).where(Combination.campaign_id == campaign.id)
         ).all():
-            assert "has_suffix" in (combo.config or {})
+            assert combo.spacing_rule_id is not None
 
     def test_no_slots_returns_zero(self, session: Session):
         campaign = make_campaign(session, with_slots=False, with_keywords=False)
@@ -123,5 +121,5 @@ class TestComboGeneratorRun:
         inserted = ComboGenerator(session=session, campaign_id=campaign.id, picks=picks).run()
         session.flush()
 
-        # region 1 × subject 2 × lt 2 × spacing 1 × has_suffix 2 = 8
-        assert inserted == 8
+        # region 1 × subject 2 × lt 2 × spacing 1 = 4
+        assert inserted == 4

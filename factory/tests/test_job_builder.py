@@ -29,27 +29,25 @@ KST = timezone(timedelta(hours=9))
 # Helpers — lightweight Combination / Keyword / Campaign fakes
 # ---------------------------------------------------------------------------
 
-def _keyword(slug: str, value: str, display_value: str = "", cat_id: int = 1):
-    """Fake Keyword with .category.slug, .value, .display_value."""
+def _keyword(slug: str, value: str, cat_id: int = 1):
+    """Fake Keyword with .category.slug, .value."""
     category = SimpleNamespace(slug=slug, id=cat_id)
     return SimpleNamespace(
         category=category,
         value=value,
-        display_value=display_value,
     )
 
 
 def _combo(
     keywords: list,
     title_template: str = "{region} {subject}",
-    has_suffix: int = 1,
 ):
     """Fake Combination with .keywords, .campaign, .config."""
     campaign = SimpleNamespace(title_template=title_template)
     return SimpleNamespace(
         keywords=keywords,
         campaign=campaign,
-        config={"has_suffix": has_suffix},
+        config={},
     )
 
 
@@ -63,37 +61,16 @@ def _account():
 
 class TestBuildValues:
 
-    def test_has_suffix_true_uses_full_value(self):
+    def test_uses_keyword_value(self):
         combo = _combo(
             keywords=[
-                _keyword("region", "강남구", "강남", cat_id=1),
-                _keyword("subject", "수학", "수학", cat_id=2),
+                _keyword("region", "강남구", cat_id=1),
+                _keyword("subject", "수학", cat_id=2),
             ],
-            has_suffix=1,
         )
         values = _build_values(combo)
         assert values["region"] == "강남구"
         assert values["subject"] == "수학"
-
-    def test_has_suffix_false_uses_display_value(self):
-        combo = _combo(
-            keywords=[
-                _keyword("region", "강남구", "강남", cat_id=1),
-            ],
-            has_suffix=0,
-        )
-        values = _build_values(combo)
-        assert values["region"] == "강남"
-
-    def test_has_suffix_false_empty_display_falls_back_to_value(self):
-        combo = _combo(
-            keywords=[
-                _keyword("region", "강남구", "", cat_id=1),
-            ],
-            has_suffix=0,
-        )
-        values = _build_values(combo)
-        assert values["region"] == "강남구"
 
     def test_keywords_sorted_by_category_id(self):
         combo = _combo(
@@ -104,15 +81,6 @@ class TestBuildValues:
         )
         values = _build_values(combo)
         assert list(values.keys()) == ["region", "subject"]
-
-    def test_none_config_defaults_to_has_suffix_true(self):
-        combo = SimpleNamespace(
-            keywords=[_keyword("region", "강남구", "강남", cat_id=1)],
-            campaign=SimpleNamespace(title_template="{region}"),
-            config=None,
-        )
-        values = _build_values(combo)
-        assert values["region"] == "강남구"
 
 
 # ---------------------------------------------------------------------------

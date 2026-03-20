@@ -1,19 +1,16 @@
 """
-tests/test_title_unit.py
---------------------------
+tests/test_options_title.py
+----------------------------
 TitleGenerator 와 TitleOption 단위 테스트.
 
-- salts.json 만 사용 (regions.json / subjects.json 제거)
-- template 형식: "{slug}" 토큰, {salt} 는 특수 처리
-- values dict 로 토큰 치환
+- 솔트 데이터는 TitleOption.prefix_salts / suffix_salts 튜플로 직접 전달.
+- template 형식: "{slug}" 토큰, {salt} 는 특수 처리.
+- values dict 로 토큰 치환.
 """
 
-import json
 import pytest
-from pathlib import Path
 
 from automator.title_generator import (
-    load_salts,
     validate_template,
     TitleGenerator,
 )
@@ -21,49 +18,26 @@ from automator.options import TitleOption
 
 
 # ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+PREFIX_SALTS = ("검증된", "전문")
+SUFFIX_SALTS = ("강력 추천", "즉시 가능")
+ALL_SALTS    = set(PREFIX_SALTS) | set(SUFFIX_SALTS)
+
+
+# ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def salts_file(tmp_path: Path) -> Path:
-    data = {
-        "prefix_salts": ["검증된", "전문"],
-        "suffix_salts": ["강력 추천", "즉시 가능"],
-    }
-    p = tmp_path / "salts.json"
-    p.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-    return p
-
-
-@pytest.fixture
-def option(salts_file) -> TitleOption:
+def option() -> TitleOption:
     return TitleOption(
-        template    = "{region} {subject} {learning_type} {salt}",
-        values      = {"region": "강남", "subject": "수학", "learning_type": "과외"},
-        salt_preset = str(salts_file),
+        template      = "{region} {subject} {learning_type} {salt}",
+        values        = {"region": "강남", "subject": "수학", "learning_type": "과외"},
+        prefix_salts  = PREFIX_SALTS,
+        suffix_salts  = SUFFIX_SALTS,
     )
-
-
-# ---------------------------------------------------------------------------
-# load_salts
-# ---------------------------------------------------------------------------
-
-@pytest.mark.unit
-def test_load_salts_returns_prefix_and_suffix(salts_file):
-    result = load_salts(salts_file)
-    assert "prefix" in result and "suffix" in result
-
-
-@pytest.mark.unit
-def test_load_salts_all_returns_combined(salts_file):
-    result = load_salts(salts_file)
-    assert set(result["all"]) == set(result["prefix"]) | set(result["suffix"])
-
-
-@pytest.mark.unit
-def test_load_salts_missing_file_raises():
-    with pytest.raises(FileNotFoundError):
-        load_salts(Path("/no/such/salts.json"))
 
 
 # ---------------------------------------------------------------------------
@@ -80,7 +54,7 @@ def test_load_salts_missing_file_raises():
     "{region} {subject}",                    # salt 없어도 유효
 ])
 def test_validate_template_valid(tmpl):
-    validate_template(tmpl)   # 예외 없이 통과
+    validate_template(tmpl)   # must not raise
 
 
 @pytest.mark.unit
@@ -98,11 +72,11 @@ def test_validate_template_invalid(tmpl, match):
 
 
 @pytest.mark.unit
-def test_invalid_template_raises_on_construction(salts_file):
+def test_invalid_template_raises_on_construction():
     with pytest.raises(ValueError):
         TitleGenerator(TitleOption(
-            template    = "",
-            salt_preset = str(salts_file),
+            template      = "",
+            prefix_salts  = PREFIX_SALTS,
         ))
 
 
@@ -111,13 +85,13 @@ def test_invalid_template_raises_on_construction(salts_file):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
-def test_fixed_title_bypasses_template(salts_file):
+def test_fixed_title_bypasses_template():
     gen = TitleGenerator(TitleOption(fixed_title="강남 수학 과외"))
     assert gen.generate() == "강남 수학 과외"
 
 
 @pytest.mark.unit
-def test_fixed_title_is_deterministic(salts_file):
+def test_fixed_title_is_deterministic():
     gen = TitleGenerator(TitleOption(fixed_title="강남 수학 과외"))
     assert gen.generate() == gen.generate()
 
@@ -139,31 +113,30 @@ def test_generate_substitutes_values(option):
 def test_generate_includes_salt(option):
     gen   = TitleGenerator(option)
     title = gen.generate()
-    suffix_salts = {"강력 추천", "즉시 가능"}
-    prefix_salts = {"검증된", "전문"}
-    all_salts = suffix_salts | prefix_salts
-    assert any(s in title for s in all_salts), f"솔트 없음: {title!r}"
+    assert any(s in title for s in ALL_SALTS), f"솔트 없음: {title!r}"
 
 
 @pytest.mark.unit
-def test_generate_without_salt_token(salts_file):
+def test_generate_without_salt_token():
     """template 에 {salt} 없으면 솔트 삽입 없이 values 만 치환."""
     gen = TitleGenerator(TitleOption(
-        template    = "{region} {subject} {learning_type}",
-        values      = {"region": "강남", "subject": "수학", "learning_type": "과외"},
-        salt_preset = str(salts_file),
+        template      = "{region} {subject} {learning_type}",
+        values        = {"region": "강남", "subject": "수학", "learning_type": "과외"},
+        prefix_salts  = PREFIX_SALTS,
+        suffix_salts  = SUFFIX_SALTS,
     ))
     title = gen.generate()
     assert title == "강남 수학 과외"
 
 
 @pytest.mark.unit
-def test_generate_raises_on_missing_value(salts_file):
+def test_generate_raises_on_missing_value():
     """values 에 없는 {slug} 토큰이 있으면 KeyError."""
     gen = TitleGenerator(TitleOption(
-        template    = "{region} {subject} {missing_slug}",
-        values      = {"region": "강남", "subject": "수학"},
-        salt_preset = str(salts_file),
+        template      = "{region} {subject} {missing_slug}",
+        values        = {"region": "강남", "subject": "수학"},
+        prefix_salts  = PREFIX_SALTS,
+        suffix_salts  = SUFFIX_SALTS,
     ))
     with pytest.raises(KeyError):
         gen.generate()
@@ -188,70 +161,82 @@ def test_fixed_seed_produces_same_title(option):
     assert gen2.generate() == title
 
 
+@pytest.mark.unit
+def test_empty_salts_produces_empty_salt_token():
+    """솔트가 비어있으면 {salt} 위치에 빈 문자열이 들어간다."""
+    gen = TitleGenerator(TitleOption(
+        template = "{region} {salt}",
+        values   = {"region": "강남"},
+    ))
+    assert gen.generate() == "강남 "
+
+
 # ---------------------------------------------------------------------------
 # Salt pool selection by {salt} position
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
-def test_suffix_salt_used_when_salt_is_last(salts_file):
+def test_suffix_salt_used_when_salt_is_last():
     """template 마지막 → suffix_salts 에서 선택."""
     gen = TitleGenerator(TitleOption(
-        template    = "{region} {subject} {learning_type} {salt}",
-        values      = {"region": "강남", "subject": "수학", "learning_type": "과외"},
-        salt_preset = str(salts_file),
+        template      = "{region} {subject} {learning_type} {salt}",
+        values        = {"region": "강남", "subject": "수학", "learning_type": "과외"},
+        prefix_salts  = PREFIX_SALTS,
+        suffix_salts  = SUFFIX_SALTS,
     ))
-    suffix_salts = {"강력 추천", "즉시 가능"}
-    prefix_salts = {"검증된", "전문"}
+    suffix_set = set(SUFFIX_SALTS)
+    prefix_set = set(PREFIX_SALTS)
     for _ in range(30):
         title = gen.generate()
-        assert any(title.endswith(s) for s in suffix_salts), f"suffix_salt가 끝에 와야 함: {title!r}"
-        assert not any(title.endswith(s) for s in prefix_salts), f"prefix_salt가 끝에 오면 안 됨: {title!r}"
+        assert any(title.endswith(s) for s in suffix_set), f"suffix_salt가 끝에 와야 함: {title!r}"
+        assert not any(title.endswith(s) for s in prefix_set), f"prefix_salt가 끝에 오면 안 됨: {title!r}"
 
 
 @pytest.mark.unit
-def test_prefix_salt_used_when_salt_is_first(salts_file):
+def test_prefix_salt_used_when_salt_is_first():
     """template 첫 번째 → prefix_salts 에서 선택."""
     gen = TitleGenerator(TitleOption(
-        template    = "{salt} {region} {subject} {learning_type}",
-        values      = {"region": "강남", "subject": "수학", "learning_type": "과외"},
-        salt_preset = str(salts_file),
+        template      = "{salt} {region} {subject} {learning_type}",
+        values        = {"region": "강남", "subject": "수학", "learning_type": "과외"},
+        prefix_salts  = PREFIX_SALTS,
+        suffix_salts  = SUFFIX_SALTS,
     ))
-    prefix_salts = {"검증된", "전문"}
-    suffix_salts = {"강력 추천", "즉시 가능"}
+    prefix_set = set(PREFIX_SALTS)
+    suffix_set = set(SUFFIX_SALTS)
     for _ in range(30):
         title = gen.generate()
-        assert any(title.startswith(s) for s in prefix_salts), f"prefix_salt가 앞에 와야 함: {title!r}"
-        assert not any(title.startswith(s) for s in suffix_salts), f"suffix_salt가 앞에 오면 안 됨: {title!r}"
+        assert any(title.startswith(s) for s in prefix_set), f"prefix_salt가 앞에 와야 함: {title!r}"
+        assert not any(title.startswith(s) for s in suffix_set), f"suffix_salt가 앞에 오면 안 됨: {title!r}"
 
 
 @pytest.mark.unit
-def test_all_salts_used_when_salt_is_middle(salts_file):
+def test_all_salts_used_when_salt_is_middle():
     gen = TitleGenerator(TitleOption(
-        template    = "{region} {salt} {subject} {learning_type}",
-        values      = {"region": "강남", "subject": "수학", "learning_type": "과외"},
-        salt_preset = str(salts_file),
+        template      = "{region} {salt} {subject} {learning_type}",
+        values        = {"region": "강남", "subject": "수학", "learning_type": "과외"},
+        prefix_salts  = PREFIX_SALTS,
+        suffix_salts  = SUFFIX_SALTS,
     ))
-    all_salts = {"검증된", "전문", "강력 추천", "즉시 가능"}
     seen = set()
     for _ in range(50):
         title = gen.generate()
-        for s in all_salts:
+        for s in ALL_SALTS:
             if s in title:
                 seen.add(s)
     assert len(seen) > 1, f"중간 위치에서 다양한 솔트가 선택되어야 함: {seen}"
 
 
 # ---------------------------------------------------------------------------
-# Multi-dimension templates (원주 성인 영어회화 케이스)
+# Multi-dimension templates
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
-def test_three_dimension_template(salts_file):
+def test_three_dimension_template():
     """{region} {target_audience} {subject} — 학원/과외와 다른 구조."""
     gen = TitleGenerator(TitleOption(
-        template    = "{region} {target_audience} {subject} {salt}",
-        values      = {"region": "원주", "target_audience": "성인", "subject": "영어회화"},
-        salt_preset = str(salts_file),
+        template      = "{region} {target_audience} {subject} {salt}",
+        values        = {"region": "원주", "target_audience": "성인", "subject": "영어회화"},
+        suffix_salts  = SUFFIX_SALTS,
     ))
     title = gen.generate()
     assert "원주" in title
@@ -260,7 +245,7 @@ def test_three_dimension_template(salts_file):
 
 
 @pytest.mark.unit
-def test_five_dimension_template(salts_file):
+def test_five_dimension_template():
     """{region} {school} {grade} {subject} {learning_type} — 5차원 케이스."""
     gen = TitleGenerator(TitleOption(
         template = "{region} {school} {grade} {subject} {learning_type} {salt}",
@@ -271,7 +256,7 @@ def test_five_dimension_template(salts_file):
             "subject": "수학",
             "learning_type": "과외",
         },
-        salt_preset = str(salts_file),
+        suffix_salts = SUFFIX_SALTS,
     ))
     title = gen.generate()
     assert all(v in title for v in ["원주", "OO중", "중1", "수학", "과외"])

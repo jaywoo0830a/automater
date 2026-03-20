@@ -9,13 +9,12 @@ from __future__ import annotations
 
 import itertools
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Sequence
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from factory.models import (
-    Campaign,
     CampaignSlot,
     Combination,
     Keyword,
@@ -32,7 +31,6 @@ class ComboSpec:
     """One row of the Cartesian product, ready to be inserted into DB."""
     keyword_ids:     list[int]
     spacing_rule_id: int
-    has_suffix:      int
 
 
 # ---------------------------------------------------------------------------
@@ -42,21 +40,19 @@ class ComboSpec:
 def build_combos(
     kw_groups:          list[list[int]],
     spacing_rule_ids:   list[int],
-    has_suffix_options: list[int],
 ) -> list[ComboSpec]:
     """
     Pure Cartesian product — no DB dependency.
 
     Returns a list of ComboSpec, one per unique
-    (keyword_ids, spacing_rule_id, has_suffix) tuple.
+    (keyword_ids, spacing_rule_id) tuple.
     """
     combos: list[ComboSpec] = []
-    for spacing_id, has_suffix in itertools.product(spacing_rule_ids, has_suffix_options):
+    for spacing_id in spacing_rule_ids:
         for combo_kws in itertools.product(*kw_groups):
             combos.append(ComboSpec(
                 keyword_ids=list(combo_kws),
                 spacing_rule_id=spacing_id,
-                has_suffix=has_suffix,
             ))
     return combos
 
@@ -95,10 +91,6 @@ class ComboGenerator:
 
     def run(self) -> int:
         """Build combos and insert them. Returns the number of rows inserted."""
-        campaign = self._session.get(Campaign, self._campaign_id)
-        config: dict[str, Any] = (campaign.config or {}) if campaign else {}
-        has_suffix_options: list[int] = config.get("has_suffix_options", [0, 1])
-
         slots = self._load_slots()
         if not slots:
             return 0
@@ -111,7 +103,7 @@ class ComboGenerator:
         if not spacing_rule_ids:
             return 0
 
-        combos = build_combos(kw_groups, spacing_rule_ids, has_suffix_options)
+        combos = build_combos(kw_groups, spacing_rule_ids)
         self._insert(combos, kw_groups)
         return len(combos)
 
@@ -184,7 +176,6 @@ class ComboGenerator:
             combination = Combination(
                 campaign_id     = self._campaign_id,
                 spacing_rule_id = spec.spacing_rule_id,
-                config          = {"has_suffix": spec.has_suffix},
             )
             combination.keywords = [kw_by_id[kid] for kid in spec.keyword_ids]
             self._session.add(combination)
