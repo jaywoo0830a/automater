@@ -88,11 +88,34 @@ def build_posting_spec(
 # ---------------------------------------------------------------------------
 
 def _build_values(combo: Any) -> dict[str, str]:
-    """Build slug -> value dict from combination's keywords."""
+    """
+    Build slug -> value dict from combination's keywords.
+
+    Inactive affixes are stripped from keyword values:
+        Keyword("강남구") + Affix(suffix, "구", active=False) → "강남"
+        Keyword("강남구") + Affix(suffix, "구", active=True)  → "강남구"
+    """
     values: dict[str, str] = {}
     for kw in sorted(combo.keywords, key=lambda k: getattr(k.category, "id", 0)):
-        values[kw.category.slug] = kw.value
+        values[kw.category.slug] = _apply_affixes(kw.value, getattr(kw, "affixes", []))
     return values
+
+
+def _apply_affixes(value: str, affixes: list[Any]) -> str:
+    """
+    Strip inactive affixes from a keyword value.
+
+    Only inactive (active=False) affixes are stripped.
+    Active affixes mean the affix is intentionally part of the value.
+    """
+    for affix in affixes:
+        if affix.active:
+            continue
+        if affix.type == "suffix" and value.endswith(affix.value):
+            value = value[: -len(affix.value)]
+        elif affix.type == "prefix" and value.startswith(affix.value):
+            value = value[len(affix.value) :]
+    return value
 
 
 def _build_title(combo: Any) -> TitleOption:

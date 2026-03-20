@@ -20,6 +20,7 @@ from automator.options import (
 )
 from factory.job_builder import (
     build_posting_spec,
+    _apply_affixes,
     _build_body_default,
     _build_body_from_layout,
     _build_title,
@@ -33,9 +34,13 @@ KST = timezone(timedelta(hours=9))
 # Helpers — lightweight fakes
 # ---------------------------------------------------------------------------
 
-def _keyword(slug: str, value: str, cat_id: int = 1):
+def _keyword(slug: str, value: str, cat_id: int = 1, affixes=None):
     category = SimpleNamespace(slug=slug, id=cat_id)
-    return SimpleNamespace(category=category, value=value)
+    return SimpleNamespace(category=category, value=value, affixes=affixes or [])
+
+
+def _affix(type: str, value: str, active: bool = True):
+    return SimpleNamespace(type=type, value=value, active=active)
 
 
 def _slot(sort_order: int, block_type: str, config: dict = None):
@@ -91,9 +96,103 @@ class TestBuildValues:
     def test_keywords_sorted_by_category_id(self):
         combo = _combo(keywords=[
             _keyword("subject", "수학", cat_id=2),
-            _keyword("region", "강남구", cat_id=1),
+            _keyword("region", "강남", cat_id=1),
         ])
-        assert list(_build_values(combo).keys()) == ["region", "subject"]
+        values = _build_values(combo)
+        assert list(values.keys()) == ["region", "subject"]
+
+    # -- affix stripping --
+
+    def test_inactive_suffix_stripped(self):
+        """강남구 + suffix "구" (inactive) → 강남"""
+        combo = _combo(keywords=[
+            _keyword("region", "강남구", cat_id=1, affixes=[
+                _affix("suffix", "구", active=False),
+            ]),
+        ])
+        values = _build_values(combo)
+        assert values["region"] == "강남"
+
+    def test_active_suffix_kept(self):
+        """강남구 + suffix "구" (active) → 강남구 (unchanged)"""
+        combo = _combo(keywords=[
+            _keyword("region", "강남구", cat_id=1, affixes=[
+                _affix("suffix", "구", active=True),
+            ]),
+        ])
+        values = _build_values(combo)
+        assert values["region"] == "강남구"
+
+    def test_inactive_prefix_stripped(self):
+        """동강남 + prefix "동" (inactive) → 강남"""
+        combo = _combo(keywords=[
+            _keyword("region", "동강남", cat_id=1, affixes=[
+                _affix("prefix", "동", active=False),
+            ]),
+        ])
+        values = _build_values(combo)
+        assert values["region"] == "강남"
+
+    def test_active_prefix_kept(self):
+        """동강남 + prefix "동" (active) → 동강남"""
+        combo = _combo(keywords=[
+            _keyword("region", "동강남", cat_id=1, affixes=[
+                _affix("prefix", "동", active=True),
+            ]),
+        ])
+        values = _build_values(combo)
+        assert values["region"] == "동강남"
+
+    def test_multiple_inactive_affixes(self):
+        """서초구 + suffix "구" (inactive) + suffix "동" (inactive) → 서초"""
+        combo = _combo(keywords=[
+            _keyword("region", "서초구", cat_id=1, affixes=[
+                _affix("suffix", "구", active=False),
+                _affix("suffix", "동", active=False),
+            ]),
+        ])
+        values = _build_values(combo)
+        assert values["region"] == "서초"
+
+    def test_mixed_active_inactive(self):
+        """강남구 + suffix "구" (inactive) + suffix "동" (active) → 강남"""
+        combo = _combo(keywords=[
+            _keyword("region", "강남구", cat_id=1, affixes=[
+                _affix("suffix", "구", active=False),
+                _affix("suffix", "동", active=True),
+            ]),
+        ])
+        values = _build_values(combo)
+        assert values["region"] == "강남"
+
+    def test_no_affixes_unchanged(self):
+        """No affixes → value unchanged."""
+        combo = _combo(keywords=[
+            _keyword("region", "강남구", cat_id=1, affixes=[]),
+        ])
+        values = _build_values(combo)
+        assert values["region"] == "강남구"
+
+    def test_suffix_not_in_value_unchanged(self):
+        """Suffix doesn't match end of value → unchanged."""
+        combo = _combo(keywords=[
+            _keyword("region", "강남", cat_id=1, affixes=[
+                _affix("suffix", "구", active=False),
+            ]),
+        ])
+        values = _build_values(combo)
+        assert values["region"] == "강남"
+
+    def test_two_keywords_independent_affixes(self):
+        """Each keyword applies its own affixes independently."""
+        combo = _combo(keywords=[
+            _keyword("region", "강남구", cat_id=1, affixes=[
+                _affix("suffix", "구", active=False),
+            ]),
+            _keyword("subject", "수학", cat_id=2, affixes=[]),
+        ])
+        values = _build_values(combo)
+        assert values == {"region": "강남", "subject": "수학"}
 
 
 # ---------------------------------------------------------------------------
