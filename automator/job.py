@@ -301,6 +301,6 @@ class PostingJob:
                     pass
 
         if rep_index is not None:
-            editor.set_representative_image(rep_index)
+            editor.set_representative_media(rep_index)
 
         editor.publish(schedule_at=post.schedule_at)

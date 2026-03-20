@@ -5,7 +5,7 @@ SmartEditorOne — Naver Smart Editor implementation of BlogEditor.
 
 Implements the 7 BlogEditor primitives:
     open, write_title, insert_text, upload_file,
-    move_cursor, set_representative_image, publish
+    move_cursor, set_representative_media, publish
 
 Dependencies:
     SelectorLoader  — selectors/naver/editor.json
@@ -204,7 +204,7 @@ class SmartEditorOne(BlogEditor):
             state="visible", timeout=10_000
         )
 
-    def set_representative_image(self, index: int) -> None:
+    def set_representative_media(self, index: int) -> None:
         """
         Set representative (thumbnail) image by insertion index.
 
@@ -233,7 +233,7 @@ class SmartEditorOne(BlogEditor):
 
         if result != "selected":
             raise RuntimeError(
-                f"set_representative_image(index={index}) failed: "
+                f"set_representative_media(index={index}) failed: "
                 f"JS returned {result!r}"
             )
 

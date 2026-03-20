@@ -42,7 +42,7 @@ class _RecordingEditor(BlogEditor):
     def write_title(self, t)                   -> None: self._rec("write_title", t)
     def insert_text(self, text, nl=2)          -> None: self._rec("insert_text", text, nl)
     def upload_file(self, path)                -> None: self._rec("upload_file", path)
-    def set_representative_image(self, i)      -> None: self._rec("set_rep", i)
+    def set_representative_media(self, i)      -> None: self._rec("set_rep", i)
     def move_cursor(self, position="end")      -> None: self._rec("cursor", position)
     def publish(self, schedule_at=None)        -> None: self._rec("publish", schedule_at)
 
@@ -162,14 +162,14 @@ def test_heading_block__calls_insert_text(editor):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
-def test_featured_block__calls_set_representative_image(editor):
+def test_featured_block__calls_set_representative_media(editor):
     _base_job().with_title(TitleOption(fixed_title="T")) \
                .with_body([Section(blocks=(ImageBlock(path="img.jpg"), FeaturedImageBlock(path="thumb.jpg")))]).run(editor)
     assert any(a[0] == "set_rep" for a in editor.actions)
 
 
 @pytest.mark.unit
-def test_no_featured_block__skips_set_representative_image(editor):
+def test_no_featured_block__skips_set_representative_media(editor):
     _base_job().with_title(TitleOption(fixed_title="T")) \
                .with_body([Section(blocks=(ImageBlock(path="img.jpg"), ParagraphBlock()))]).run(editor)
     assert not any(a[0] == "set_rep" for a in editor.actions)

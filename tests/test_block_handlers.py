@@ -5,7 +5,7 @@ ImageBlock / FeaturedImageBlock 의 이미지 변환 파이프라인 검증.
 
 1. 이미지 처리 옵션이 기본값이면 process_image / process_featured 가 호출된다.
 2. 변환된 임시 파일 경로가 execute() 에 전달된다.
-3. FeaturedImageBlock 은 set_representative_image() 를 트리거한다.
+3. FeaturedImageBlock 은 set_representative_media() 를 트리거한다.
 """
 
 import pytest
@@ -91,7 +91,7 @@ def test_processed_path_differs_from_original(tmp_path):
 
 @pytest.mark.unit
 def test_featured_block__sets_representative_image(tmp_path):
-    """FeaturedImageBlock 이 있으면 set_representative_image() 가 호출된다."""
+    """FeaturedImageBlock 이 있으면 set_representative_media() 가 호출된다."""
     thumb  = _make_jpeg(tmp_path)
     editor = MagicMock()
 
@@ -101,7 +101,7 @@ def test_featured_block__sets_representative_image(tmp_path):
             FeaturedImageBlock(path=str(thumb)),
         ))]).run(editor)
 
-    editor.set_representative_image.assert_called_once()
+    editor.set_representative_media.assert_called_once()
 
 
 @pytest.mark.unit

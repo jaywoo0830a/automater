@@ -79,13 +79,13 @@ def test_upload_file_raises_for_missing_file(editor):
 
 
 # ---------------------------------------------------------------------------
-# set_representative_image()
+# set_representative_media()
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
 def test_set_rep_image_raises_for_negative_index(editor):
     with pytest.raises(ValueError):
-        editor.set_representative_image(-1)
+        editor.set_representative_media(-1)
 
 
 # ---------------------------------------------------------------------------

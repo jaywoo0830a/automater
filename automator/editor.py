@@ -10,7 +10,7 @@ BlogEditor primitives
     insert_text(text, newlines)     — any text at cursor
     upload_file(path)               — any file via chooser
     move_cursor(position)           — reposition cursor
-    set_representative_image(index) — mark thumbnail
+    set_representative_media(index) — mark thumbnail
     publish(schedule_at)            — publish or schedule
 
 PostStep hierarchy (internal)
@@ -74,7 +74,7 @@ class BlogEditor(ABC):
         """Reposition the cursor."""
 
     @abstractmethod
-    def set_representative_image(self, index: int) -> None:
+    def set_representative_media(self, index: int) -> None:
         """
         Set the index-th (0-based) uploaded image as representative.
 
