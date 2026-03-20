@@ -1,5 +1,5 @@
 """
-tests/test_generator_image.py
+tests/test_image_processor.py
 -------------------------------
 process_image() / process_featured() / build_filename() 단위 테스트.
 

@@ -1,5 +1,5 @@
 """
-PublishOption 스케줄 검증 테스트.
+tests/test_publish_option.py — PublishOption schedule validation.
 """
 
 from __future__ import annotations

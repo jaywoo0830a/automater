@@ -5,7 +5,7 @@ tests/conftest.py
 
 계층 구조
 ----------
-Unit fixtures  : mock_paragraph_generator (autouse)
+Unit fixtures  : mock_generate_paragraphs (autouse)
 E2E fixtures   : account → browser_instance → auth_context → page → editor
 
 E2E fixture 사용 조건
@@ -42,22 +42,23 @@ _LOGIN_SEL = SelectorLoader.load("selectors/naver/login.json")
 
 
 # ---------------------------------------------------------------------------
-# Unit — ParagraphGenerator mock (autouse)
+# Unit — generate_paragraphs mock (autouse)
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(autouse=True)
-def mock_paragraph_generator(request):
+def mock_generate_paragraphs(request):
     """
-    Unit 테스트에서 ParagraphGenerator 를 stub 으로 교체.
-    E2e 테스트는 실제 클래스를 사용 (ENV=dev|test 면 자동으로 stub 반환).
+    Unit tests use patched generate_paragraphs for deterministic output.
+    E2e tests use the real function (ENV=dev|test returns stubs automatically).
     """
     if "e2e" in request.keywords:
         yield
         return
 
-    mock = MagicMock()
-    mock.return_value.generate.side_effect = _stub_generate
-    with patch("automator.job.ParagraphGenerator", mock):
+    def _stub_side_effect(prompt, count, **kwargs):
+        return _stub_generate(count)
+
+    with patch("automator.paragraph_generator.generate_paragraphs", side_effect=_stub_side_effect) as mock:
         yield mock
 
 

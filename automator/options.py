@@ -1,33 +1,31 @@
 """
 automator/options.py
 ---------------------
-Value objects describing a blog posting job.
+Frozen value objects — no I/O, no imports beyond stdlib.
 
-Design
-------
-블로그 포스팅 = 5가지 질문의 답:
+Public interface
+----------------
+    AccountOption       — who is posting
+    TitleOption         — title template + salts
+    Section             — block container (role, tone)
+    PublishOption       — schedule, tags, visibility
+    RunSetting          — throttling, failure handling
 
-  AccountOption  — 누가 올리는가
-  TitleOption    — 무슨 제목인가
-  Section 목록   — 무엇이 담겼는가  (Section > Block 계층)
-  PublishOption  — 언제·어떻게 올리는가
+Block types (inside Section.blocks)
+------------------------------------
+    HeadingBlock        — H1-H6
+    ParagraphBlock      — AI-generated text
+    ImageBlock          — body image
+    FeaturedImageBlock  — thumbnail image
+    ListBlock           — ordered/unordered list
+    QuoteBlock          — blockquote
+    DividerBlock        — horizontal rule
 
-Structure hierarchy:
-  Post (PostingJob)
-  └── Section           의미 단위 — role / tone 을 가진다
-       └── Block        시각 단위 — 7종
-            └── BlockMeta  role / tone / keyword / generated
-
-Block types:
-  HeadingBlock      → H1–H6 제목
-  ParagraphBlock    → 텍스트 단락  (ParagraphStep 으로 변환)
-  ImageBlock        → 본문 이미지  (ImageStep 으로 변환)
-  FeaturedImageBlock→ 대표 이미지  (ThumbnailStep 으로 변환)
-  ListBlock         → 순서 있는/없는 목록
-  QuoteBlock        → 인용문
-  DividerBlock      → 구분선
-
-All dataclasses are frozen (immutable). No I/O. No imports beyond stdlib.
+Type aliases
+------------
+    Block      = Union of all block types
+    BlockRole  = Literal["intro", "body", "supporting", "cta", "closing"]
+    BlockTone  = Literal["informational", "review", "story", "promotional"]
 """
 
 from __future__ import annotations
@@ -113,29 +111,12 @@ class TitleOption:
     seed:             int | None       = None
 
 
-# ---------------------------------------------------------------------------
-# BlockMeta — 모든 Block 이 공유하는 메타데이터
-# ---------------------------------------------------------------------------
-
 BlockRole = Literal["intro", "body", "supporting", "cta", "closing"]
 BlockTone = Literal["informational", "review", "story", "promotional"]
 
 
-@dataclass(frozen=True)
-class BlockMeta:
-    """
-    Block 의 의미와 문체를 기술하는 메타데이터.
-
-    Attributes:
-        role:      이 블록의 역할. Section.role 과 독립적으로 유지된다.
-        generated: AI 생성 여부.
-    """
-    role:      BlockRole = "body"
-    generated: bool      = False
-
-
 # ---------------------------------------------------------------------------
-# Block hierarchy — 7종
+# Block hierarchy — 7 types
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
@@ -143,7 +124,6 @@ class HeadingBlock:
     """H1–H6 제목 블록."""
     level: Literal[1, 2, 3, 4, 5, 6]
     text:  str
-    meta:  BlockMeta = field(default_factory=BlockMeta)
 
 
 @dataclass(frozen=True)
@@ -152,7 +132,7 @@ class ParagraphBlock:
     텍스트 단락 하나.
 
     AI 프롬프트는 prompt → keyword → (빈 값) 순으로 우선한다.
-    keyword 가 있으면 ParagraphGenerator 가 SEO 최적화 프롬프트를 자동 생성한다.
+    keyword 가 있으면 generate_paragraphs() 가 SEO 최적화 프롬프트를 자동 생성한다.
 
     Attributes:
         prompt:    Gemini 에 직접 전달할 프롬프트.
@@ -169,7 +149,6 @@ class ParagraphBlock:
     min_chars: int       = 0
     max_chars: int       = 0
     newlines:  int       = 2
-    meta:      BlockMeta = field(default_factory=BlockMeta)
 
 
 @dataclass(frozen=True)
@@ -197,7 +176,6 @@ class ImageBlock:
     exif_gps_lat:      float | None = None
     exif_gps_lng:      float | None = None
     filename_keyword:  str        = ""
-    meta:              BlockMeta  = field(default_factory=BlockMeta)
 
 
 @dataclass(frozen=True)
@@ -234,7 +212,6 @@ class FeaturedImageBlock:
     exif_gps_lat:           float | None = None
     exif_gps_lng:           float | None = None
     filename_keyword:       str        = ""
-    meta:                   BlockMeta  = field(default_factory=BlockMeta)
 
 
 @dataclass(frozen=True)
@@ -242,7 +219,6 @@ class ListBlock:
     """순서 있는/없는 목록 블록."""
     items:   tuple[str, ...]  = field(default_factory=tuple)
     ordered: bool             = False
-    meta:    BlockMeta        = field(default_factory=BlockMeta)
 
 
 @dataclass(frozen=True)
@@ -250,13 +226,11 @@ class QuoteBlock:
     """인용문 블록."""
     text:        str      = ""
     attribution: str      = ""
-    meta:        BlockMeta = field(default_factory=BlockMeta)
 
 
 @dataclass(frozen=True)
 class DividerBlock:
     """구분선 블록. 내용 없음."""
-    meta: BlockMeta = field(default_factory=BlockMeta)
 
 
 # Sealed union — isinstance 분기에 사용
@@ -282,7 +256,7 @@ class Section:
 
     Attributes:
         blocks: 이 섹션에 속한 Block 목록. 순서가 곧 레이아웃이다.
-        role:   섹션의 역할. Block.meta.role 과 독립적으로 유지된다.
+        role:   섹션의 역할.
         tone:   섹션의 문체.
     """
     blocks: tuple[Block, ...] = field(default_factory=tuple)

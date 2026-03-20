@@ -1,9 +1,13 @@
 """
 automator/layout.py
 --------------------
-Section / Block 유효성 검사 및 집계 유틸리티.
+Section/Block validation and aggregation utilities.
 
-Section 이 최상위 단위다. 모든 Block 은 Section 안에 있다.
+Public interface
+----------------
+    all_blocks(sections)          -> list[Block]
+    paragraph_block_count(sections) -> int
+    validate_sections(sections)   -> None (raises ValueError)
 """
 
 from __future__ import annotations

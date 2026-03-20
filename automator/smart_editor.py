@@ -1,23 +1,15 @@
 """
 automator/smart_editor.py
 --------------------------
-Layer 3: Editor Shell
+SmartEditorOne — Naver Smart Editor implementation of BlogEditor.
 
-Thin OOP adaptor that implements the BlogEditor ABC.
+Implements the 7 BlogEditor primitives:
+    open, write_title, insert_text, upload_file,
+    move_cursor, set_representative_image, publish
 
-Responsibilities
-----------------
-1. Resolve selectors  — SelectorLoader.load(editor.json)
-2. Resolve frames     — find_editor_frame / find_js_frame  (browser_actions)
-3. Delegate DOM work  — browser_actions pure functions
-
-This class contains no DOM logic of its own. When a test exercises
-SmartEditorOne it is really testing the wiring, not the DOM operations.
-The DOM operations are tested independently in test_browser_actions.py.
-
-Selector key naming rule: {context}_{element}_{variant?}
-  context : overlay | toolbar | editor | library | publish
-  See selectors/naver/editor.json for the full catalogue.
+Dependencies:
+    SelectorLoader  — selectors/naver/editor.json
+    browser_actions — pure DOM functions
 """
 
 from __future__ import annotations
@@ -29,10 +21,7 @@ from pathlib import Path
 
 from playwright.sync_api import Page
 
-from automator.editor import (
-    BlogEditor,
-    ParagraphStep, ImageStep, ThumbnailStep, PostStep,
-)
+from automator.editor import BlogEditor, CursorPosition
 from automator.selector_loader import SelectorLoader
 from automator.browser_actions import (
     click_if_visible,
@@ -169,12 +158,11 @@ class SmartEditorOne(BlogEditor):
         el.click()
         self._page.keyboard.type(title)
 
-    def _write_paragraph(self, text: str, newlines: int = 2) -> None:
+    def insert_text(self, text: str, newlines: int = 2) -> None:
         """
         Click the last paragraph container and type text.
 
         Uses editor_paragraph_container (p.se-text-paragraph).
-        Guaranteed to be in the main editor — never inside an image iframe.
         Presses Enter newlines times after typing (default: 2).
         """
         frame     = self._frame()
@@ -186,15 +174,15 @@ class SmartEditorOne(BlogEditor):
         for _ in range(max(newlines, 1)):
             self._page.keyboard.press("Enter")
 
-    def _upload_image(self, image_path: str) -> None:
+    def upload_file(self, path: str) -> None:
         """
-        Upload image via toolbar button.
+        Upload a file via toolbar button.
 
-        Raises FileNotFoundError if image_path does not exist.
+        Raises FileNotFoundError if path does not exist.
         """
-        path = Path(image_path)
-        if not path.exists():
-            raise FileNotFoundError(f"Image file not found: {image_path!r}")
+        file_path = Path(path)
+        if not file_path.exists():
+            raise FileNotFoundError(f"File not found: {path!r}")
 
         frame = self._frame()
         sel   = self._sel()
@@ -254,31 +242,23 @@ class SmartEditorOne(BlogEditor):
             timeout_ms=5_000,
         )
 
-    def execute(self, step: PostStep) -> None:
+    def move_cursor(self, position: CursorPosition = "end") -> None:
         """
-        PostStep 을 에디터에 실행한다.
+        Reposition the cursor.
 
-        ParagraphStep → _write_paragraph()
-        ImageStep     → _upload_image()
-        ThumbnailStep → _upload_image()
-        그 외 타입은 silently skip.
-        """
-        if isinstance(step, ParagraphStep):
-            self._write_paragraph(step.text, newlines=step.newlines)
-        elif isinstance(step, (ImageStep, ThumbnailStep)):
-            self._upload_image(step.path)
-
-    def move_cursor_to_end(self) -> None:
-        """
-        Move cursor to end of document.
-
-        Clicks p.se-text-paragraph.last — always in the main editor,
-        never inside an image component iframe — then presses Ctrl+End.
+        'end'   -> click last paragraph, press Ctrl+End
+        'start' -> click first paragraph, press Ctrl+Home
         """
         frame = self._frame()
         sel   = self._sel()
-        sel.locator(frame, "editor_paragraph_container").last.click()
-        self._page.keyboard.press("Control+End")
+        container = sel.locator(frame, "editor_paragraph_container")
+
+        if position == "start":
+            container.first.click()
+            self._page.keyboard.press("Control+Home")
+        else:
+            container.last.click()
+            self._page.keyboard.press("Control+End")
 
     def publish(self, schedule_at: datetime | None = None) -> None:
         """

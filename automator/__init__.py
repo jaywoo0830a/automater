@@ -3,62 +3,36 @@ automator
 ---------
 Blog automation package.
 
-Quick start
------------
-    from automator import (
-        PostingJob,
-        AccountOption, TitleOption, PublishOption, RunSetting,
-        Section, BlockMeta,
-        HeadingBlock, ParagraphBlock, ImageBlock, FeaturedImageBlock,
-        ListBlock, QuoteBlock, DividerBlock,
-        SmartEditorOne,
-    )
+Public interface
+----------------
+    PostingJob          — builder + orchestrator (entry point)
+    BlogEditor          — abstract editor with 7 primitives
+    SmartEditorOne      — Naver Smart Editor implementation
 
+    AccountOption, TitleOption, PublishOption, RunSetting — config
+    Section, Block types (7)    — post body structure
+    BlockHandler, HANDLERS      — extension point for new block types
+
+    generate_title()            — TitleOption -> str
+    generate_paragraphs()       — prompt -> list[str]
+    validate_template()         — raises ValueError on bad template
+
+Usage
+-----
     job = (
         PostingJob
-        .for_account(AccountOption(
-            username="my_id",
-            password="my_pw",
-            meta={"blog_id": "my_blog"},
-        ))
-        .with_title(TitleOption(fixed_title="강남 수학 과외 추천"))
-        .with_body([
-            Section(
-                role="intro",
-                blocks=(
-                    HeadingBlock(level=2, text="강남 수학 과외 안내"),
-                    ParagraphBlock(
-                        keyword="강남 수학 과외",
-                        tone="review",
-                        min_chars=250,
-                    ),
-                ),
-            ),
-            Section(
-                role="closing",
-                blocks=(
-                    ImageBlock(path="assets/images/1.jpg"),
-                    FeaturedImageBlock(
-                        path="assets/thumbnails/1.jpg",
-                        overlay_text="강남 수학 과외",
-                    ),
-                ),
-            ),
-        ])
+        .for_account(AccountOption(username="id", password="pw"))
+        .with_title(TitleOption(fixed_title="제목"))
+        .with_body([Section(blocks=(ParagraphBlock(),))])
         .with_publish(PublishOption(mode="immediate"))
     )
-
-    write_url = f"https://blog.naver.com/{job._account.meta['blog_id']}?Redirect=Write&"
-    with SmartEditorOne(page, write_url) as editor:
-        job.run(editor)
+    job.run(editor)
 """
 
-from automator.paragraph_generator import ParagraphGenerator
 from automator.options import (
     AccountOption,
     TitleOption,
     Section,
-    BlockMeta,
     Block,
     HeadingBlock,
     ParagraphBlock,
@@ -70,10 +44,10 @@ from automator.options import (
     PublishOption,
     RunSetting,
 )
-from automator.editor import (
-    BlogEditor, PostContent,
-    ParagraphStep, ImageStep, ThumbnailStep, PostStep,
-)
+from automator.editor import BlogEditor
+from automator.title_generator import generate_title, validate_template
+from automator.paragraph_generator import generate_paragraphs, RateLimitError
+from automator.block_handlers import BlockHandler, ContentContext, get_handler, HANDLERS
 from automator.browser_actions import (
     click_if_visible, click_polling,
     dismiss, dismiss_polling, dismiss_parallel,
@@ -83,10 +57,10 @@ from automator.smart_editor import SmartEditorOne
 from automator.job import PostingJob
 
 __all__ = [
+    # Value objects
     "AccountOption",
     "TitleOption",
     "Section",
-    "BlockMeta",
     "Block",
     "HeadingBlock",
     "ParagraphBlock",
@@ -97,13 +71,19 @@ __all__ = [
     "DividerBlock",
     "PublishOption",
     "RunSetting",
+    # Editor
     "BlogEditor",
-    "PostContent",
-    "ParagraphStep",
-    "ImageStep",
-    "ThumbnailStep",
-    "PostStep",
     "SmartEditorOne",
+    # Orchestrator
     "PostingJob",
-    "ParagraphGenerator",
+    # Functions
+    "generate_title",
+    "validate_template",
+    "generate_paragraphs",
+    "RateLimitError",
+    # Extension API
+    "BlockHandler",
+    "ContentContext",
+    "get_handler",
+    "HANDLERS",
 ]

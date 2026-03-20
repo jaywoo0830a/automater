@@ -1,12 +1,12 @@
 """
-Unit tests for layout.py (Section/Block validation utilities).
+tests/test_layout.py — Section/Block validation.
 """
 
 import pytest
 from automator.options import (
     ParagraphBlock, ImageBlock, FeaturedImageBlock,
     HeadingBlock, ListBlock, QuoteBlock, DividerBlock,
-    Section, BlockMeta,
+    Section,
 )
 from automator.layout import validate_sections, paragraph_block_count, all_blocks
 
@@ -86,21 +86,3 @@ def test_all_block_types_accepted():
         QuoteBlock(text="인용", attribution="출처"),
         DividerBlock(),
     )])
-
-
-@pytest.mark.unit
-def test_block_meta_defaults():
-    meta = BlockMeta()
-    assert meta.role == "body"
-    assert meta.generated is False
-
-
-@pytest.mark.unit
-def test_section_role_independent_from_block_meta():
-    """Section.role 과 Block.meta.role 은 독립적이다."""
-    section = Section(
-        blocks=(ParagraphBlock(meta=BlockMeta(role="cta")),),
-        role="intro",
-    )
-    assert section.role == "intro"
-    assert section.blocks[0].meta.role == "cta"

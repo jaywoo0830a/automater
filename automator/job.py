@@ -1,61 +1,45 @@
 """
 automator/job.py
 ----------------
-PostingJob — platform-agnostic immutable builder + orchestrator.
+PostingJob — immutable builder + orchestrator.
 
-Builder
--------
-    base = PostingJob.for_account(account)
+Public interface
+----------------
+    PostingJob.for_account(account)     -> PostingJob
+    PostingJob.with_title(title)        -> PostingJob
+    PostingJob.with_body(sections)      -> PostingJob
+    PostingJob.with_publish(publish)    -> PostingJob
+    PostingJob.with_setting(setting)    -> PostingJob
+    PostingJob.run(editor)              -> None
+    PostingJob.validate()               -> None
 
-    job = (
-        base
-        .with_title(TitleOption(
-            template="{region} {subject} {salt}",
-            values={...},
-            suffix_salts=("강력 추천", "즉시 가능"),
-        ))
-        .with_body([
-            Section(blocks=(
-                HeadingBlock(level=2, text="강남 수학 과외 안내"),
-                ParagraphBlock(prompt="강남 수학 과외 홍보"),
-            ), role="intro"),
-            Section(blocks=(
-                ImageBlock(path="img.jpg"),
-                ParagraphBlock(prompt="후기 형식 마무리"),
-                FeaturedImageBlock(path="thumb.jpg"),
-            ), role="closing"),
-        ])
-        .with_publish(PublishOption(mode="immediate", tags=["강남수학과외"]))
-    )
-    job.run(editor)
-
-with_*() 는 항상 새 인스턴스를 반환한다 — base 는 절대 변하지 않는다.
-editor 는 run() 시점에 주입된다.
+Internal flow (run)
+-------------------
+    1. validate()
+    2. _generate_content() — BlockHandler.to_steps() per block
+    3. _execute()          — step.execute(editor) per step
 """
 
 from __future__ import annotations
 
 import random
-import tempfile
 import time
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from automator.editor import (
-    BlogEditor, PostContent,
-    ParagraphStep, ImageStep, ThumbnailStep, PostStep,
+    BlogEditor, _PostContent,
+    ParagraphStep,
 )
-from automator.image_processor import process_image, process_featured, build_filename
-from automator.title_generator import TitleGenerator, validate_template
+from automator.block_handlers import ContentContext, get_handler
+from automator.title_generator import generate_title, validate_template
 from automator.layout import validate_sections, paragraph_block_count, all_blocks
-from automator.paragraph_generator import ParagraphGenerator
-from automator.seo_prompt import build_prompt
+from automator.paragraph_generator import generate_paragraphs
 from automator.options import (
     AccountOption,
     TitleOption,
     Section,
-    Block, ParagraphBlock, ImageBlock, FeaturedImageBlock,
     PublishOption,
     RunSetting,
     KST,
@@ -221,70 +205,41 @@ class PostingJob:
         self,
         title:   TitleOption,
         publish: PublishOption,
-    ) -> PostContent:
+    ) -> _PostContent:
         """
-        Section 목록에서 PostContent 를 생성한다.
+        Convert Section list into _PostContent using BlockHandlers.
 
-        ParagraphBlock 텍스트 생성 우선순위
-        ------------------------------------
-        keyword 있음  → build_prompt() 로 SEO 최적화 프롬프트 자동 생성
-        keyword 없음  → block.prompt 사용 (비어있으면 stub 텍스트)
-
-        Block → PostStep 변환
-        ---------------------
-        ParagraphBlock    → ParagraphStep(text, newlines)
-        ImageBlock        → ImageStep(path)
-        FeaturedImageBlock→ ThumbnailStep(path)
-        HeadingBlock      → (현재 에디터 미지원, skip)
-        ListBlock         → (현재 에디터 미지원, skip)
-        QuoteBlock        → (현재 에디터 미지원, skip)
-        DividerBlock      → (현재 에디터 미지원, skip)
+        Each Block is dispatched to its registered handler via get_handler().
+        No isinstance branching — adding a new Block type only requires
+        a new BlockHandler + registry entry.
         """
-        generated_title = TitleGenerator(title).generate()
+        generated_title = generate_title(title)
 
-        flat_blocks    = all_blocks(self._body)
-        para_blocks    = [b for b in flat_blocks if isinstance(b, ParagraphBlock)]
-        n_paragraphs   = len(para_blocks)
-        paragraph_texts: list[str] = []
+        flat_blocks = all_blocks(self._body)
+        para_count  = paragraph_block_count(self._body)
 
-        if n_paragraphs > 0:
-            # keyword 가 있으면 SEO 자동 프롬프트, 없으면 block.prompt 사용
-            paragraph_texts = [
-                ParagraphGenerator(
-                    prompt=build_prompt(b, paragraph_index=i,
-                                       total_paragraphs=n_paragraphs)
-                ).generate(1)[0]
-                for i, b in enumerate(para_blocks)
-            ]
-
-        # 빈 body — stub 단락 하나
         if not flat_blocks:
-            stub = ParagraphGenerator(prompt="").generate(1)[0]
-            return PostContent(
+            stub = generate_paragraphs("", 1)[0]
+            return _PostContent(
                 title=generated_title,
                 steps=[ParagraphStep(text=stub, newlines=2)],
                 tags=publish.tags,
                 schedule_at=self._resolve_schedule(publish),
             )
 
-        # Block → PostStep
-        para_idx   = 0
+        ctx = ContentContext(
+            paragraph_index=0,
+            total_paragraphs=para_count,
+        )
+
         steps_out: list[PostStep] = []
         for block in flat_blocks:
-            if isinstance(block, ParagraphBlock):
-                steps_out.append(ParagraphStep(
-                    text=paragraph_texts[para_idx],
-                    newlines=block.newlines,
-                ))
-                para_idx += 1
-            elif isinstance(block, ImageBlock):
-                steps_out.append(ImageStep(path=block.path))
-            elif isinstance(block, FeaturedImageBlock):
-                steps_out.append(ThumbnailStep(path=block.path))
-            # HeadingBlock / ListBlock / QuoteBlock / DividerBlock:
-            # 현재 SmartEditorOne 미지원 — 추후 구현
+            handler = get_handler(block)
+            steps_out.extend(handler.to_steps(block, ctx))
 
-        return PostContent(
+        self._tmp_files = ctx.tmp_files
+
+        return _PostContent(
             title=generated_title,
             steps=steps_out,
             tags=publish.tags,
@@ -308,36 +263,38 @@ class PostingJob:
     # Editor execution
     # ------------------------------------------------------------------
 
-    def _execute(self, editor: BlogEditor, post: PostContent) -> None:
-        """Drive the editor to publish the post."""
+    def _execute(self, editor: BlogEditor, post: _PostContent) -> None:
+        """
+        Drive the editor to publish the post.
+
+        Each step executes itself via step.execute(editor) — no isinstance.
+        Orchestration properties (needs_upload_delay, marks_representative)
+        are checked polymorphically.
+        """
         editor.open()
         editor.write_title(post.title)
 
         upload_delay_ms = self._setting.upload_delay_ms if self._setting else 1500
         image_upload_count = 0
         rep_index: int | None = None
-        tmp_files: list[str] = []
 
         try:
             for i, step in enumerate(post.steps):
                 if i > 0:
-                    editor.move_cursor_to_end()
+                    editor.move_cursor("end")
 
-                step, tmp_path = self._maybe_process_image(step)
-                if tmp_path:
-                    tmp_files.append(tmp_path)
+                step.execute(editor)
 
-                editor.execute(step)
+                if step.marks_representative:
+                    rep_index = image_upload_count
 
-                if isinstance(step, (ImageStep, ThumbnailStep)):
-                    if isinstance(step, ThumbnailStep):
-                        rep_index = image_upload_count
+                if step.needs_upload_delay:
                     image_upload_count += 1
                     if upload_delay_ms > 0:
                         time.sleep(upload_delay_ms / 1000)
 
         finally:
-            for path in tmp_files:
+            for path in getattr(self, '_tmp_files', []):
                 try:
                     Path(path).unlink(missing_ok=True)
                 except OSError:
@@ -347,75 +304,3 @@ class PostingJob:
             editor.set_representative_image(rep_index)
 
         editor.publish(schedule_at=post.schedule_at)
-
-    # ------------------------------------------------------------------
-    # Image processing helper
-    # ------------------------------------------------------------------
-
-    def _maybe_process_image(
-        self, step: PostStep,
-    ) -> tuple[PostStep, str | None]:
-        """
-        Apply image transformations if the step is an image with a valid path.
-
-        Returns the (possibly replaced) step and an optional temp file path
-        that the caller must clean up.
-        """
-        if not isinstance(step, (ImageStep, ThumbnailStep)):
-            return step, None
-        if not Path(step.path).exists():
-            return step, None
-
-        raw_bytes = Path(step.path).read_bytes()
-        flat_blocks = all_blocks(self._body)
-
-        if isinstance(step, ThumbnailStep):
-            processed, fname = self._process_thumbnail(raw_bytes, step.path, flat_blocks)
-        else:
-            processed, fname = self._process_body_image(raw_bytes, step.path, flat_blocks)
-
-        if processed is None:
-            return step, None
-
-        tmp = tempfile.NamedTemporaryFile(
-            suffix=".jpg", prefix=fname.replace(".jpg", "_"), delete=False,
-        )
-        tmp.write(processed)
-        tmp.close()
-        return replace(step, path=tmp.name), tmp.name
-
-    def _process_thumbnail(
-        self,
-        raw_bytes: bytes,
-        original_path: str,
-        flat_blocks: list[Block],
-    ) -> tuple[bytes | None, str]:
-        """Process a FeaturedImageBlock and return (processed_bytes, filename)."""
-        feat_block = next(
-            (b for b in flat_blocks
-             if isinstance(b, FeaturedImageBlock) and b.path == original_path),
-            None,
-        )
-        if feat_block is None:
-            return None, ""
-        processed = process_featured(raw_bytes, feat_block)
-        fname = build_filename("featured", 1, feat_block.filename_keyword)
-        return processed, fname
-
-    def _process_body_image(
-        self,
-        raw_bytes: bytes,
-        original_path: str,
-        flat_blocks: list[Block],
-    ) -> tuple[bytes | None, str]:
-        """Process an ImageBlock and return (processed_bytes, filename)."""
-        img_block = next(
-            (b for b in flat_blocks
-             if isinstance(b, ImageBlock) and b.path == original_path),
-            None,
-        )
-        if img_block is None:
-            return None, ""
-        processed = process_image(raw_bytes, img_block)
-        fname = build_filename("preview", 1, img_block.filename_keyword)
-        return processed, fname

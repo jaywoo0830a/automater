@@ -1,5 +1,5 @@
 """
-tests/test_options_seo.py
+tests/test_seo_prompt.py
 --------------------------
 build_prompt() 단위 테스트 — SEO 프롬프트 자동 생성 로직 검증.
 """

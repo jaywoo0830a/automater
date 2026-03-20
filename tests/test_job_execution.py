@@ -1,26 +1,28 @@
 """
 tests/test_job_execution.py
 ----------------------------
-PostingJob.run() — 에디터 호출 순서와 흐름 검증.
+PostingJob.run() — editor call sequence and flow verification.
 
-conftest.py 의 mock_paragraph_generator autouse fixture 덕분에
-실제 Gemini API 호출 없이 모든 테스트가 실행된다.
+_RecordingEditor captures primitive calls (insert_text, upload_file).
+Each PostStep calls the primitive directly via step.execute(editor).
 """
 
 import pytest
 from unittest.mock import MagicMock
 from datetime import datetime, timedelta
 
-from automator.editor import (
-    BlogEditor,
-    ParagraphStep, ImageStep, ThumbnailStep, PostStep,
-)
+from automator.editor import BlogEditor
 from automator.job import PostingJob
 from automator.options import (
     AccountOption, TitleOption,
-    ParagraphBlock, ImageBlock, FeaturedImageBlock, Section,
+    ParagraphBlock, ImageBlock, FeaturedImageBlock, HeadingBlock, Section,
     PublishOption, KST,
 )
+
+
+_CONTENT_ACTIONS = frozenset({
+    "insert_text", "upload_file",
+})
 
 
 def _account():
@@ -28,7 +30,7 @@ def _account():
 
 
 class _RecordingEditor(BlogEditor):
-    """호출 순서와 인자를 기록하는 테스트용 에디터."""
+    """Records all primitive calls in order."""
 
     def __init__(self):
         self.actions: list[tuple] = []
@@ -36,12 +38,17 @@ class _RecordingEditor(BlogEditor):
     def _rec(self, name, *args):
         self.actions.append((name, *args))
 
-    def open(self)                         -> None: self._rec("open")
-    def write_title(self, t)               -> None: self._rec("write_title", t)
-    def execute(self, step: PostStep)      -> None: self._rec("execute", step)
-    def set_representative_image(self, i)  -> None: self._rec("set_rep", i)
-    def move_cursor_to_end(self)           -> None: self._rec("cursor_end")
-    def publish(self, schedule_at=None)    -> None: self._rec("publish", schedule_at)
+    def open(self)                             -> None: self._rec("open")
+    def write_title(self, t)                   -> None: self._rec("write_title", t)
+    def insert_text(self, text, nl=2)          -> None: self._rec("insert_text", text, nl)
+    def upload_file(self, path)                -> None: self._rec("upload_file", path)
+    def set_representative_image(self, i)      -> None: self._rec("set_rep", i)
+    def move_cursor(self, position="end")      -> None: self._rec("cursor", position)
+    def publish(self, schedule_at=None)        -> None: self._rec("publish", schedule_at)
+
+    def content_actions(self) -> list[tuple]:
+        """Return only content-producing actions (write/upload)."""
+        return [a for a in self.actions if a[0] in _CONTENT_ACTIONS]
 
 
 @pytest.fixture
@@ -54,7 +61,7 @@ def _base_job():
 
 
 # ---------------------------------------------------------------------------
-# 기본 호출 순서
+# Call ordering
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
@@ -65,11 +72,12 @@ def test_open_is_called_before_write_title(editor):
 
 
 @pytest.mark.unit
-def test_write_title_is_called_before_any_execute(editor):
+def test_write_title_is_called_before_any_content(editor):
     _base_job().with_title(TitleOption(fixed_title="T")) \
                .with_body([Section(blocks=(ParagraphBlock(),))]).run(editor)
     names = [a[0] for a in editor.actions]
-    assert names.index("write_title") < names.index("execute")
+    first_content = next(i for i, n in enumerate(names) if n in _CONTENT_ACTIONS)
+    assert names.index("write_title") < first_content
 
 
 @pytest.mark.unit
@@ -79,15 +87,15 @@ def test_publish_is_always_the_last_action(editor):
 
 
 # ---------------------------------------------------------------------------
-# 빈 body 처리
+# Empty body
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
 def test_empty_body__generates_one_stub_paragraph(editor):
     _base_job().with_title(TitleOption(fixed_title="T")).run(editor)
-    exec_steps = [a[1] for a in editor.actions if a[0] == "execute"]
-    assert len(exec_steps) == 1
-    assert isinstance(exec_steps[0], ParagraphStep)
+    content = editor.content_actions()
+    assert len(content) == 1
+    assert content[0][0] == "insert_text"
 
 
 @pytest.mark.unit
@@ -97,7 +105,7 @@ def test_empty_body__still_calls_publish(editor):
 
 
 # ---------------------------------------------------------------------------
-# Block → PostStep 변환 및 순서
+# Block -> primitive call mapping and order
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
@@ -111,41 +119,46 @@ def test_blocks_are_executed_in_declared_order(editor):
                    )),
                ]).run(editor)
 
-    step_types = [
-        type(a[1]).__name__
-        for a in editor.actions if a[0] == "execute"
-    ]
-    assert step_types == ["ImageStep", "ParagraphStep", "ThumbnailStep"]
+    content = editor.content_actions()
+    primitives = [a[0] for a in content]
+    assert primitives == ["upload_file", "insert_text", "upload_file"]
 
 
 @pytest.mark.unit
-def test_text_block__produces_paragraph_step(editor):
+def test_paragraph_block__calls_insert_text(editor):
     _base_job().with_title(TitleOption(fixed_title="T")) \
                .with_body([Section(blocks=(ParagraphBlock(newlines=3),))]).run(editor)
-    steps = [a[1] for a in editor.actions if a[0] == "execute"]
-    assert isinstance(steps[0], ParagraphStep)
-    assert steps[0].newlines == 3
+    content = editor.content_actions()
+    assert content[0][0] == "insert_text"
 
 
 @pytest.mark.unit
-def test_image_block__produces_image_step(editor):
+def test_image_block__calls_upload_file(editor):
     _base_job().with_title(TitleOption(fixed_title="T")) \
                .with_body([Section(blocks=(ImageBlock(path="img.jpg"),))]).run(editor)
-    steps = [a[1] for a in editor.actions if a[0] == "execute"]
-    assert isinstance(steps[0], ImageStep)
-    assert steps[0].path == "img.jpg"
+    content = editor.content_actions()
+    assert content[0][0] == "upload_file"
+    assert content[0][1] == "img.jpg"
 
 
 @pytest.mark.unit
-def test_featured_block__produces_thumbnail_step(editor):
+def test_featured_block__calls_upload_file(editor):
     _base_job().with_title(TitleOption(fixed_title="T")) \
                .with_body([Section(blocks=(FeaturedImageBlock(path="thumb.jpg"),))]).run(editor)
-    steps = [a[1] for a in editor.actions if a[0] == "execute"]
-    assert isinstance(steps[0], ThumbnailStep)
+    content = editor.content_actions()
+    assert content[0][0] == "upload_file"
+
+
+@pytest.mark.unit
+def test_heading_block__calls_insert_text(editor):
+    _base_job().with_title(TitleOption(fixed_title="T")) \
+               .with_body([Section(blocks=(HeadingBlock(level=2, text="Title"),))]).run(editor)
+    content = editor.content_actions()
+    assert content[0] == ("insert_text", "Title", 1)
 
 
 # ---------------------------------------------------------------------------
-# 대표 이미지 지정
+# Representative image
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
@@ -163,17 +176,17 @@ def test_no_featured_block__skips_set_representative_image(editor):
 
 
 @pytest.mark.unit
-def test_featured_block__set_rep_called_after_all_executes(editor):
+def test_featured_block__set_rep_called_after_all_content(editor):
     _base_job().with_title(TitleOption(fixed_title="T")) \
                .with_body([Section(blocks=(FeaturedImageBlock(path="thumb.jpg"), ParagraphBlock()))]).run(editor)
     names = [a[0] for a in editor.actions]
-    last_execute = max(i for i, n in enumerate(names) if n == "execute")
+    last_content = max(i for i, n in enumerate(names) if n in _CONTENT_ACTIONS)
     set_rep_idx  = names.index("set_rep")
-    assert set_rep_idx > last_execute
+    assert set_rep_idx > last_content
 
 
 # ---------------------------------------------------------------------------
-# 커서 이동
+# Cursor movement
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
@@ -191,7 +204,7 @@ def test_single_block__cursor_not_moved(editor):
 
 
 # ---------------------------------------------------------------------------
-# 발행 스케줄
+# Publish schedule
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit

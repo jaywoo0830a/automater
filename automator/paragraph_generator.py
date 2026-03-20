@@ -1,27 +1,14 @@
 """
 automator/paragraph_generator.py
 ----------------------------------
-Generates blog paragraph text using the Google Gemini API.
+Paragraph generation functions.
 
-Usage
------
-    from automator.paragraph_generator import ParagraphGenerator
+    generate_paragraphs(prompt, count)  -> list[str]
 
-    gen = ParagraphGenerator(api_key="...", prompt="대치동 수학 과외 홍보 블로그 단락 3개")
-    paragraphs = gen.generate(count=3)
-    # → ["단락1 텍스트", "단락2 텍스트", "단락3 텍스트"]
+ENV=production  -> calls Gemini API
+ENV=dev | test  -> returns stub paragraphs (no dependencies)
 
-Design decisions
-----------------
-- One API call generates all N paragraphs at once (efficient, consistent tone).
-- Response must be valid JSON array: ["단락1", "단락2", ...].
-  If parsing fails, falls back to placeholder strings.
-- Caller sets the prompt; this class only knows how to call the API and parse.
-- api_key defaults to os.getenv("GEMINI_API_KEY") if not provided.
-
-Requirements
-------------
-    pip install google-genai
+No class — prompt in, paragraphs out.
 """
 
 from __future__ import annotations
@@ -32,33 +19,20 @@ import re
 
 from automator.config import is_production
 
+
 # ---------------------------------------------------------------------------
 # Exceptions
 # ---------------------------------------------------------------------------
 
 class RateLimitError(Exception):
-    """
-    Raised when the Gemini API returns 429 RESOURCE_EXHAUSTED.
+    """Raised when the Gemini API returns 429 RESOURCE_EXHAUSTED."""
 
-    Callers can catch this specifically to skip retrying, display a helpful
-    message, or fall back to placeholder text — without masking other errors.
 
-        try:
-            paragraphs = gen.generate(count=3)
-        except RateLimitError:
-            # Daily free-tier quota exhausted — use placeholders
-            paragraphs = ["(단락 생성 실패 — API 쿼터 초과)"] * 3
-    """
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
 
-# gemini-flash-latest: always points to the latest available Flash model.
-# Use this alias to avoid hard-coding a specific version that may be blocked.
-# Ref: https://ai.google.dev/gemini-api/docs/models
 GEMINI_MODEL = "gemini-flash-latest"
-
-# ---------------------------------------------------------------------------
-# Stub paragraphs — Universal Declaration of Human Rights (Korean)
-# Used in dev/test environments instead of real Gemini API calls.
-# ---------------------------------------------------------------------------
 
 _STUB_PARAGRAPHS = [
     (
@@ -70,29 +44,10 @@ _STUB_PARAGRAPHS = [
         "출신 민족 또는 사회적 신분, 재산, 출생 또는 그 밖의 지위에 따른 "
         "어떠한 구별도 없이 이 선언에 규정된 모든 권리와 자유를 누릴 자격이 있다."
     ),
-    (
-        "모든 사람은 생명권과 신체의 자유와 안전을 누릴 권리가 있다."
-    ),
-    (
-        "모든 사람은 어디에서나 법 앞에 인간으로서 인정받을 권리를 가진다."
-    ),
-    (
-        "모든 사람은 자신의 나라 안에서 자유롭게 이동하고 거주지를 선택할 권리가 있다."
-    ),
+    "모든 사람은 생명권과 신체의 자유와 안전을 누릴 권리가 있다.",
+    "모든 사람은 어디에서나 법 앞에 인간으로서 인정받을 권리를 가진다.",
+    "모든 사람은 자신의 나라 안에서 자유롭게 이동하고 거주지를 선택할 권리가 있다.",
 ]
-
-
-def _stub_generate(count: int) -> list[str]:
-    """
-    Return ``count`` stub paragraphs from the Universal Declaration of Human Rights.
-
-    Cycles through _STUB_PARAGRAPHS so any count is supported.
-    No external dependencies — always works offline.
-    """
-    return [
-        _STUB_PARAGRAPHS[i % len(_STUB_PARAGRAPHS)]
-        for i in range(count)
-    ]
 
 _SYSTEM_PROMPT = """\
 You are a Korean blog content writer specializing in education marketing.
@@ -111,136 +66,106 @@ _USER_TEMPLATE = """\
 """
 
 
-class ParagraphGenerator:
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+def generate_paragraphs(
+    prompt: str,
+    count: int,
+    api_key: str = "",
+    model: str = "",
+) -> list[str]:
     """
-    Generates blog paragraphs — real or mock, depending on ENV.
+    Generate ``count`` paragraphs from ``prompt``.
 
-    ENV behaviour
-    -------------
-    ENV=production  → calls Gemini API (real content, costs quota)
-    ENV=dev | test  → returns stub paragraphs (UDHR Korean, no dependencies)
-
-    This means you never have to touch test code or conftest to switch
-    between real and mock content — just set ENV in .env.
+    ENV=production  -> calls Gemini API; errors propagate.
+    ENV=dev | test  -> returns stub paragraphs, no API call.
 
     Args:
-        prompt:  The user's content instruction (e.g. "대치동 수학 과외 홍보").
+        prompt:  Content instruction (e.g. "대치동 수학 과외 홍보").
+        count:   Number of paragraphs to generate.
         api_key: Gemini API key. Defaults to GEMINI_API_KEY env var.
-                 Only required when ENV=production.
-        model:   Gemini model name. Defaults to GEMINI_MODEL env var.
+        model:   Gemini model name. Defaults to GEMINI_MODEL.
+
+    Returns:
+        List of ``count`` paragraph strings.
+
+    Raises:
+        RateLimitError: API returns 429 RESOURCE_EXHAUSTED.
     """
+    if count <= 0:
+        return []
 
-    def __init__(
-        self,
-        prompt:  str,
-        api_key: str = "",
-        model:   str = "",
-    ) -> None:
-        self._prompt      = prompt
-        self._production  = is_production()
-        self._api_key     = api_key or os.getenv("GEMINI_API_KEY", "")
-        self._model       = model or os.getenv("GEMINI_MODEL", GEMINI_MODEL)
+    if not is_production():
+        return _stub_generate(count)
 
-        if self._production and not self._api_key:
-            raise ValueError(
-                "Gemini API key is required in production. "
-                "Set GEMINI_API_KEY in .env or pass api_key= explicitly."
-            )
+    resolved_key = api_key or os.getenv("GEMINI_API_KEY", "")
+    resolved_model = model or os.getenv("GEMINI_MODEL", GEMINI_MODEL)
 
-    def generate(self, count: int) -> list[str]:
-        """
-        Generate ``count`` paragraphs and return them as a list of strings.
-
-        ENV=production  → calls Gemini API; all errors propagate to caller.
-        ENV=dev | test  → returns stub paragraphs (UDHR Korean), no API call.
-
-        Args:
-            count: Number of paragraphs to generate.
-
-        Returns:
-            List of ``count`` paragraph strings.
-
-        Raises:
-            RateLimitError: When the API returns 429 RESOURCE_EXHAUSTED.
-            Exception:      Any other API or parsing error — not swallowed.
-        """
-        if count <= 0:
-            return []
-
-        # Non-production: return stub paragraphs without any API call
-        if not self._production:
-            return _stub_generate(count)
-
-        # Production: call real Gemini API — all errors propagate
-        raw = self._call_api(count)
-        return self._parse(raw, count)
-
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
-
-    def _call_api(self, count: int) -> str:
-        """
-        Send the prompt to Gemini and return the raw response text.
-
-        Raises:
-            RateLimitError: When the API returns 429 RESOURCE_EXHAUSTED.
-                            Callers can catch this to skip or retry gracefully.
-        """
-        from google import genai  # type: ignore[import]
-        from google.genai import types  # type: ignore[import]
-
-        client = genai.Client(api_key=self._api_key)
-
-        user_text = _USER_TEMPLATE.format(
-            user_prompt=self._prompt,
-            count=count,
+    if not resolved_key:
+        raise ValueError(
+            "Gemini API key is required in production. "
+            "Set GEMINI_API_KEY in .env or pass api_key= explicitly."
         )
 
-        try:
-            response = client.models.generate_content(
-                model=self._model,
-                contents=user_text,
-                config=types.GenerateContentConfig(
-                    system_instruction=_SYSTEM_PROMPT,
-                    temperature=0.8,
-                    max_output_tokens=2048,
-                ),
-            )
-        except Exception as exc:
-            # Detect 429 RESOURCE_EXHAUSTED and re-raise as RateLimitError
-            # so callers can handle quota exhaustion explicitly.
-            msg = str(exc)
-            if "429" in msg or "RESOURCE_EXHAUSTED" in msg:
-                raise RateLimitError(
-                    f"Gemini API rate limit exceeded: {msg}"
-                ) from exc
-            raise
+    raw = _call_api(prompt, count, resolved_key, resolved_model)
+    return _parse(raw, count)
 
-        return response.text
 
-    def _parse(self, raw: str, count: int) -> list[str]:
-        """
-        Parse a JSON array from the raw API response.
+# ---------------------------------------------------------------------------
+# Private helpers
+# ---------------------------------------------------------------------------
 
-        Strips markdown code fences if present, then JSON-parses.
-        If parsing fails or the result has the wrong length, returns placeholders.
-        """
-        # Strip markdown code fences (```json ... ```)
-        clean = re.sub(r"```(?:json)?\s*|\s*```", "", raw).strip()
+def _stub_generate(count: int) -> list[str]:
+    """Return ``count`` stub paragraphs (UDHR Korean). Cycles if needed."""
+    return [
+        _STUB_PARAGRAPHS[i % len(_STUB_PARAGRAPHS)]
+        for i in range(count)
+    ]
 
-        # Extract the first JSON array found
-        match = re.search(r"\[.*\]", clean, re.DOTALL)
-        if not match:
-            raise ValueError(f"No JSON array found in response: {raw!r:.200s}")
 
-        parsed = json.loads(match.group())
+def _call_api(prompt: str, count: int, api_key: str, model: str) -> str:
+    """Send the prompt to Gemini and return the raw response text."""
+    from google import genai
+    from google.genai import types
 
-        if not isinstance(parsed, list):
-            raise ValueError(f"Expected JSON array, got {type(parsed)}")
+    client = genai.Client(api_key=api_key)
+    user_text = _USER_TEMPLATE.format(user_prompt=prompt, count=count)
 
-        # Pad or truncate to exactly ``count`` items
-        result = [str(p) for p in parsed]
-        while len(result) < count:
-            result.append(f"(단락 {len(result) + 1} 생성 실패)")
-        return result[:count]
+    try:
+        response = client.models.generate_content(
+            model=model,
+            contents=user_text,
+            config=types.GenerateContentConfig(
+                system_instruction=_SYSTEM_PROMPT,
+                temperature=0.8,
+                max_output_tokens=2048,
+            ),
+        )
+    except Exception as exc:
+        msg = str(exc)
+        if "429" in msg or "RESOURCE_EXHAUSTED" in msg:
+            raise RateLimitError(
+                f"Gemini API rate limit exceeded: {msg}"
+            ) from exc
+        raise
+
+    return response.text
+
+
+def _parse(raw: str, count: int) -> list[str]:
+    """Parse a JSON array from the raw API response."""
+    clean = re.sub(r"```(?:json)?\s*|\s*```", "", raw).strip()
+    match = re.search(r"\[.*\]", clean, re.DOTALL)
+    if not match:
+        raise ValueError(f"No JSON array found in response: {raw!r:.200s}")
+
+    parsed = json.loads(match.group())
+    if not isinstance(parsed, list):
+        raise ValueError(f"Expected JSON array, got {type(parsed)}")
+
+    result = [str(p) for p in parsed]
+    while len(result) < count:
+        result.append(f"(단락 {len(result) + 1} 생성 실패)")
+    return result[:count]
