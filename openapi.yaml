@@ -1,0 +1,2256 @@
+openapi: 3.2.0
+info:
+  title: Automator Factory API
+  version: 2.0.0
+  description: |
+    블로그 자동화 캠페인 관리 API.
+
+    **리소스 계층**
+    ```
+    Platform
+    ├── Account
+    └── Campaign
+         ├── CampaignSlot      (카테고리 순서)
+         ├── SpacingRule        (띄어쓰기 패턴)
+         ├── KeywordPick        (키워드 필터)
+         ├── CampaignPalette    (솔트/CTA 샘플링 풀)
+         │    └── PaletteItem
+         ├── Combination        (카테시안 곱 결과)
+         └── Batch
+              └── BatchItem
+    KeywordCategory
+    └── Keyword
+         └── Affix              (접두사/접미사 파생 규칙)
+    ```
+
+    **도메인 액션**
+    - `POST /campaigns/{id}/combinations/seed`     — 키워드 카테시안 곱 생성
+    - `POST /campaigns/{id}/combinations/preview`  — 생성될 조합 수 미리보기
+    - `POST /campaigns/{id}/batches/dispatch`       — 가용 계정에 배치 할당
+    - `POST /campaigns/{id}/preview-title`          — 제목 생성 미리보기
+    - `POST /campaigns/{id}/clone`                  — 캠페인 깊은 복제
+    - `POST /batches/{id}/start`                    — 워커 프로세스 시작
+    - `POST /batches/{id}/cancel`                   — 실행 중 배치 중단
+    - `POST /batch-items/{id}/retry`                — 실패 항목 재시도
+    - `GET  /campaigns/{id}/stats`                  — 대시보드 집계
+
+    **실시간 업데이트**
+    - `WebSocket /ws/batches/{batchId}` — 배치 진행률 실시간 푸시
+      (OAS 3.2.0 paths로 표현하지 않음 — 별도 AsyncAPI 문서 참조)
+
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Local development
+
+# ---------------------------------------------------------------------------
+# Tags — OAS 3.2.0 hierarchical tags
+# ---------------------------------------------------------------------------
+tags:
+  - name: platforms
+    summary: 플랫폼 관리
+    kind: nav
+  - name: accounts
+    summary: 계정 관리
+    parent: platforms
+    kind: nav
+  - name: keyword-categories
+    summary: 키워드 카테고리
+    kind: nav
+  - name: keywords
+    summary: 키워드 마스터 데이터
+    parent: keyword-categories
+    kind: nav
+  - name: affixes
+    summary: 키워드 접사 (접두사/접미사)
+    parent: keywords
+    kind: nav
+  - name: campaigns
+    summary: 캠페인 관리
+    kind: nav
+  - name: campaign-slots
+    summary: 캠페인 슬롯 (카테고리 순서)
+    parent: campaigns
+    kind: nav
+  - name: spacing-rules
+    summary: 띄어쓰기 패턴
+    parent: campaigns
+    kind: nav
+  - name: keyword-picks
+    summary: 키워드 선택 필터
+    parent: campaigns
+    kind: nav
+  - name: palettes
+    summary: 샘플링 풀 (솔트, CTA)
+    parent: campaigns
+    kind: nav
+  - name: combinations
+    summary: 키워드 조합
+    parent: campaigns
+    kind: nav
+  - name: batches
+    summary: 실행 배치
+    parent: campaigns
+    kind: nav
+  - name: batch-items
+    summary: 배치 항목
+    parent: batches
+    kind: nav
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Paths
+# ═══════════════════════════════════════════════════════════════════════════
+
+paths:
+
+  # ── Platforms ────────────────────────────────────────────────────────────
+
+  /platforms:
+    get:
+      tags: [platforms]
+      operationId: listPlatforms
+      summary: 플랫폼 목록 조회
+      parameters:
+        - $ref: '#/components/parameters/PageOffset'
+        - $ref: '#/components/parameters/PageLimit'
+      responses:
+        '200':
+          description: 플랫폼 목록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPlatforms'
+
+    post:
+      tags: [platforms]
+      operationId: createPlatform
+      summary: 플랫폼 생성
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlatformCreate'
+      responses:
+        '201':
+          description: 생성됨
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Platform'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /platforms/{platformId}:
+    parameters:
+      - $ref: '#/components/parameters/PlatformId'
+
+    get:
+      tags: [platforms]
+      operationId: getPlatform
+      summary: 플랫폼 단건 조회
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Platform'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags: [platforms]
+      operationId: updatePlatform
+      summary: 플랫폼 수정
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlatformUpdate'
+      responses:
+        '200':
+          description: 수정됨
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Platform'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [platforms]
+      operationId: deletePlatform
+      summary: 플랫폼 삭제
+      responses:
+        '204':
+          description: 삭제됨
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Accounts ─────────────────────────────────────────────────────────────
+
+  /platforms/{platformId}/accounts:
+    parameters:
+      - $ref: '#/components/parameters/PlatformId'
+
+    get:
+      tags: [accounts]
+      operationId: listAccounts
+      summary: 플랫폼별 계정 목록
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/AccountStatus'
+        - $ref: '#/components/parameters/PageOffset'
+        - $ref: '#/components/parameters/PageLimit'
+      responses:
+        '200':
+          description: 계정 목록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAccounts'
+
+    post:
+      tags: [accounts]
+      operationId: createAccount
+      summary: 계정 생성
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountCreate'
+      responses:
+        '201':
+          description: 생성됨
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /accounts/{accountId}:
+    parameters:
+      - $ref: '#/components/parameters/AccountId'
+
+    get:
+      tags: [accounts]
+      operationId: getAccount
+      summary: 계정 단건 조회
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags: [accounts]
+      operationId: updateAccount
+      summary: 계정 수정
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountUpdate'
+      responses:
+        '200':
+          description: 수정됨
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [accounts]
+      operationId: deleteAccount
+      summary: 계정 삭제
+      responses:
+        '204':
+          description: 삭제됨
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Keyword Categories ──────────────────────────────────────────────────
+
+  /keyword-categories:
+    get:
+      tags: [keyword-categories]
+      operationId: listKeywordCategories
+      summary: 키워드 카테고리 목록
+      responses:
+        '200':
+          description: 카테고리 목록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedKeywordCategories'
+
+    post:
+      tags: [keyword-categories]
+      operationId: createKeywordCategory
+      summary: 키워드 카테고리 생성
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KeywordCategoryCreate'
+      responses:
+        '201':
+          description: 생성됨
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeywordCategory'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /keyword-categories/{categoryId}:
+    parameters:
+      - $ref: '#/components/parameters/CategoryId'
+
+    get:
+      tags: [keyword-categories]
+      operationId: getKeywordCategory
+      summary: 카테고리 단건 조회
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeywordCategory'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags: [keyword-categories]
+      operationId: updateKeywordCategory
+      summary: 카테고리 수정
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KeywordCategoryUpdate'
+      responses:
+        '200':
+          description: 수정됨
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeywordCategory'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [keyword-categories]
+      operationId: deleteKeywordCategory
+      summary: 카테고리 삭제
+      responses:
+        '204':
+          description: 삭제됨
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Keywords ────────────────────────────────────────────────────────────
+
+  /keyword-categories/{categoryId}/keywords:
+    parameters:
+      - $ref: '#/components/parameters/CategoryId'
+
+    get:
+      tags: [keywords]
+      operationId: listKeywords
+      summary: 카테고리별 키워드 목록
+      parameters:
+        - name: active
+          in: query
+          schema:
+            type: boolean
+        - name: tier
+          in: query
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/PageOffset'
+        - $ref: '#/components/parameters/PageLimit'
+      responses:
+        '200':
+          description: 키워드 목록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedKeywords'
+
+    post:
+      tags: [keywords]
+      operationId: createKeyword
+      summary: 키워드 생성
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KeywordCreate'
+      responses:
+        '201':
+          description: 생성됨
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Keyword'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /keywords/{keywordId}:
+    parameters:
+      - $ref: '#/components/parameters/KeywordId'
+
+    get:
+      tags: [keywords]
+      operationId: getKeyword
+      summary: 키워드 단건 조회 (affixes 포함)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Keyword'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags: [keywords]
+      operationId: updateKeyword
+      summary: 키워드 수정
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KeywordUpdate'
+      responses:
+        '200':
+          description: 수정됨
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Keyword'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [keywords]
+      operationId: deleteKeyword
+      summary: 키워드 삭제
+      responses:
+        '204':
+          description: 삭제됨
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Affixes (NEW) ───────────────────────────────────────────────────────
+
+  /keywords/{keywordId}/affixes:
+    parameters:
+      - $ref: '#/components/parameters/KeywordId'
+
+    get:
+      tags: [affixes]
+      operationId: listAffixes
+      summary: 키워드별 접사 목록
+      parameters:
+        - name: type
+          in: query
+          description: prefix 또는 suffix 필터
+          schema:
+            $ref: '#/components/schemas/AffixType'
+      responses:
+        '200':
+          description: 접사 목록
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Affix'
+
+    post:
+      tags: [affixes]
+      operationId: createAffix
+      summary: 접사 생성
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AffixCreate'
+      responses:
+        '201':
+          description: 생성됨
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Affix'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+    put:
+      tags: [affixes]
+      operationId: replaceAffixes
+      summary: 접사 일괄 교체
+      description: |
+        해당 키워드의 기존 접사를 전부 삭제하고 전달된 목록으로 교체한다.
+        CSV 일괄 import 시 사용. 배열 순서가 곧 sort_order.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/AffixCreate'
+      responses:
+        '200':
+          description: 교체됨
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Affix'
+
+  /affixes/{affixId}:
+    parameters:
+      - $ref: '#/components/parameters/AffixId'
+
+    patch:
+      tags: [affixes]
+      operationId: updateAffix
+      summary: 접사 수정
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AffixUpdate'
+      responses:
+        '200':
+          description: 수정됨
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Affix'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [affixes]
+      operationId: deleteAffix
+      summary: 접사 삭제
+      responses:
+        '204':
+          description: 삭제됨
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Campaigns ───────────────────────────────────────────────────────────
+
+  /campaigns:
+    get:
+      tags: [campaigns]
+      operationId: listCampaigns
+      summary: 캠페인 목록
+      parameters:
+        - name: platform_id
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/CampaignStatus'
+        - $ref: '#/components/parameters/PageOffset'
+        - $ref: '#/components/parameters/PageLimit'
+      responses:
+        '200':
+          description: 캠페인 목록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCampaigns'
+
+    post:
+      tags: [campaigns]
+      operationId: createCampaign
+      summary: 캠페인 생성
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignCreate'
+      responses:
+        '201':
+          description: 생성됨
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campaign'
+
+  /campaigns/{campaignId}:
+    parameters:
+      - $ref: '#/components/parameters/CampaignId'
+
+    get:
+      tags: [campaigns]
+      operationId: getCampaign
+      summary: 캠페인 단건 조회 (palettes 포함)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campaign'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags: [campaigns]
+      operationId: updateCampaign
+      summary: 캠페인 수정
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignUpdate'
+      responses:
+        '200':
+          description: 수정됨
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campaign'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [campaigns]
+      operationId: deleteCampaign
+      summary: 캠페인 삭제
+      responses:
+        '204':
+          description: 삭제됨
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Campaign — domain actions (NEW) ─────────────────────────────────────
+
+  /campaigns/{campaignId}/preview-title:
+    parameters:
+      - $ref: '#/components/parameters/CampaignId'
+
+    post:
+      tags: [campaigns]
+      operationId: previewTitle
+      summary: 제목 생성 미리보기
+      description: |
+        generate_title()을 dry run하여 샘플 제목을 반환한다.
+        캠페인의 title_template, palettes(salt), 슬롯 키워드를 사용.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                count:
+                  type: integer
+                  default: 5
+                  description: 생성할 샘플 제목 수
+      responses:
+        '200':
+          description: 샘플 제목 목록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TitlePreviewResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /campaigns/{campaignId}/stats:
+    parameters:
+      - $ref: '#/components/parameters/CampaignId'
+
+    get:
+      tags: [campaigns]
+      operationId: getCampaignStats
+      summary: 캠페인 대시보드 집계
+      description: |
+        한 번의 호출로 SPA 대시보드에 필요한 모든 집계값을 반환한다.
+      responses:
+        '200':
+          description: 집계 데이터
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignStats'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /campaigns/{campaignId}/clone:
+    parameters:
+      - $ref: '#/components/parameters/CampaignId'
+
+    post:
+      tags: [campaigns]
+      operationId: cloneCampaign
+      summary: 캠페인 깊은 복제
+      description: |
+        캠페인과 연관된 슬롯, 스페이싱 규칙, 팔레트, 키워드 픽을 모두 복제한다.
+        조합(Combination)과 배치(Batch)는 복제하지 않는다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  maxLength: 128
+                  description: 새 캠페인 이름
+      responses:
+        '201':
+          description: 복제된 캠페인
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campaign'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Campaign Slots ─────────────────────────────────────────────────────
+
+  /campaigns/{campaignId}/slots:
+    parameters:
+      - $ref: '#/components/parameters/CampaignId'
+
+    get:
+      tags: [campaign-slots]
+      operationId: listCampaignSlots
+      summary: 캠페인 슬롯 목록
+      responses:
+        '200':
+          description: 슬롯 목록 (sort_order 순)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CampaignSlot'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [campaign-slots]
+      operationId: replaceCampaignSlots
+      summary: 캠페인 슬롯 일괄 교체
+      description: |
+        기존 슬롯을 전부 삭제하고 전달된 목록으로 교체한다.
+        배열 순서가 곧 sort_order.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/CampaignSlotCreate'
+      responses:
+        '200':
+          description: 교체됨
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CampaignSlot'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Spacing Rules ──────────────────────────────────────────────────────
+
+  /campaigns/{campaignId}/spacing-rules:
+    parameters:
+      - $ref: '#/components/parameters/CampaignId'
+
+    get:
+      tags: [spacing-rules]
+      operationId: listSpacingRules
+      summary: 띄어쓰기 규칙 목록
+      responses:
+        '200':
+          description: 규칙 목록
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SpacingRule'
+
+    post:
+      tags: [spacing-rules]
+      operationId: createSpacingRule
+      summary: 띄어쓰기 규칙 생성
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SpacingRuleCreate'
+      responses:
+        '201':
+          description: 생성됨
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpacingRule'
+
+  /spacing-rules/{ruleId}:
+    parameters:
+      - $ref: '#/components/parameters/RuleId'
+
+    patch:
+      tags: [spacing-rules]
+      operationId: updateSpacingRule
+      summary: 띄어쓰기 규칙 수정
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SpacingRuleUpdate'
+      responses:
+        '200':
+          description: 수정됨
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpacingRule'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [spacing-rules]
+      operationId: deleteSpacingRule
+      summary: 띄어쓰기 규칙 삭제
+      responses:
+        '204':
+          description: 삭제됨
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Keyword Picks ──────────────────────────────────────────────────────
+
+  /campaigns/{campaignId}/picks:
+    parameters:
+      - $ref: '#/components/parameters/CampaignId'
+
+    get:
+      tags: [keyword-picks]
+      operationId: loadPicks
+      summary: 캠페인 키워드 선택 현황 조회
+      description: |
+        카테고리 slug별 선택된 키워드 값 목록을 반환한다.
+        빈 배열 = 해당 카테고리의 전체 active 키워드 사용.
+      responses:
+        '200':
+          description: 카테고리별 선택 현황
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PicksMap'
+              example:
+                region: ["강남구", "수원시"]
+                subject: ["수학"]
+                learning_type: []
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /campaigns/{campaignId}/picks/{categorySlug}:
+    parameters:
+      - $ref: '#/components/parameters/CampaignId'
+      - $ref: '#/components/parameters/CategorySlug'
+
+    put:
+      tags: [keyword-picks]
+      operationId: savePicks
+      summary: 카테고리별 키워드 선택 저장
+      description: |
+        해당 카테고리의 기존 선택을 전부 교체한다.
+        빈 배열을 전달하면 선택을 초기화한다 (전체 사용).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SavePicksRequest'
+      responses:
+        '200':
+          description: 저장 결과
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavePicksResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  # ── Palettes (NEW) ─────────────────────────────────────────────────────
+
+  /campaigns/{campaignId}/palettes:
+    parameters:
+      - $ref: '#/components/parameters/CampaignId'
+
+    get:
+      tags: [palettes]
+      operationId: listPalettes
+      summary: 캠페인 팔레트 목록
+      responses:
+        '200':
+          description: 팔레트 목록 (items 포함)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CampaignPalette'
+
+    post:
+      tags: [palettes]
+      operationId: createPalette
+      summary: 팔레트 생성
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignPaletteCreate'
+      responses:
+        '201':
+          description: 생성됨
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignPalette'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /palettes/{paletteId}:
+    parameters:
+      - $ref: '#/components/parameters/PaletteId'
+
+    get:
+      tags: [palettes]
+      operationId: getPalette
+      summary: 팔레트 단건 조회 (items 포함)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignPalette'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags: [palettes]
+      operationId: updatePalette
+      summary: 팔레트 수정
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignPaletteUpdate'
+      responses:
+        '200':
+          description: 수정됨
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignPalette'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [palettes]
+      operationId: deletePalette
+      summary: 팔레트 삭제
+      responses:
+        '204':
+          description: 삭제됨
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /palettes/{paletteId}/items:
+    parameters:
+      - $ref: '#/components/parameters/PaletteId'
+
+    put:
+      tags: [palettes]
+      operationId: replacePaletteItems
+      summary: 팔레트 항목 일괄 교체
+      description: |
+        기존 항목을 전부 삭제하고 전달된 목록으로 교체한다.
+        배열 순서가 곧 sort_order.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/PaletteItemCreate'
+      responses:
+        '200':
+          description: 교체됨
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PaletteItem'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Combinations ───────────────────────────────────────────────────────
+
+  /campaigns/{campaignId}/combinations:
+    parameters:
+      - $ref: '#/components/parameters/CampaignId'
+
+    get:
+      tags: [combinations]
+      operationId: listCombinations
+      summary: 조합 목록 조회
+      parameters:
+        - name: used
+          in: query
+          description: "true = 사용됨, false = 미사용, 생략 = 전체"
+          schema:
+            type: boolean
+        - $ref: '#/components/parameters/PageOffset'
+        - $ref: '#/components/parameters/PageLimit'
+      responses:
+        '200':
+          description: 조합 목록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCombinations'
+
+    delete:
+      tags: [combinations]
+      operationId: deleteUnusedCombinations
+      summary: 미사용 조합 일괄 삭제
+      description: "used_at IS NULL인 조합만 삭제한다."
+      responses:
+        '200':
+          description: 삭제 결과
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deleted]
+                properties:
+                  deleted:
+                    type: integer
+
+  /campaigns/{campaignId}/combinations/seed:
+    parameters:
+      - $ref: '#/components/parameters/CampaignId'
+
+    post:
+      tags: [combinations]
+      operationId: seedCombinations
+      summary: 키워드 조합 생성 (카테시안 곱)
+      description: |
+        현재 캠페인의 슬롯 × 키워드 × 띄어쓰기 규칙의
+        카테시안 곱을 계산해 combinations 테이블에 삽입한다.
+        키워드 picks가 설정되어 있으면 해당 필터를 적용한다.
+      responses:
+        '201':
+          description: 생성 결과
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeedResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /campaigns/{campaignId}/combinations/preview:
+    parameters:
+      - $ref: '#/components/parameters/CampaignId'
+
+    post:
+      tags: [combinations]
+      operationId: previewSeed
+      summary: 조합 생성 미리보기 (dry run)
+      description: |
+        seed와 동일한 카테시안 곱을 계산하되 DB에 삽입하지 않는다.
+        생성될 조합 수와 축별 카운트를 반환한다.
+      responses:
+        '200':
+          description: 미리보기 결과
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeedPreviewResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  # ── Batches ────────────────────────────────────────────────────────────
+
+  /campaigns/{campaignId}/batches:
+    parameters:
+      - $ref: '#/components/parameters/CampaignId'
+
+    get:
+      tags: [batches]
+      operationId: listBatches
+      summary: 배치 목록 조회
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/BatchStatus'
+        - $ref: '#/components/parameters/PageOffset'
+        - $ref: '#/components/parameters/PageLimit'
+      responses:
+        '200':
+          description: 배치 목록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBatches'
+
+  /campaigns/{campaignId}/batches/dispatch:
+    parameters:
+      - $ref: '#/components/parameters/CampaignId'
+
+    post:
+      tags: [batches]
+      operationId: dispatchBatches
+      summary: 가용 계정에 배치 할당
+      description: |
+        미사용 조합을 40개씩 묶어 가용 계정에 배분한다.
+        쿨다운 기간이 지난 active 계정만 사용한다.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DispatchRequest'
+      responses:
+        '201':
+          description: 할당 결과
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DispatchResult'
+
+  /batches/{batchId}:
+    parameters:
+      - $ref: '#/components/parameters/BatchId'
+
+    get:
+      tags: [batches]
+      operationId: getBatch
+      summary: 배치 단건 조회
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Batch'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /batches/{batchId}/start:
+    parameters:
+      - $ref: '#/components/parameters/BatchId'
+
+    post:
+      tags: [batches]
+      operationId: startBatch
+      summary: 배치 실행 시작
+      description: |
+        pending 상태의 배치를 running으로 전환하고 워커 프로세스를 시작한다.
+        이미 running/done/failed 상태이면 409를 반환한다.
+      responses:
+        '200':
+          description: 시작됨
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Batch'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /batches/{batchId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/BatchId'
+
+    post:
+      tags: [batches]
+      operationId: cancelBatch
+      summary: 배치 실행 중단
+      description: |
+        running 상태의 배치를 중단한다. 진행 중인 항목은 완료까지 대기 후 중단.
+        pending 미처리 항목은 failed로 전환된다.
+      responses:
+        '200':
+          description: 중단됨
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Batch'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  # ── Batch Items ────────────────────────────────────────────────────────
+
+  /batches/{batchId}/items:
+    parameters:
+      - $ref: '#/components/parameters/BatchId'
+
+    get:
+      tags: [batch-items]
+      operationId: listBatchItems
+      summary: 배치 항목 목록
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/BatchItemStatus'
+        - $ref: '#/components/parameters/PageOffset'
+        - $ref: '#/components/parameters/PageLimit'
+      responses:
+        '200':
+          description: 항목 목록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBatchItems'
+
+  /batch-items/{itemId}/retry:
+    parameters:
+      - $ref: '#/components/parameters/BatchItemId'
+
+    post:
+      tags: [batch-items]
+      operationId: retryBatchItem
+      summary: 실패 항목 재시도
+      description: |
+        failed 상태의 항목을 pending으로 되돌려 재실행 대기열에 넣는다.
+        failed가 아닌 항목에 대해서는 409를 반환한다.
+      responses:
+        '200':
+          description: 재시도 대기열에 추가됨
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchItem'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Components
+# ═══════════════════════════════════════════════════════════════════════════
+
+components:
+
+  # ── Parameters ──────────────────────────────────────────────────────────
+
+  parameters:
+    PlatformId:
+      name: platformId
+      in: path
+      required: true
+      schema:
+        type: integer
+    AccountId:
+      name: accountId
+      in: path
+      required: true
+      schema:
+        type: integer
+    CategoryId:
+      name: categoryId
+      in: path
+      required: true
+      schema:
+        type: integer
+    KeywordId:
+      name: keywordId
+      in: path
+      required: true
+      schema:
+        type: integer
+    AffixId:
+      name: affixId
+      in: path
+      required: true
+      schema:
+        type: integer
+    CampaignId:
+      name: campaignId
+      in: path
+      required: true
+      schema:
+        type: integer
+    CategorySlug:
+      name: categorySlug
+      in: path
+      required: true
+      schema:
+        type: string
+        example: region
+    RuleId:
+      name: ruleId
+      in: path
+      required: true
+      schema:
+        type: integer
+    PaletteId:
+      name: paletteId
+      in: path
+      required: true
+      schema:
+        type: integer
+    BatchId:
+      name: batchId
+      in: path
+      required: true
+      schema:
+        type: integer
+    BatchItemId:
+      name: itemId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+    PageOffset:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    PageLimit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+  # ── Responses ───────────────────────────────────────────────────────────
+
+  responses:
+    NotFound:
+      description: 리소스를 찾을 수 없음
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: 중복 또는 상태 충돌
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ValidationError:
+      description: 유효성 검증 실패
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  # ── Schemas ─────────────────────────────────────────────────────────────
+
+  schemas:
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+    # ── Platform ────────────────────────────────────────────────────────
+
+    Platform:
+      type: object
+      required: [id, name, slug, base_url, status, created_at]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        base_url:
+          type: string
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    PlatformCreate:
+      type: object
+      required: [name, slug]
+      properties:
+        name:
+          type: string
+          maxLength: 64
+        slug:
+          type: string
+          maxLength: 32
+        base_url:
+          type: string
+          maxLength: 256
+          default: ""
+
+    PlatformUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 64
+        slug:
+          type: string
+          maxLength: 32
+        base_url:
+          type: string
+          maxLength: 256
+        status:
+          type: string
+          maxLength: 16
+
+    PaginatedPlatforms:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Platform'
+        total:
+          type: integer
+
+    # ── Account ─────────────────────────────────────────────────────────
+
+    AccountStatus:
+      type: string
+      enum: [active, cooling, disabled]
+
+    Account:
+      type: object
+      required: [id, platform_id, username, cooldown_days, status, created_at]
+      properties:
+        id:
+          type: integer
+        platform_id:
+          type: integer
+        username:
+          type: string
+        extra:
+          type: ["object", "null"]
+          additionalProperties: true
+        last_used_at:
+          type: ["string", "null"]
+          format: date-time
+        cooldown_days:
+          type: integer
+        status:
+          $ref: '#/components/schemas/AccountStatus'
+        created_at:
+          type: string
+          format: date-time
+
+    AccountCreate:
+      type: object
+      required: [username, password_enc]
+      properties:
+        username:
+          type: string
+          maxLength: 128
+        password_enc:
+          type: string
+          maxLength: 512
+        extra:
+          type: object
+          additionalProperties: true
+        cooldown_days:
+          type: integer
+          default: 14
+
+    AccountUpdate:
+      type: object
+      properties:
+        password_enc:
+          type: string
+          maxLength: 512
+        extra:
+          type: ["object", "null"]
+          additionalProperties: true
+        cooldown_days:
+          type: integer
+        status:
+          $ref: '#/components/schemas/AccountStatus'
+
+    PaginatedAccounts:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Account'
+        total:
+          type: integer
+
+    # ── KeywordCategory ─────────────────────────────────────────────────
+
+    KeywordCategory:
+      type: object
+      required: [id, name, slug, created_at]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    KeywordCategoryCreate:
+      type: object
+      required: [name, slug]
+      properties:
+        name:
+          type: string
+          maxLength: 64
+        slug:
+          type: string
+          maxLength: 32
+
+    KeywordCategoryUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 64
+        slug:
+          type: string
+          maxLength: 32
+
+    PaginatedKeywordCategories:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/KeywordCategory'
+        total:
+          type: integer
+
+    # ── Keyword (updated — includes affixes) ────────────────────────────
+
+    Keyword:
+      type: object
+      required: [id, category_id, value, display_value, tier, active, sort_order, created_at]
+      properties:
+        id:
+          type: integer
+        category_id:
+          type: integer
+        parent_id:
+          type: ["integer", "null"]
+        value:
+          type: string
+        display_value:
+          type: string
+        tier:
+          type: integer
+        active:
+          type: boolean
+        sort_order:
+          type: integer
+        affixes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Affix'
+          description: 이 키워드에 연결된 접사 목록 (읽기 전용)
+        created_at:
+          type: string
+          format: date-time
+
+    KeywordCreate:
+      type: object
+      required: [value]
+      properties:
+        parent_id:
+          type: ["integer", "null"]
+        value:
+          type: string
+          maxLength: 128
+        display_value:
+          type: string
+          maxLength: 128
+          default: ""
+        tier:
+          type: integer
+          default: 1
+        active:
+          type: boolean
+          default: true
+        sort_order:
+          type: integer
+          default: 0
+
+    KeywordUpdate:
+      type: object
+      properties:
+        parent_id:
+          type: ["integer", "null"]
+        value:
+          type: string
+          maxLength: 128
+        display_value:
+          type: string
+          maxLength: 128
+        tier:
+          type: integer
+        active:
+          type: boolean
+        sort_order:
+          type: integer
+
+    PaginatedKeywords:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Keyword'
+        total:
+          type: integer
+
+    # ── Affix (NEW) ─────────────────────────────────────────────────────
+
+    AffixType:
+      type: string
+      enum: [prefix, suffix]
+
+    Affix:
+      type: object
+      required: [id, keyword_id, type, value, sort_order, active, created_at]
+      properties:
+        id:
+          type: integer
+        keyword_id:
+          type: integer
+        type:
+          $ref: '#/components/schemas/AffixType'
+        value:
+          type: string
+        sort_order:
+          type: integer
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    AffixCreate:
+      type: object
+      required: [type, value]
+      properties:
+        type:
+          $ref: '#/components/schemas/AffixType'
+        value:
+          type: string
+          maxLength: 128
+        sort_order:
+          type: integer
+          default: 0
+        active:
+          type: boolean
+          default: true
+
+    AffixUpdate:
+      type: object
+      properties:
+        value:
+          type: string
+          maxLength: 128
+        sort_order:
+          type: integer
+        active:
+          type: boolean
+
+    # ── Campaign (updated — includes palettes) ──────────────────────────
+
+    CampaignStatus:
+      type: string
+      enum: [active, paused, archived]
+
+    Campaign:
+      type: object
+      required: [id, platform_id, name, title_template, status, created_at]
+      properties:
+        id:
+          type: integer
+        platform_id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        title_template:
+          type: string
+        config:
+          type: ["object", "null"]
+          additionalProperties: true
+        status:
+          $ref: '#/components/schemas/CampaignStatus'
+        palettes:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignPalette'
+          description: 캠페인 팔레트 목록 (읽기 전용)
+        created_at:
+          type: string
+          format: date-time
+
+    CampaignCreate:
+      type: object
+      required: [platform_id, name]
+      properties:
+        platform_id:
+          type: integer
+        name:
+          type: string
+          maxLength: 128
+        description:
+          type: ["string", "null"]
+        title_template:
+          type: string
+          maxLength: 256
+          default: ""
+        config:
+          type: ["object", "null"]
+          additionalProperties: true
+
+    CampaignUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 128
+        description:
+          type: ["string", "null"]
+        title_template:
+          type: string
+          maxLength: 256
+        config:
+          type: ["object", "null"]
+          additionalProperties: true
+        status:
+          $ref: '#/components/schemas/CampaignStatus'
+
+    PaginatedCampaigns:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Campaign'
+        total:
+          type: integer
+
+    # ── CampaignSlot ────────────────────────────────────────────────────
+
+    CampaignSlot:
+      type: object
+      required: [campaign_id, category_id, sort_order, created_at]
+      properties:
+        campaign_id:
+          type: integer
+        category_id:
+          type: integer
+        category_slug:
+          type: string
+          description: 조인된 카테고리 slug (읽기 전용)
+        sort_order:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+
+    CampaignSlotCreate:
+      type: object
+      required: [category_id]
+      properties:
+        category_id:
+          type: integer
+
+    # ── SpacingRule ──────────────────────────────────────────────────────
+
+    SpacingRule:
+      type: object
+      required: [id, campaign_id, pattern, active, created_at]
+      properties:
+        id:
+          type: integer
+        campaign_id:
+          type: integer
+        pattern:
+          type: object
+          additionalProperties:
+            type: integer
+            enum: [0, 1]
+          description: "{slug: 뒤에_공백(0|1)}"
+        description:
+          type: string
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    SpacingRuleCreate:
+      type: object
+      required: [pattern]
+      properties:
+        pattern:
+          type: object
+          additionalProperties:
+            type: integer
+            enum: [0, 1]
+        description:
+          type: string
+          maxLength: 128
+          default: ""
+        active:
+          type: boolean
+          default: true
+
+    SpacingRuleUpdate:
+      type: object
+      properties:
+        pattern:
+          type: object
+          additionalProperties:
+            type: integer
+            enum: [0, 1]
+        description:
+          type: string
+          maxLength: 128
+        active:
+          type: boolean
+
+    # ── Keyword Picks ───────────────────────────────────────────────────
+
+    PicksMap:
+      type: object
+      additionalProperties:
+        type: array
+        items:
+          type: string
+      description: "{category_slug: [keyword_value, ...]}"
+
+    SavePicksRequest:
+      type: object
+      required: [values]
+      properties:
+        values:
+          type: array
+          items:
+            type: string
+
+    SavePicksResponse:
+      type: object
+      required: [category_slug, saved_count]
+      properties:
+        category_slug:
+          type: string
+        saved_count:
+          type: integer
+
+    # ── CampaignPalette + PaletteItem (NEW) ─────────────────────────────
+
+    PaletteStrategy:
+      type: string
+      enum: [random, sequential]
+
+    CampaignPalette:
+      type: object
+      required: [id, campaign_id, slug, strategy, created_at]
+      properties:
+        id:
+          type: integer
+        campaign_id:
+          type: integer
+        slug:
+          type: string
+          description: "salt_prefix | salt_suffix | cta"
+        strategy:
+          $ref: '#/components/schemas/PaletteStrategy'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaletteItem'
+          description: 팔레트 항목 목록 (읽기 전용)
+        created_at:
+          type: string
+          format: date-time
+
+    CampaignPaletteCreate:
+      type: object
+      required: [slug]
+      properties:
+        slug:
+          type: string
+          maxLength: 64
+        strategy:
+          $ref: '#/components/schemas/PaletteStrategy'
+          default: random
+
+    CampaignPaletteUpdate:
+      type: object
+      properties:
+        slug:
+          type: string
+          maxLength: 64
+        strategy:
+          $ref: '#/components/schemas/PaletteStrategy'
+
+    PaletteItem:
+      type: object
+      required: [id, palette_id, value, sort_order, active, created_at]
+      properties:
+        id:
+          type: integer
+        palette_id:
+          type: integer
+        value:
+          type: string
+        sort_order:
+          type: integer
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    PaletteItemCreate:
+      type: object
+      required: [value]
+      properties:
+        value:
+          type: string
+          maxLength: 256
+        active:
+          type: boolean
+          default: true
+
+    # ── Combination ─────────────────────────────────────────────────────
+
+    Combination:
+      type: object
+      required: [id, campaign_id, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        campaign_id:
+          type: integer
+        spacing_rule_id:
+          type: ["integer", "null"]
+        keywords:
+          type: array
+          items:
+            $ref: '#/components/schemas/Keyword'
+          description: 이 조합에 포함된 키워드 목록
+        used_at:
+          type: ["string", "null"]
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    PaginatedCombinations:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Combination'
+        total:
+          type: integer
+        pending:
+          type: integer
+          description: 미사용 조합 수
+
+    SeedResult:
+      type: object
+      required: [inserted]
+      properties:
+        inserted:
+          type: integer
+          description: 생성된 조합 수
+        picks_applied:
+          $ref: '#/components/schemas/PicksMap'
+
+    SeedPreviewResult:
+      type: object
+      required: [total, keyword_groups, spacing_rules]
+      properties:
+        total:
+          type: integer
+          description: 생성될 조합 수
+        keyword_groups:
+          type: integer
+          description: 키워드 그룹 수
+        spacing_rules:
+          type: integer
+          description: 활성 띄어쓰기 규칙 수
+        picks_applied:
+          $ref: '#/components/schemas/PicksMap'
+
+    # ── Title preview (NEW) ─────────────────────────────────────────────
+
+    TitlePreviewResult:
+      type: object
+      required: [titles, template]
+      properties:
+        template:
+          type: string
+          description: 사용된 title_template
+        titles:
+          type: array
+          items:
+            type: string
+          description: 생성된 샘플 제목 목록
+
+    # ── Campaign stats (NEW) ────────────────────────────────────────────
+
+    CampaignStats:
+      type: object
+      required: [campaign_id]
+      properties:
+        campaign_id:
+          type: integer
+        combinations_total:
+          type: integer
+          description: 전체 조합 수
+        combinations_pending:
+          type: integer
+          description: 미사용 조합 수
+        combinations_used:
+          type: integer
+          description: 사용된 조합 수
+        batches_total:
+          type: integer
+        batches_pending:
+          type: integer
+        batches_running:
+          type: integer
+        batches_done:
+          type: integer
+        batches_failed:
+          type: integer
+        items_total:
+          type: integer
+        items_done:
+          type: integer
+        items_failed:
+          type: integer
+        posts_today:
+          type: integer
+          description: 오늘 발행된 포스트 수
+        accounts_available:
+          type: integer
+          description: 쿨다운 지난 active 계정 수
+        accounts_cooling:
+          type: integer
+          description: 쿨다운 중인 계정 수
+
+    # ── Batch ───────────────────────────────────────────────────────────
+
+    BatchStatus:
+      type: string
+      enum: [pending, running, done, failed, cancelled]
+
+    Batch:
+      type: object
+      required: [id, campaign_id, account_id, scheduled_at, status, created_at]
+      properties:
+        id:
+          type: integer
+        campaign_id:
+          type: integer
+        account_id:
+          type: integer
+        scheduled_at:
+          type: string
+          format: date-time
+        status:
+          $ref: '#/components/schemas/BatchStatus'
+        worker_pid:
+          type: ["integer", "null"]
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: ["string", "null"]
+          format: date-time
+        completed_at:
+          type: ["string", "null"]
+          format: date-time
+        items_total:
+          type: integer
+          description: 전체 항목 수 (읽기 전용)
+        items_done:
+          type: integer
+          description: 완료 항목 수 (읽기 전용)
+        items_failed:
+          type: integer
+          description: 실패 항목 수 (읽기 전용)
+
+    DispatchRequest:
+      type: object
+      properties:
+        schedule_base:
+          type: string
+          format: date-time
+          description: 배치 시작 기준 시각 (KST). 생략 시 현재 + 2시간.
+
+    DispatchResult:
+      type: object
+      required: [batches_created, accounts_used, combos_assigned]
+      properties:
+        batches_created:
+          type: integer
+        accounts_used:
+          type: integer
+        combos_assigned:
+          type: integer
+        scheduled_times:
+          type: array
+          items:
+            type: string
+            format: date-time
+
+    PaginatedBatches:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Batch'
+        total:
+          type: integer
+
+    # ── BatchItem ───────────────────────────────────────────────────────
+
+    BatchItemStatus:
+      type: string
+      enum: [pending, done, failed]
+
+    BatchItem:
+      type: object
+      required: [id, batch_id, combination_id, status, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        batch_id:
+          type: integer
+        combination_id:
+          type: integer
+          format: int64
+        status:
+          $ref: '#/components/schemas/BatchItemStatus'
+        result_url:
+          type: ["string", "null"]
+          maxLength: 512
+        error_message:
+          type: ["string", "null"]
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: ["string", "null"]
+          format: date-time
+
+    PaginatedBatchItems:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BatchItem'
+        total:
+          type: integer
