@@ -7,21 +7,28 @@ info:
 
     **리소스 계층**
     ```
-    Platform
-    ├── Account
-    └── Campaign
-         ├── CampaignSlot      (카테고리 순서)
-         ├── SpacingRule        (띄어쓰기 패턴)
-         ├── KeywordPick        (키워드 필터)
-         ├── CampaignPalette    (솔트/CTA 샘플링 풀)
+    User (SPA login — owns Accounts + Campaigns)
+    Platform          (global, shared)
+    ├── Account       (user_id FK)
+    └── Campaign      (user_id FK)
+         ├── CampaignSlot
+         ├── SpacingRule
+         ├── KeywordPick
+         ├── CampaignPalette
          │    └── PaletteItem
-         ├── Combination        (카테시안 곱 결과)
+         ├── Combination
          └── Batch
               └── BatchItem
-    KeywordCategory
+    KeywordCategory   (global, shared)
     └── Keyword
-         └── Affix              (접두사/접미사 파생 규칙)
+         └── Affix
     ```
+
+    **인증**
+    - `POST /auth/register` — 회원가입
+    - `POST /auth/login`    — JWT 발급
+    - `GET  /auth/me`       — 내 정보 조회
+    - `POST /auth/change-password` — 비밀번호 변경
 
     **도메인 액션**
     - `POST /campaigns/{id}/combinations/seed`     — 키워드 카테시안 곱 생성
@@ -46,6 +53,12 @@ servers:
 # Tags — OAS 3.2.0 hierarchical tags
 # ---------------------------------------------------------------------------
 tags:
+  - name: auth
+    summary: 인증 (로그인/회원가입)
+    kind: nav
+  - name: users
+    summary: 사용자 관리
+    kind: nav
   - name: platforms
     summary: 플랫폼 관리
     kind: nav
@@ -101,6 +114,210 @@ tags:
 # ═══════════════════════════════════════════════════════════════════════════
 
 paths:
+
+  # ── Auth ─────────────────────────────────────────────────────────────────
+
+  /auth/register:
+    post:
+      tags: [auth]
+      operationId: register
+      summary: 회원가입
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: 가입 완료
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: 로그인
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 로그인 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: 인증 실패
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/me:
+    get:
+      tags: [auth]
+      operationId: getMe
+      summary: 현재 로그인된 사용자 조회
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: 인증 필요
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    patch:
+      tags: [auth]
+      operationId: updateMe
+      summary: 내 정보 수정
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdate'
+      responses:
+        '200':
+          description: 수정됨
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: 인증 필요
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/change-password:
+    post:
+      tags: [auth]
+      operationId: changePassword
+      summary: 비밀번호 변경
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: 변경 완료
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message:
+                    type: string
+        '401':
+          description: 현재 비밀번호 불일치
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ── Users (admin only) ──────────────────────────────────────────────────
+
+  /users:
+    get:
+      tags: [users]
+      operationId: listUsers
+      summary: 사용자 목록 (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: role
+          in: query
+          schema:
+            $ref: '#/components/schemas/UserRole'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/UserStatus'
+        - $ref: '#/components/parameters/PageOffset'
+        - $ref: '#/components/parameters/PageLimit'
+      responses:
+        '200':
+          description: 사용자 목록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUsers'
+        '403':
+          description: 관리자 권한 필요
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+
+    get:
+      tags: [users]
+      operationId: getUser
+      summary: 사용자 단건 조회 (admin)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags: [users]
+      operationId: updateUser
+      summary: 사용자 수정 (admin — role/status 변경)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUserUpdate'
+      responses:
+        '200':
+          description: 수정됨
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   # ── Platforms ────────────────────────────────────────────────────────────
 
@@ -1302,9 +1519,24 @@ paths:
 
 components:
 
+  # ── Security ────────────────────────────────────────────────────────────
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token from /auth/login
+
   # ── Parameters ──────────────────────────────────────────────────────────
 
   parameters:
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: integer
     PlatformId:
       name: platformId
       in: path
@@ -1427,6 +1659,121 @@ components:
           type: object
           additionalProperties: true
 
+    # ── User + Auth ─────────────────────────────────────────────────────
+
+    UserRole:
+      type: string
+      enum: [admin, operator]
+
+    UserStatus:
+      type: string
+      enum: [active, disabled]
+
+    User:
+      type: object
+      required: [id, email, display_name, role, status, created_at]
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+        role:
+          $ref: '#/components/schemas/UserRole'
+        status:
+          $ref: '#/components/schemas/UserStatus'
+        created_at:
+          type: string
+          format: date-time
+        last_login_at:
+          type: ["string", "null"]
+          format: date-time
+
+    UserUpdate:
+      type: object
+      properties:
+        display_name:
+          type: string
+          maxLength: 64
+
+    AdminUserUpdate:
+      type: object
+      properties:
+        display_name:
+          type: string
+          maxLength: 64
+        role:
+          $ref: '#/components/schemas/UserRole'
+        status:
+          $ref: '#/components/schemas/UserStatus'
+
+    PaginatedUsers:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+        total:
+          type: integer
+
+    RegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 256
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+        display_name:
+          type: string
+          maxLength: 64
+          default: ""
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    AuthResponse:
+      type: object
+      required: [access_token, user]
+      properties:
+        access_token:
+          type: string
+          description: JWT access token
+        token_type:
+          type: string
+          default: bearer
+        expires_in:
+          type: integer
+          description: Token TTL in seconds
+        user:
+          $ref: '#/components/schemas/User'
+
+    ChangePasswordRequest:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password:
+          type: string
+        new_password:
+          type: string
+          minLength: 8
+          maxLength: 128
+
     # ── Platform ────────────────────────────────────────────────────────
 
     Platform:
@@ -1497,9 +1844,11 @@ components:
 
     Account:
       type: object
-      required: [id, platform_id, username, cooldown_days, status, created_at]
+      required: [id, user_id, platform_id, username, cooldown_days, status, created_at]
       properties:
         id:
+          type: integer
+        user_id:
           type: integer
         platform_id:
           type: integer
@@ -1753,9 +2102,11 @@ components:
 
     Campaign:
       type: object
-      required: [id, platform_id, name, title_template, status, created_at]
+      required: [id, user_id, platform_id, name, title_template, status, created_at]
       properties:
         id:
+          type: integer
+        user_id:
           type: integer
         platform_id:
           type: integer

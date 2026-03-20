@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from factory.db import create_schema, drop_schema
 from factory.models import (
-    Base, Platform, Campaign, KeywordCategory,
+    Base, User, Platform, Campaign, KeywordCategory,
     Keyword, CampaignSlot, SpacingRule,
     Affix, CampaignPalette, PaletteItem,
 )
@@ -107,7 +107,17 @@ def make_campaign(
     session.add(platform)
     session.flush()
 
+    user = User(
+        email="test@example.com",
+        password_hash="$argon2id$test_hash",
+        display_name="Test User",
+        role="operator",
+    )
+    session.add(user)
+    session.flush()
+
     campaign = Campaign(
+        user_id        = user.id,
         platform_id    = platform.id,
         name           = "Test Campaign",
         title_template = "{region} {subject} {learning_type}",

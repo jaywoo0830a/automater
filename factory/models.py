@@ -6,18 +6,19 @@ SQLAlchemy 2.0 ORM models — single source of truth for schema.
 Use db.create_schema(engine) to create tables from these models.
 
 Table map:
+    User                  → users                  (SPA login, owns accounts/campaigns)
     Platform              → platforms
-    Account               → accounts
+    Account               → accounts               (user_id FK)
     KeywordCategory       → keyword_categories
     Keyword               → keywords
-    Affix                 → affixes              (keyword derivation rules)
-    Campaign              → campaigns
+    Affix                 → affixes                (keyword derivation rules)
+    Campaign              → campaigns              (user_id FK)
     CampaignSlot          → campaign_slots
     SpacingRule           → spacing_rules
     CampaignKeywordPick   → campaign_keyword_picks
-    CampaignPalette       → campaign_palettes    (runtime sampling pools)
+    CampaignPalette       → campaign_palettes      (runtime sampling pools)
     PaletteItem           → palette_items
-    combination_keywords  → combination_keywords  (association table)
+    combination_keywords  → combination_keywords    (association table)
     Combination           → combinations
     Batch                 → batches
     BatchItem             → batch_items
@@ -79,6 +80,27 @@ combination_keywords = Table(
 
 
 # ---------------------------------------------------------------------------
+# User — SPA login account (owns Accounts and Campaigns)
+# ---------------------------------------------------------------------------
+
+class User(Base):
+    __tablename__ = "users"
+
+    id:            Mapped[int]                = mapped_column(Integer,     primary_key=True, autoincrement=True)
+    email:         Mapped[str]                = mapped_column(String(256), nullable=False, unique=True)
+    password_hash: Mapped[str]                = mapped_column(String(512), nullable=False)
+    display_name:  Mapped[str]                = mapped_column(String(64),  nullable=False, default="")
+    role:          Mapped[str]                = mapped_column(String(16),  nullable=False, default="operator")
+    status:        Mapped[str]                = mapped_column(String(16),  nullable=False, default="active")
+    created_at:    Mapped[datetime]           = mapped_column(DateTime,    nullable=False, default=lambda: datetime.now(timezone.utc))
+    last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime,    nullable=True)
+
+    # relationships
+    accounts:  Mapped[list["Account"]]  = relationship("Account",  back_populates="owner")
+    campaigns: Mapped[list["Campaign"]] = relationship("Campaign", back_populates="owner")
+
+
+# ---------------------------------------------------------------------------
 # Platform
 # ---------------------------------------------------------------------------
 
@@ -108,6 +130,7 @@ class Account(Base):
     )
 
     id:            Mapped[int]           = mapped_column(Integer,     primary_key=True, autoincrement=True)
+    user_id:       Mapped[int]           = mapped_column(Integer,     ForeignKey("users.id"), nullable=False)
     platform_id:   Mapped[int]           = mapped_column(Integer,     ForeignKey("platforms.id"), nullable=False)
     username:      Mapped[str]           = mapped_column(String(128), nullable=False)
     password_enc:  Mapped[str]           = mapped_column(String(512), nullable=False, default="")
@@ -119,8 +142,9 @@ class Account(Base):
     created_at:    Mapped[datetime]      = mapped_column(DateTime,    nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # relationships
-    platform: Mapped["Platform"] = relationship("Platform", back_populates="accounts")
-    batches:  Mapped[list["Batch"]] = relationship("Batch", back_populates="account")
+    owner:    Mapped["User"]          = relationship("User",     back_populates="accounts")
+    platform: Mapped["Platform"]      = relationship("Platform", back_populates="accounts")
+    batches:  Mapped[list["Batch"]]   = relationship("Batch",    back_populates="account")
 
 
 # ---------------------------------------------------------------------------
@@ -189,6 +213,7 @@ class Campaign(Base):
     __tablename__ = "campaigns"
 
     id:             Mapped[int]           = mapped_column(Integer,     primary_key=True, autoincrement=True)
+    user_id:        Mapped[int]           = mapped_column(Integer,     ForeignKey("users.id"), nullable=False)
     platform_id:    Mapped[int]           = mapped_column(Integer,     ForeignKey("platforms.id"), nullable=False)
     name:           Mapped[str]           = mapped_column(String(128), nullable=False)
     description:    Mapped[Optional[str]] = mapped_column(Text,        nullable=True)
@@ -198,7 +223,8 @@ class Campaign(Base):
     created_at:     Mapped[datetime]      = mapped_column(DateTime,    nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # relationships
-    platform:      Mapped["Platform"]             = relationship("Platform",      back_populates="campaigns")
+    owner:         Mapped["User"]                  = relationship("User",         back_populates="campaigns")
+    platform:      Mapped["Platform"]              = relationship("Platform",     back_populates="campaigns")
     slots:         Mapped[list["CampaignSlot"]]   = relationship(
         "CampaignSlot", back_populates="campaign", order_by="CampaignSlot.sort_order"
     )

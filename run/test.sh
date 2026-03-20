@@ -134,23 +134,30 @@ case "${MODE}" in
   bash ./run/test.sh --all         # everything
 
   Test files (tests/):
-    test_post_step.py          PostStep.execute() self-dispatch
-    test_smart_editor.py       SmartEditorOne DOM wiring
-    test_title_generator.py    generate_title() + validate_template()
+    test_post_step.py           PostStep.execute() self-dispatch
+    test_smart_editor.py        SmartEditorOne DOM wiring
+    test_title_generator.py     generate_title() + validate_template()
     test_paragraph_generator.py generate_paragraphs()
-    test_image_processor.py    process_image() / process_featured()
-    test_seo_prompt.py         build_prompt()
-    test_block_handlers.py     BlockHandler image processing
-    test_layout.py             Section/Block validation
-    test_job_builder.py        PostingJob builder immutability
-    test_job_validation.py     PostingJob.validate()
-    test_job_execution.py      PostingJob.run() call sequence
-    test_publish_option.py     PublishOption schedule
-    test_seo_integration.py    SEO prompt in job context
-    test_browser_actions.py    Pure DOM functions
-    test_browser_config.py     BrowserSettings
-    test_browser_selectors.py  SelectorLoader
-    test_e2e_naver.py          E2E smoke (requires session)
+    test_image_processor.py     process_image() / process_featured()
+    test_seo_prompt.py          build_prompt()
+    test_block_handlers.py      BlockHandler image processing
+    test_layout.py              Section/Block validation
+    test_job_builder.py         PostingJob builder immutability
+    test_job_validation.py      PostingJob.validate()
+    test_job_execution.py       PostingJob.run() call sequence
+    test_publish_option.py      PublishOption schedule
+    test_seo_integration.py     SEO prompt in job context
+    test_browser_actions.py     Pure DOM functions
+    test_browser_config.py      BrowserSettings
+    test_browser_selectors.py   SelectorLoader
+    test_e2e_naver.py           E2E smoke (requires session)
+
+  Test files (factory/tests/ — requires --factory):
+    test_user.py                User model + ownership
+    test_campaign_slots.py      ComboGenerator slot logic
+    test_keyword_picker.py      save_picks / load_picks
+    test_batch_dispatcher.py    BatchDispatcher
+    test_job_builder.py         Combination -> PostingJob
 
 HELP
     ;;

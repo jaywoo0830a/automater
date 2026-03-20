@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from factory.dispatcher import BatchDispatcher, BATCH_SIZE
-from factory.models import Account, Batch, BatchItem, Combination, Platform
+from factory.models import Account, Batch, BatchItem, Combination, Platform, User
 from factory.tests.conftest import make_campaign
 
 KST           = timezone(timedelta(hours=9))
@@ -27,8 +27,10 @@ SCHEDULE_BASE = datetime(2026, 3, 20, 10, 0, tzinfo=KST)
 
 def _add_account(session: Session, *, last_used_at=None, cooldown_days=14, status="active") -> Account:
     platform = session.scalars(select(Platform)).first()
+    user     = session.scalars(select(User)).first()
     suffix   = "".join(random.choices(string.ascii_lowercase, k=6))
     acc = Account(
+        user_id       = user.id,
         platform_id   = platform.id,
         username      = f"user_{suffix}",
         password_enc  = "enc",
