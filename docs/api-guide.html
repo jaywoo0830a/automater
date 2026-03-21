@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Automater API Guide — Frontend Integration</title>
+<style>
+  @page { margin: 2cm; }
+  body {
+    font-family: "Noto Sans KR", "Malgun Gothic", sans-serif;
+    line-height: 1.7;
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 2rem;
+    color: #222;
+  }
+  h1 { font-size: 1.8rem; border-bottom: 2px solid #222; padding-bottom: 0.5rem; }
+  h2 { font-size: 1.4rem; margin-top: 3rem; border-bottom: 1px solid #999; padding-bottom: 0.3rem; }
+  h3 { font-size: 1.1rem; margin-top: 2rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { border: 1px solid #999; padding: 0.5rem 0.8rem; text-align: left; font-size: 0.9rem; }
+  th { background: #f0f0f0; }
+  code { background: #f5f5f5; padding: 0.15rem 0.4rem; font-size: 0.85rem; }
+  pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; font-size: 0.85rem; }
+  .mermaid { margin: 1.5rem 0; }
+  .page-break { page-break-before: always; }
+  .note { background: #fffde7; border-left: 3px solid #f9a825; padding: 0.8rem 1rem; margin: 1rem 0; }
+  .endpoint { font-family: monospace; font-weight: bold; }
+</style>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: true, theme: 'neutral', sequence: { mirrorActors: false } });
+</script>
+</head>
+<body>
+
+<h1>Automater API Guide — Frontend Integration</h1>
+<p>
+  이 문서는 <code>openapi.yaml</code> (OpenAPI 3.2.0)과 함께 프론트엔드 팀에 전달됩니다.<br>
+  목적: 각 SPA 화면에서 어떤 API를 어떤 순서로 호출하는지 시각적으로 설명합니다.
+</p>
+<p>
+  <strong>Base URL:</strong> <code>/api/v2</code><br>
+  <strong>인증:</strong> 모든 요청에 <code>Authorization: Bearer {token}</code> 헤더 필요 (auth 제외)
+</p>
+
+<!-- ================================================================== -->
+<h2>1. 화면 → API 매핑</h2>
+<!-- ================================================================== -->
+
+<p>SPA의 주요 화면과 각 화면이 사용하는 API 엔드포인트 매핑입니다.</p>
+
+<table>
+  <tr>
+    <th>화면</th>
+    <th>HTTP</th>
+    <th>엔드포인트</th>
+    <th>용도</th>
+  </tr>
+  <tr><td colspan="4"><strong>인증</strong></td></tr>
+  <tr><td>회원가입</td><td>POST</td><td><code>/auth/register</code></td><td>계정 생성 → 토큰 발급</td></tr>
+  <tr><td>로그인</td><td>POST</td><td><code>/auth/login</code></td><td>JWT 발급</td></tr>
+  <tr><td>GNB (상단 바)</td><td>GET</td><td><code>/auth/me</code></td><td>현재 사용자 표시</td></tr>
+
+  <tr><td colspan="4"><strong>대시보드</strong></td></tr>
+  <tr><td>캠페인 목록</td><td>GET</td><td><code>/campaigns</code></td><td>카드/리스트 렌더링</td></tr>
+  <tr><td>캠페인 생성 모달</td><td>GET</td><td><code>/platforms</code></td><td>플랫폼 드롭다운</td></tr>
+  <tr><td></td><td>POST</td><td><code>/campaigns</code></td><td>생성 후 상세로 이동</td></tr>
+
+  <tr><td colspan="4"><strong>캠페인 상세</strong></td></tr>
+  <tr><td>상세 헤더</td><td>GET</td><td><code>/campaigns/{id}</code></td><td>이름, 상태, 파생 템플릿</td></tr>
+  <tr><td>대시보드 카드</td><td>GET</td><td><code>/campaigns/{id}/overview</code></td><td>조합 수, 배치 통계</td></tr>
+  <tr><td>토큰 편집기</td><td>GET</td><td><code>/campaigns/{id}/tokens</code></td><td>토큰 목록 (드래그 정렬)</td></tr>
+  <tr><td></td><td>POST</td><td><code>/campaigns/{id}/tokens</code></td><td>토큰 추가</td></tr>
+  <tr><td></td><td>PUT</td><td><code>/campaigns/{id}/tokens/reorder</code></td><td>순서 변경</td></tr>
+  <tr><td></td><td>DELETE</td><td><code>/campaigns/{id}/tokens/{tid}</code></td><td>토큰 삭제</td></tr>
+
+  <tr><td colspan="4"><strong>키워드 관리 (캠페인 내)</strong></td></tr>
+  <tr><td>카테고리별 키워드 선택</td><td>GET</td><td><code>/campaigns/{id}/picks</code></td><td>현재 선택 표시</td></tr>
+  <tr><td></td><td>PUT</td><td><code>/campaigns/{id}/picks</code></td><td>체크박스 저장</td></tr>
+  <tr><td>접사 체크박스</td><td>GET</td><td><code>/campaigns/{id}/affix-overrides</code></td><td>접사 토글 목록</td></tr>
+  <tr><td></td><td>PUT</td><td><code>/campaigns/{id}/affix-overrides</code></td><td>동/구/시 토글</td></tr>
+
+  <tr><td colspan="4"><strong>벌크 임포트 (민지 워크플로우)</strong></td></tr>
+  <tr><td>엑셀 업로드</td><td>POST</td><td><code>/campaigns/{id}/import/excel</code></td><td>파일 업로드 → 자동 임포트</td></tr>
+  <tr><td>JSON 수동 임포트</td><td>POST</td><td><code>/campaigns/{id}/import/keywords</code></td><td>딕셔너리 직접 전달</td></tr>
+  <tr><td>솔트/CTA 임포트</td><td>POST</td><td><code>/campaigns/{id}/import/pools</code></td><td>팔레트 풀 등록</td></tr>
+  <tr><td>조합 생성 버튼</td><td>POST</td><td><code>/campaigns/{id}/import/generate</code></td><td>stale 정리 + 신규 생성</td></tr>
+  <tr><td>리셋 버튼</td><td>POST</td><td><code>/campaigns/{id}/reset/soft</code></td><td>미발송 조합만 삭제</td></tr>
+  <tr><td></td><td>POST</td><td><code>/campaigns/{id}/reset/hard</code></td><td>전체 초기화 (이력 보존)</td></tr>
+
+  <tr><td colspan="4"><strong>조합 / 배치</strong></td></tr>
+  <tr><td>조합 목록</td><td>GET</td><td><code>/campaigns/{id}/combinations</code></td><td>페이지네이션 + 필터</td></tr>
+  <tr><td>조합 생성</td><td>POST</td><td><code>/campaigns/{id}/combinations/generate</code></td><td>토큰 기반 경로</td></tr>
+  <tr><td>배치 발송</td><td>POST</td><td><code>/campaigns/{id}/batches</code></td><td>계정 선택 + 예약</td></tr>
+  <tr><td>배치 모니터링</td><td>GET</td><td><code>/campaigns/{id}/batches</code></td><td>목록</td></tr>
+  <tr><td></td><td>GET</td><td><code>/campaigns/{id}/batches/{bid}</code></td><td>상세 + 아이템 상태</td></tr>
+
+  <tr><td colspan="4"><strong>설정</strong></td></tr>
+  <tr><td>계정 관리</td><td>CRUD</td><td><code>/accounts</code></td><td>플랫폼 로그인 정보</td></tr>
+  <tr><td>레이아웃 편집</td><td>CRUD</td><td><code>/layouts</code></td><td>본문 블록 시퀀스</td></tr>
+  <tr><td>프리셋 관리</td><td>CRUD</td><td><code>/presets/publish</code>, <code>/presets/run</code></td><td>발행/실행 설정</td></tr>
+  <tr><td>미디어 라이브러리</td><td>CRUD</td><td><code>/media</code></td><td>이미지 업로드/삭제</td></tr>
+  <tr><td>키워드 사전</td><td>CRUD</td><td><code>/keyword-categories</code>, <code>/keywords/{id}</code></td><td>글로벌 키워드 관리</td></tr>
+  <tr><td>접사 사전</td><td>CRUD</td><td><code>/affixes</code></td><td>동, 구, 시 등록</td></tr>
+</table>
+
+
+<!-- ================================================================== -->
+<h2 class="page-break">2. 핵심 워크플로우 — Sequence Diagram</h2>
+<!-- ================================================================== -->
+
+<!-- -------------------------------- -->
+<h3>2.1 회원가입 → 첫 캠페인 생성</h3>
+<!-- -------------------------------- -->
+
+<pre class="mermaid">
+sequenceDiagram
+    actor User
+    participant SPA
+    participant API
+
+    User->>SPA: 회원가입 폼 작성
+    SPA->>API: POST /auth/register
+    API-->>SPA: {access_token, user}
+    SPA->>SPA: 토큰 저장 (localStorage)
+
+    User->>SPA: "캠페인 만들기" 클릭
+    SPA->>API: GET /platforms
+    API-->>SPA: [{id:1, name:"Naver Blog", ...}]
+    SPA->>SPA: 플랫폼 드롭다운 렌더링
+
+    User->>SPA: 이름 입력 + 플랫폼 선택
+    SPA->>API: POST /campaigns {name, platform_id}
+    API-->>SPA: {id:42, name:"내 캠페인", ...}
+    SPA->>SPA: /campaigns/42 로 라우팅
+</pre>
+
+
+<!-- -------------------------------- -->
+<h3>2.2 민지의 엑셀 임포트 → 조합 생성</h3>
+<!-- -------------------------------- -->
+
+<div class="note">
+  민지는 slug가 뭔지 모릅니다. 엑셀 컬럼 헤더가 "지역", "과목" 같은 한글이고,
+  시스템이 KeywordCategory.name 매칭으로 자동 해석합니다.
+</div>
+
+<pre class="mermaid">
+sequenceDiagram
+    actor Minji
+    participant SPA
+    participant API
+
+    Minji->>SPA: 엑셀 파일 드래그앤드롭
+    SPA->>API: POST /campaigns/42/import/excel<br/>(multipart: file + auto_detect_affixes=true)
+    API-->>SPA: {categories_created:3, keywords_created:7, ...}
+    SPA->>SPA: "7개 키워드 임포트 완료" 토스트
+
+    Minji->>SPA: "솔트 추가" 탭 클릭
+    SPA->>API: POST /campaigns/42/import/pools<br/>{salt_prefix:["검증된","전문"], salt_suffix:["강력추천"]}
+    API-->>SPA: {pools_created:2, items_created:3}
+
+    Minji->>SPA: "조합 생성" 버튼 클릭
+    SPA->>API: POST /campaigns/42/import/generate
+    API-->>SPA: {combinations_generated:12, combinations_stale:0}
+    SPA->>SPA: "12개 조합 생성 완료" 표시
+
+    Minji->>SPA: 조합 목록 확인
+    SPA->>API: GET /campaigns/42/combinations?page=1
+    API-->>SPA: {items:[...], total:12, page:1}
+</pre>
+
+
+<!-- -------------------------------- -->
+<h3 class="page-break">2.3 엑셀 재업로드 (키워드 추가/제거)</h3>
+<!-- -------------------------------- -->
+
+<div class="note">
+  민지가 엑셀을 수정해서 다시 올리면, stale 조합이 자동 정리되고 새 조합만 추가됩니다.
+  이미 발송된 조합은 절대 삭제되지 않습니다.
+</div>
+
+<pre class="mermaid">
+sequenceDiagram
+    actor Minji
+    participant SPA
+    participant API
+
+    Minji->>SPA: 수정된 엑셀 업로드 (원주시 제거, 봉천동 추가)
+    SPA->>API: POST /campaigns/42/import/excel (file)
+    API-->>SPA: {keywords_created:1, keywords_existing:6, picks_set:7}
+
+    Minji->>SPA: "조합 재생성" 클릭
+    SPA->>API: POST /campaigns/42/import/generate
+    API-->>SPA: {combinations_generated:2, combinations_stale:2}
+    Note right of API: stale 2개 삭제 (원주시 관련)<br/>신규 2개 생성 (봉천동 관련)
+
+    SPA->>SPA: "2개 추가, 2개 정리됨" 표시
+</pre>
+
+
+<!-- -------------------------------- -->
+<h3>2.4 잘못된 엑셀 → 하드 리셋 → 재시작</h3>
+<!-- -------------------------------- -->
+
+<pre class="mermaid">
+sequenceDiagram
+    actor Minji
+    participant SPA
+    participant API
+
+    Minji->>SPA: 잘못된 엑셀 업로드
+    SPA->>API: POST /campaigns/42/import/excel (wrong file)
+    API-->>SPA: {keywords_created:500, ...}
+    SPA->>API: POST /campaigns/42/import/generate
+    API-->>SPA: {combinations_generated:15000}
+
+    Minji->>SPA: "처음부터 다시" 클릭
+    SPA->>SPA: 확인 다이얼로그 표시
+    Minji->>SPA: 확인
+    SPA->>API: POST /campaigns/42/reset/hard
+    API-->>SPA: {combinations_removed:15000, tokens_removed:3, ...}
+
+    Minji->>SPA: 올바른 엑셀 업로드
+    SPA->>API: POST /campaigns/42/import/excel (correct file)
+    API-->>SPA: {keywords_created:7, ...}
+    SPA->>API: POST /campaigns/42/import/generate
+    API-->>SPA: {combinations_generated:12}
+</pre>
+
+
+<!-- -------------------------------- -->
+<h3 class="page-break">2.5 토큰 편집기 — 타이틀 템플릿 구성</h3>
+<!-- -------------------------------- -->
+
+<div class="note">
+  title_template 문자열은 DB에 저장되지 않습니다.
+  토큰 순서에서 자동 파생됩니다. 프론트엔드는 토큰 목록의 순서를
+  시각적으로 보여주고, 드래그로 재정렬할 수 있습니다.
+</div>
+
+<pre class="mermaid">
+sequenceDiagram
+    actor User
+    participant SPA
+    participant API
+
+    User->>SPA: 캠페인 상세 페이지 진입
+    SPA->>API: GET /campaigns/42/tokens
+    API-->>SPA: [{slug:"region",type:"keyword"}, {slug:"subject",type:"keyword"}, {slug:"salt_suffix",type:"pool"}]
+    SPA->>SPA: 파생 템플릿 표시: "{region} {subject} {salt_suffix}"
+
+    User->>SPA: "전문" 리터럴 토큰 추가
+    SPA->>API: POST /campaigns/42/tokens<br/>{slug:"_lit_expert", token_type:"literal", value:"전문"}
+    API-->>SPA: {id:99, slug:"_lit_expert", ...}
+
+    User->>SPA: 토큰 드래그로 재정렬
+    SPA->>API: PUT /campaigns/42/tokens/reorder<br/>{token_ids:[10, 99, 11, 12]}
+    API-->>SPA: [{slug:"region"}, {slug:"_lit_expert"}, {slug:"subject"}, {slug:"salt_suffix"}]
+    SPA->>SPA: 파생 템플릿 갱신: "{region} 전문 {subject} {salt_suffix}"
+</pre>
+
+
+<!-- -------------------------------- -->
+<h3>2.6 접사 체크박스 — "동" 제거 토글</h3>
+<!-- -------------------------------- -->
+
+<pre class="mermaid">
+sequenceDiagram
+    actor User
+    participant SPA
+    participant API
+
+    User->>SPA: 키워드 관리 탭 진입
+    SPA->>API: GET /campaigns/42/affix-overrides
+    API-->>SPA: [{keyword_value:"수리동", affix_value:"동", active:true}, ...]
+    SPA->>SPA: 키워드별 접사 체크박스 렌더링
+
+    User->>SPA: "수리동"의 "동" 체크 해제
+    SPA->>API: PUT /campaigns/42/affix-overrides<br/>{keyword_id:10, affix_id:1, active:false}
+    API-->>SPA: {active:false}
+    SPA->>SPA: 미리보기 갱신: "수리동" → "수리"
+
+    Note right of SPA: "산본동"의 "동"은 여전히 active<br/>같은 접사를 키워드별 독립 제어
+</pre>
+
+
+<!-- -------------------------------- -->
+<h3 class="page-break">2.7 배치 발송 → 모니터링</h3>
+<!-- -------------------------------- -->
+
+<pre class="mermaid">
+sequenceDiagram
+    actor User
+    participant SPA
+    participant API
+
+    User->>SPA: "발송" 버튼 클릭
+    SPA->>API: GET /accounts
+    API-->>SPA: [{id:1, username:"blog_acc1", last_used_at:null}, ...]
+    SPA->>SPA: 계정 선택 드롭다운 + 예약 시간 입력
+
+    User->>SPA: 계정 선택 + 시간 설정 + 확인
+    SPA->>API: POST /campaigns/42/batches<br/>{account_id:1, scheduled_at:"2026-03-22T10:00:00+09:00"}
+    API-->>SPA: {id:7, status:"pending", item_count:12}
+
+    User->>SPA: 배치 상세 확인
+    SPA->>API: GET /campaigns/42/batches/7
+    API-->>SPA: {status:"running", items:[{status:"completed"}, {status:"running"}, ...]}
+    SPA->>SPA: 진행률 바 + 아이템별 상태 표시
+
+    Note right of SPA: 폴링 또는 WebSocket으로<br/>실시간 상태 갱신
+</pre>
+
+
+<!-- ================================ -->
+<h2 class="page-break">3. 데이터 모델 — ERD</h2>
+<!-- ================================ -->
+
+<pre class="mermaid">
+erDiagram
+    users ||--o{ campaigns : owns
+    users ||--o{ accounts : owns
+    users ||--o{ media : owns
+    users ||--o{ post_layouts : owns
+    users ||--o{ publish_presets : owns
+    users ||--o{ run_presets : owns
+
+    platforms ||--o{ accounts : has
+    platforms ||--o{ campaigns : has
+
+    campaigns ||--o{ template_tokens : has
+    campaigns ||--o{ spacing_rules : has
+    campaigns ||--o{ campaign_keyword_picks : has
+    campaigns ||--o{ campaign_affix_overrides : has
+    campaigns ||--o{ combinations : has
+    campaigns ||--o{ batches : has
+    campaigns }o--o| post_layouts : uses
+    campaigns }o--o| publish_presets : uses
+    campaigns }o--o| run_presets : uses
+
+    template_tokens ||--o| campaign_slots : "keyword type"
+    template_tokens ||--o| campaign_palettes : "pool type"
+
+    campaign_slots }o--|| keyword_categories : binds
+    keyword_categories ||--o{ keywords : contains
+    keywords }o--o{ affixes : "keyword_affixes M2M"
+    keywords }o--o{ combinations : "combination_keywords M2M"
+
+    campaign_palettes ||--o{ palette_items : contains
+
+    campaign_keyword_picks }o--|| keywords : selects
+
+    campaign_affix_overrides }o--|| keywords : targets
+    campaign_affix_overrides }o--|| affixes : targets
+
+    combinations }o--o| spacing_rules : uses
+    combinations ||--o{ batch_items : assigned
+
+    batches ||--o{ batch_items : contains
+    batches }o--|| accounts : uses
+</pre>
+
+
+<!-- ================================ -->
+<h2 class="page-break">4. 응답 예시 — 핵심 엔드포인트</h2>
+<!-- ================================ -->
+
+<h3>4.1 GET /campaigns/42</h3>
+<pre>
+{
+  "id": 42,
+  "name": "강남 교육 캠페인",
+  "platform_id": 1,
+  "status": "active",
+  "derived_template": "{salt_prefix} {region} {subject} {salt_suffix}",
+  "tokens": [
+    {"id": 10, "slug": "salt_prefix", "token_type": "pool", "sort_order": 0,
+     "palette": {"strategy": "random", "items": [
+       {"id": 1, "value": "검증된", "active": true},
+       {"id": 2, "value": "전문", "active": true}
+     ]}},
+    {"id": 11, "slug": "region", "token_type": "keyword", "sort_order": 1,
+     "category_id": 1, "category_name": "지역"},
+    {"id": 12, "slug": "subject", "token_type": "keyword", "sort_order": 2,
+     "category_id": 2, "category_name": "과목"},
+    {"id": 13, "slug": "salt_suffix", "token_type": "pool", "sort_order": 3,
+     "palette": {"strategy": "random", "items": [
+       {"id": 3, "value": "강력 추천", "active": true}
+     ]}}
+  ],
+  "created_at": "2026-03-21T10:00:00Z"
+}
+</pre>
+
+<h3>4.2 GET /campaigns/42/overview</h3>
+<pre>
+{
+  "campaign_id": 42,
+  "derived_template": "{salt_prefix} {region} {subject} {salt_suffix}",
+  "token_count": 4,
+  "combination_total": 12,
+  "combination_unused": 8,
+  "combination_used": 4,
+  "batch_pending": 1,
+  "batch_running": 0,
+  "batch_completed": 2
+}
+</pre>
+
+<h3>4.3 GET /campaigns/42/combinations?page=1&amp;size=2</h3>
+<pre>
+{
+  "items": [
+    {
+      "id": 1001,
+      "keywords": [
+        {"id": 10, "category_slug": "region", "value": "수리동", "display_value": "수리동"},
+        {"id": 20, "category_slug": "subject", "value": "수학", "display_value": "수학"}
+      ],
+      "spacing_rule_id": 5,
+      "used_at": null,
+      "created_at": "2026-03-21T11:00:00Z"
+    },
+    {
+      "id": 1002,
+      "keywords": [
+        {"id": 10, "category_slug": "region", "value": "수리동", "display_value": "수리동"},
+        {"id": 21, "category_slug": "subject", "value": "영어", "display_value": "영어"}
+      ],
+      "spacing_rule_id": 5,
+      "used_at": "2026-03-21T14:00:00Z",
+      "created_at": "2026-03-21T11:00:00Z"
+    }
+  ],
+  "total": 12,
+  "page": 1,
+  "size": 2,
+  "pages": 6
+}
+</pre>
+
+<h3 class="page-break">4.4 GET /campaigns/42/affix-overrides</h3>
+<pre>
+[
+  {
+    "id": 1,
+    "keyword_id": 10, "keyword_value": "수리동",
+    "affix_id": 1, "affix_type": "suffix", "affix_value": "동",
+    "active": false
+  },
+  {
+    "id": 2,
+    "keyword_id": 20, "keyword_value": "산본동",
+    "affix_id": 1, "affix_type": "suffix", "affix_value": "동",
+    "active": true
+  }
+]
+</pre>
+
+<div class="note">
+  <code>active: false</code> → "수리동"에서 "동" 제거 → "수리"로 사용<br>
+  <code>active: true</code> → "산본동"은 그대로 유지<br>
+  override가 없는 키워드-접사 쌍은 기본 active=true (접사 유지)
+</div>
+
+
+<!-- ================================ -->
+<h2 class="page-break">5. 프론트엔드 구현 가이드</h2>
+<!-- ================================ -->
+
+<h3>5.1 두 가지 조합 생성 경로</h3>
+<p>프론트엔드는 사용자 유형에 따라 두 경로를 제공해야 합니다:</p>
+
+<table>
+  <tr><th>경로</th><th>대상</th><th>API</th><th>UI</th></tr>
+  <tr>
+    <td>벌크 임포트</td>
+    <td>민지 (비기술)</td>
+    <td><code>/import/excel</code> → <code>/import/generate</code></td>
+    <td>엑셀 업로드 → 버튼 한 번</td>
+  </tr>
+  <tr>
+    <td>수동 구성</td>
+    <td>운영자 (기술)</td>
+    <td>토큰 편집 → picks 설정 → <code>/combinations/generate</code></td>
+    <td>토큰 에디터 + 키워드 체크박스</td>
+  </tr>
+</table>
+
+<h3>5.2 파생 템플릿 표시 규칙</h3>
+<p>
+  <code>derived_template</code>은 서버가 토큰 순서에서 자동 계산합니다.
+  프론트엔드도 동일한 규칙으로 로컬에서 미리보기를 렌더링할 수 있습니다:
+</p>
+<pre>
+// Client-side template derivation
+function deriveTemplate(tokens) {
+  return tokens
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map(t => t.token_type === 'literal' ? t.value : `{${t.slug}}`)
+    .join(' ');
+}
+</pre>
+
+<h3>5.3 리셋 버튼 UI 가이드</h3>
+<table>
+  <tr><th>버튼</th><th>동작</th><th>확인 다이얼로그</th></tr>
+  <tr>
+    <td>소프트 리셋</td>
+    <td>미발송 조합만 삭제</td>
+    <td>"발송되지 않은 조합 N개가 삭제됩니다. 발송 이력은 보존됩니다."</td>
+  </tr>
+  <tr>
+    <td>하드 리셋</td>
+    <td>토큰/픽/조합 전부 삭제</td>
+    <td>"캠페인 설정이 초기화됩니다. 발송 이력만 보존됩니다. 이 작업은 되돌릴 수 없습니다."</td>
+  </tr>
+</table>
+
+<h3>5.4 배치 모니터링 폴링</h3>
+<p>
+  배치가 <code>pending</code> 또는 <code>running</code> 상태일 때
+  <code>GET /campaigns/{id}/batches/{bid}</code>를 5초 간격으로 폴링합니다.
+  <code>completed</code> 또는 <code>failed</code>가 되면 폴링을 중단합니다.
+</p>
+
+</body>
+</html>
