@@ -100,9 +100,6 @@ MODE="${1:---unit}"
 case "${MODE}" in
 
   --unit)
-    echo "── unit/api ──────────────────────────────"
-    pytest tests/unit/api/ -v
-    echo ""
     echo "── unit/automator ────────────────────────"
     pytest tests/unit/automator/ -v
     echo ""
@@ -150,10 +147,6 @@ case "${MODE}" in
   bash ./run/test.sh --e2e           # unit + integration + e2e smoke
   bash ./run/test.sh --all           # everything
 
-  ── tests/unit/api/                  API 라우트 단위 테스트
-      test_auth.py                    register, login, me, password
-      test_utility.py                 validateTitleTemplate, listBlockTypes
-
   ── tests/unit/automator/            Automator 순수 단위 테스트
       test_title_generator.py         generate_title + validate_template
       test_paragraph_generator.py     generate_paragraphs stubs
@@ -169,6 +162,9 @@ case "${MODE}" in
       test_job_builder.py             Combination → PostingSpec 합성
       test_batch_worker.py            BatchWorker 실행 파이프라인
       test_storage.py                 LocalStorage 파일 작업
+      test_bulk_importer.py           BulkImporter 입력 검증
+      test_excel_parser.py            엑셀 파싱 + 헤더 해석
+      test_affix_detector.py          접사 자동 감지
 
   ── tests/integration/automator/     Automator 통합 테스트
       test_spec_builder.py            PostingSpec immutability
@@ -184,6 +180,7 @@ case "${MODE}" in
       test_combo_generator.py         ComboGenerator slot logic
       test_keyword_picker.py          save_picks / load_picks
       test_batch_dispatcher.py        BatchDispatcher
+      test_bulk_importer.py           BulkImporter full pipeline
 
   ── tests/browser/                   Playwright mocks (no real browser)
       test_smart_editor.py            SmartEditorOne DOM wiring

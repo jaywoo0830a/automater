@@ -116,10 +116,30 @@ class TestComboGeneratorRun:
         picker   = CampaignKeywordPicker(session=session, campaign_id=campaign.id)
         picker.save_picks(category_slug="region", values=["강남구"])
         session.flush()
-        picks = picker.load_pick_ids()
 
-        inserted = ComboGenerator(session=session, campaign_id=campaign.id, picks=picks).run()
+        inserted = ComboGenerator(session=session, campaign_id=campaign.id).run()
         session.flush()
 
         # region 1 × subject 2 × lt 2 × spacing 1 = 4
         assert inserted == 4
+
+    def test_run_twice_no_duplicates(self, session: Session):
+        """Running generate twice does not create duplicate combinations."""
+        campaign = make_campaign(session)
+        first  = ComboGenerator(session=session, campaign_id=campaign.id).run()
+        session.flush()
+        second = ComboGenerator(session=session, campaign_id=campaign.id).run()
+        session.flush()
+
+        total = session.scalars(
+            select(Combination).where(Combination.campaign_id == campaign.id)
+        ).all()
+        assert first == 8
+        assert second == 0
+        assert len(total) == 8
+
+    def test_no_picks_returns_zero(self, session: Session):
+        """Campaign with keywords but no picks → zero combinations."""
+        campaign = make_campaign(session, with_picks=False)
+        inserted = ComboGenerator(session=session, campaign_id=campaign.id).run()
+        assert inserted == 0

@@ -23,6 +23,9 @@ from factory.job_builder import (
     _apply_affixes,
     _build_body_default,
     _build_body_from_layout,
+    _build_override_lookup,
+    _build_pools,
+    _build_template,
     _build_title,
     _build_values,
 )
@@ -34,13 +37,19 @@ KST = timezone(timedelta(hours=9))
 # Helpers — lightweight fakes
 # ---------------------------------------------------------------------------
 
-def _keyword(slug: str, value: str, cat_id: int = 1, affixes=None):
+def _keyword(slug: str, value: str, cat_id: int = 1, affixes=None, kw_id: int = 0):
     category = SimpleNamespace(slug=slug, id=cat_id)
-    return SimpleNamespace(category=category, value=value, affixes=affixes or [])
+    return SimpleNamespace(
+        id=kw_id, category=category, value=value, affixes=affixes or [],
+    )
 
 
-def _affix(type: str, value: str, active: bool = True):
-    return SimpleNamespace(type=type, value=value, active=active)
+def _affix(type: str, value: str, affix_id: int = 0):
+    return SimpleNamespace(id=affix_id, type=type, value=value)
+
+
+def _override(affix_id: int, keyword_id: int, active: bool):
+    return SimpleNamespace(affix_id=affix_id, keyword_id=keyword_id, active=active)
 
 
 def _slot(sort_order: int, block_type: str, config: dict = None):
@@ -59,18 +68,35 @@ def _preset(config: dict):
     return SimpleNamespace(config=config)
 
 
+def _palette_item(value: str, active: bool = True):
+    return SimpleNamespace(value=value, active=active)
+
+
+def _palette(strategy: str = "random", items: list = None):
+    return SimpleNamespace(strategy=strategy, items=items or [])
+
+
+def _token(slug: str, token_type: str = "keyword", palette=None, value=None, sort_order: int = 0):
+    return SimpleNamespace(
+        slug=slug, token_type=token_type,
+        palette=palette, value=value, sort_order=sort_order,
+    )
+
+
 def _combo(
     keywords: list,
-    title_template: str = "{region} {subject}",
     layout=None,
     publish_preset=None,
     run_preset=None,
+    affix_overrides=None,
+    tokens=None,
 ):
     campaign = SimpleNamespace(
-        title_template=title_template,
         layout=layout,
         publish_preset=publish_preset,
         run_preset=run_preset,
+        affix_overrides=affix_overrides or [],
+        tokens=tokens or [],
     )
     return SimpleNamespace(keywords=keywords, campaign=campaign)
 
@@ -101,98 +127,200 @@ class TestBuildValues:
         values = _build_values(combo)
         assert list(values.keys()) == ["region", "subject"]
 
-    # -- affix stripping --
+    # -- affix stripping (campaign override controls active/inactive) --
 
-    def test_inactive_suffix_stripped(self):
-        """강남구 + suffix "구" (inactive) → 강남"""
-        combo = _combo(keywords=[
-            _keyword("region", "강남구", cat_id=1, affixes=[
-                _affix("suffix", "구", active=False),
-            ]),
+    def test_override_inactive_suffix_stripped(self):
+        """강남구 + suffix "구" overridden active=False → 강남"""
+        kw = _keyword("region", "강남구", cat_id=1, kw_id=10, affixes=[
+            _affix("suffix", "구", affix_id=1),
         ])
+        combo = _combo(
+            keywords=[kw],
+            affix_overrides=[_override(affix_id=1, keyword_id=10, active=False)],
+        )
         values = _build_values(combo)
         assert values["region"] == "강남"
 
-    def test_active_suffix_kept(self):
-        """강남구 + suffix "구" (active) → 강남구 (unchanged)"""
-        combo = _combo(keywords=[
-            _keyword("region", "강남구", cat_id=1, affixes=[
-                _affix("suffix", "구", active=True),
-            ]),
+    def test_override_active_suffix_kept(self):
+        """강남구 + suffix "구" overridden active=True → 강남구"""
+        kw = _keyword("region", "강남구", cat_id=1, kw_id=10, affixes=[
+            _affix("suffix", "구", affix_id=1),
         ])
+        combo = _combo(
+            keywords=[kw],
+            affix_overrides=[_override(affix_id=1, keyword_id=10, active=True)],
+        )
         values = _build_values(combo)
         assert values["region"] == "강남구"
 
-    def test_inactive_prefix_stripped(self):
-        """동강남 + prefix "동" (inactive) → 강남"""
-        combo = _combo(keywords=[
-            _keyword("region", "동강남", cat_id=1, affixes=[
-                _affix("prefix", "동", active=False),
-            ]),
+    def test_no_override_keeps_affix(self):
+        """No override → affix is kept (default = active)."""
+        kw = _keyword("region", "강남구", cat_id=1, kw_id=10, affixes=[
+            _affix("suffix", "구", affix_id=1),
         ])
+        combo = _combo(keywords=[kw], affix_overrides=[])
+        values = _build_values(combo)
+        assert values["region"] == "강남구"
+
+    def test_override_inactive_prefix_stripped(self):
+        """동강남 + prefix "동" overridden active=False → 강남"""
+        kw = _keyword("region", "동강남", cat_id=1, kw_id=10, affixes=[
+            _affix("prefix", "동", affix_id=2),
+        ])
+        combo = _combo(
+            keywords=[kw],
+            affix_overrides=[_override(affix_id=2, keyword_id=10, active=False)],
+        )
         values = _build_values(combo)
         assert values["region"] == "강남"
 
-    def test_active_prefix_kept(self):
-        """동강남 + prefix "동" (active) → 동강남"""
-        combo = _combo(keywords=[
-            _keyword("region", "동강남", cat_id=1, affixes=[
-                _affix("prefix", "동", active=True),
-            ]),
+    def test_override_active_prefix_kept(self):
+        """동강남 + prefix "동" overridden active=True → 동강남"""
+        kw = _keyword("region", "동강남", cat_id=1, kw_id=10, affixes=[
+            _affix("prefix", "동", affix_id=2),
         ])
+        combo = _combo(
+            keywords=[kw],
+            affix_overrides=[_override(affix_id=2, keyword_id=10, active=True)],
+        )
         values = _build_values(combo)
         assert values["region"] == "동강남"
 
-    def test_multiple_inactive_affixes(self):
-        """서초구 + suffix "구" (inactive) + suffix "동" (inactive) → 서초"""
-        combo = _combo(keywords=[
-            _keyword("region", "서초구", cat_id=1, affixes=[
-                _affix("suffix", "구", active=False),
-                _affix("suffix", "동", active=False),
-            ]),
+    def test_multiple_overrides_inactive(self):
+        """서초구 + two suffixes both overridden inactive → 서초"""
+        kw = _keyword("region", "서초구", cat_id=1, kw_id=10, affixes=[
+            _affix("suffix", "구", affix_id=1),
+            _affix("suffix", "동", affix_id=2),
         ])
+        combo = _combo(
+            keywords=[kw],
+            affix_overrides=[
+                _override(affix_id=1, keyword_id=10, active=False),
+                _override(affix_id=2, keyword_id=10, active=False),
+            ],
+        )
         values = _build_values(combo)
         assert values["region"] == "서초"
 
-    def test_mixed_active_inactive(self):
-        """강남구 + suffix "구" (inactive) + suffix "동" (active) → 강남"""
-        combo = _combo(keywords=[
-            _keyword("region", "강남구", cat_id=1, affixes=[
-                _affix("suffix", "구", active=False),
-                _affix("suffix", "동", active=True),
-            ]),
+    def test_mixed_overrides(self):
+        """강남구 + suffix "구" inactive, suffix "동" active → 강남"""
+        kw = _keyword("region", "강남구", cat_id=1, kw_id=10, affixes=[
+            _affix("suffix", "구", affix_id=1),
+            _affix("suffix", "동", affix_id=2),
         ])
+        combo = _combo(
+            keywords=[kw],
+            affix_overrides=[
+                _override(affix_id=1, keyword_id=10, active=False),
+                _override(affix_id=2, keyword_id=10, active=True),
+            ],
+        )
         values = _build_values(combo)
         assert values["region"] == "강남"
 
     def test_no_affixes_unchanged(self):
         """No affixes → value unchanged."""
         combo = _combo(keywords=[
-            _keyword("region", "강남구", cat_id=1, affixes=[]),
+            _keyword("region", "강남구", cat_id=1, kw_id=10, affixes=[]),
         ])
         values = _build_values(combo)
         assert values["region"] == "강남구"
 
     def test_suffix_not_in_value_unchanged(self):
         """Suffix doesn't match end of value → unchanged."""
-        combo = _combo(keywords=[
-            _keyword("region", "강남", cat_id=1, affixes=[
-                _affix("suffix", "구", active=False),
-            ]),
+        kw = _keyword("region", "강남", cat_id=1, kw_id=10, affixes=[
+            _affix("suffix", "구", affix_id=1),
         ])
+        combo = _combo(
+            keywords=[kw],
+            affix_overrides=[_override(affix_id=1, keyword_id=10, active=False)],
+        )
         values = _build_values(combo)
         assert values["region"] == "강남"
 
-    def test_two_keywords_independent_affixes(self):
-        """Each keyword applies its own affixes independently."""
-        combo = _combo(keywords=[
-            _keyword("region", "강남구", cat_id=1, affixes=[
-                _affix("suffix", "구", active=False),
-            ]),
-            _keyword("subject", "수학", cat_id=2, affixes=[]),
+    def test_two_keywords_independent_overrides(self):
+        """Each keyword's override is independent."""
+        kw1 = _keyword("region", "강남구", cat_id=1, kw_id=10, affixes=[
+            _affix("suffix", "구", affix_id=1),
         ])
+        kw2 = _keyword("subject", "수학", cat_id=2, kw_id=20, affixes=[])
+        combo = _combo(
+            keywords=[kw1, kw2],
+            affix_overrides=[_override(affix_id=1, keyword_id=10, active=False)],
+        )
         values = _build_values(combo)
         assert values == {"region": "강남", "subject": "수학"}
+
+    def test_same_affix_different_keyword_overrides(self):
+        """Same affix "동" stripped from 수리동 but kept for 산본동."""
+        dong = _affix("suffix", "동", affix_id=1)
+        kw1 = _keyword("region", "수리동", cat_id=1, kw_id=10, affixes=[dong])
+        kw2 = _keyword("region2", "산본동", cat_id=3, kw_id=20, affixes=[dong])
+        combo = _combo(
+            keywords=[kw1, kw2],
+            affix_overrides=[
+                _override(affix_id=1, keyword_id=10, active=False),
+                _override(affix_id=1, keyword_id=20, active=True),
+            ],
+        )
+        values = _build_values(combo)
+        assert values["region"] == "수리"
+        assert values["region2"] == "산본동"
+
+
+# ---------------------------------------------------------------------------
+# _build_title
+# ---------------------------------------------------------------------------
+
+class TestBuildTemplate:
+
+    def test_keyword_tokens_produce_slug_placeholders(self):
+        campaign = SimpleNamespace(tokens=[
+            _token("region", "keyword", sort_order=0),
+            _token("subject", "keyword", sort_order=1),
+        ])
+        assert _build_template(campaign) == "{region} {subject}"
+
+    def test_pool_tokens_produce_slug_placeholders(self):
+        campaign = SimpleNamespace(tokens=[
+            _token("region", "keyword", sort_order=0),
+            _token("salt_suffix", "pool", sort_order=1),
+        ])
+        assert _build_template(campaign) == "{region} {salt_suffix}"
+
+    def test_literal_token_produces_raw_value(self):
+        campaign = SimpleNamespace(tokens=[
+            _token("region", "keyword", sort_order=0),
+            _token("_lit_expert", "literal", value="전문", sort_order=1),
+            _token("subject", "keyword", sort_order=2),
+        ])
+        assert _build_template(campaign) == "{region} 전문 {subject}"
+
+    def test_sort_order_respected(self):
+        campaign = SimpleNamespace(tokens=[
+            _token("subject", "keyword", sort_order=2),
+            _token("salt_prefix", "pool", sort_order=0),
+            _token("region", "keyword", sort_order=1),
+        ])
+        assert _build_template(campaign) == "{salt_prefix} {region} {subject}"
+
+    def test_empty_tokens(self):
+        campaign = SimpleNamespace(tokens=[])
+        assert _build_template(campaign) == ""
+
+    def test_no_tokens_attribute(self):
+        campaign = SimpleNamespace()
+        assert _build_template(campaign) == ""
+
+    def test_mixed_all_types(self):
+        campaign = SimpleNamespace(tokens=[
+            _token("salt_prefix", "pool", sort_order=0),
+            _token("region", "keyword", sort_order=1),
+            _token("_lit_best", "literal", value="최고의", sort_order=2),
+            _token("subject", "keyword", sort_order=3),
+            _token("cta", "pool", sort_order=4),
+        ])
+        assert _build_template(campaign) == "{salt_prefix} {region} 최고의 {subject} {cta}"
 
 
 # ---------------------------------------------------------------------------
@@ -201,15 +329,137 @@ class TestBuildValues:
 
 class TestBuildTitle:
 
-    def test_returns_title_option_with_template(self):
+    def test_returns_title_option_with_template_from_tokens(self):
         combo = _combo(
             keywords=[_keyword("region", "강남", cat_id=1), _keyword("subject", "수학", cat_id=2)],
-            title_template="{region} {subject} {salt}",
+            tokens=[
+                _token("region", "keyword", sort_order=0),
+                _token("subject", "keyword", sort_order=1),
+                _token("salt_suffix", "pool", sort_order=2),
+            ],
         )
         opt = _build_title(combo)
         assert isinstance(opt, TitleOption)
-        assert opt.template == "{region} {subject} {salt}"
+        assert opt.template == "{region} {subject} {salt_suffix}"
         assert opt.values == {"region": "강남", "subject": "수학"}
+
+    def test_pools_loaded_from_tokens(self):
+        combo = _combo(
+            keywords=[_keyword("region", "강남", cat_id=1)],
+            tokens=[
+                _token("region", "keyword", sort_order=0),
+                _token("salt_suffix", "pool", sort_order=1, palette=_palette(items=[
+                    _palette_item("강력 추천"),
+                    _palette_item("즉시 가능"),
+                ])),
+            ],
+        )
+        opt = _build_title(combo)
+        assert opt.pools == {"salt_suffix": ("강력 추천", "즉시 가능")}
+
+    def test_multiple_pool_tokens(self):
+        combo = _combo(
+            keywords=[_keyword("region", "강남", cat_id=1)],
+            tokens=[
+                _token("salt_prefix", "pool", sort_order=0, palette=_palette(items=[
+                    _palette_item("검증된"), _palette_item("전문"),
+                ])),
+                _token("region", "keyword", sort_order=1),
+                _token("cta", "pool", sort_order=2, palette=_palette(items=[
+                    _palette_item("지금 신청"),
+                ])),
+            ],
+        )
+        opt = _build_title(combo)
+        assert opt.template == "{salt_prefix} {region} {cta}"
+        assert opt.pools["salt_prefix"] == ("검증된", "전문")
+        assert opt.pools["cta"] == ("지금 신청",)
+
+    def test_inactive_palette_items_excluded(self):
+        combo = _combo(
+            keywords=[_keyword("region", "강남", cat_id=1)],
+            tokens=[
+                _token("region", "keyword", sort_order=0),
+                _token("salt_suffix", "pool", sort_order=1, palette=_palette(items=[
+                    _palette_item("강력 추천", active=True),
+                    _palette_item("삭제됨", active=False),
+                ])),
+            ],
+        )
+        opt = _build_title(combo)
+        assert opt.pools == {"salt_suffix": ("강력 추천",)}
+
+    def test_literal_token_in_template(self):
+        combo = _combo(
+            keywords=[_keyword("region", "강남", cat_id=1)],
+            tokens=[
+                _token("region", "keyword", sort_order=0),
+                _token("_lit_expert", "literal", value="전문", sort_order=1),
+                _token("subject", "keyword", sort_order=2),
+            ],
+        )
+        opt = _build_title(combo)
+        assert opt.template == "{region} 전문 {subject}"
+
+    def test_no_tokens_empty_template(self):
+        combo = _combo(
+            keywords=[_keyword("region", "강남", cat_id=1)],
+        )
+        opt = _build_title(combo)
+        assert opt.template == ""
+        assert opt.pools == {}
+
+
+# ---------------------------------------------------------------------------
+# _build_pools
+# ---------------------------------------------------------------------------
+
+class TestBuildPools:
+
+    def test_builds_pools_from_tokens(self):
+        campaign = SimpleNamespace(tokens=[
+            _token("salt_prefix", "pool", palette=_palette(items=[
+                _palette_item("검증된"), _palette_item("전문"),
+            ])),
+            _token("salt_suffix", "pool", palette=_palette(items=[
+                _palette_item("강력 추천"),
+            ])),
+        ])
+        pools = _build_pools(campaign)
+        assert pools == {
+            "salt_prefix": ("검증된", "전문"),
+            "salt_suffix": ("강력 추천",),
+        }
+
+    def test_filters_inactive_items(self):
+        campaign = SimpleNamespace(tokens=[
+            _token("cta", "pool", palette=_palette(items=[
+                _palette_item("지금 신청", active=True),
+                _palette_item("삭제됨", active=False),
+                _palette_item("무료 상담", active=True),
+            ])),
+        ])
+        pools = _build_pools(campaign)
+        assert pools == {"cta": ("지금 신청", "무료 상담")}
+
+    def test_keyword_tokens_excluded(self):
+        campaign = SimpleNamespace(tokens=[
+            _token("region", "keyword"),
+            _token("salt_suffix", "pool", palette=_palette(items=[
+                _palette_item("추천"),
+            ])),
+        ])
+        pools = _build_pools(campaign)
+        assert "region" not in pools
+        assert pools == {"salt_suffix": ("추천",)}
+
+    def test_empty_tokens(self):
+        pools = _build_pools(SimpleNamespace(tokens=[]))
+        assert pools == {}
+
+    def test_no_tokens_attribute(self):
+        pools = _build_pools(SimpleNamespace())
+        assert pools == {}
 
 
 # ---------------------------------------------------------------------------

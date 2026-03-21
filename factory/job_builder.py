@@ -91,25 +91,52 @@ def _build_values(combo: Any) -> dict[str, str]:
     """
     Build slug -> value dict from combination's keywords.
 
-    Inactive affixes are stripped from keyword values:
-        Keyword("강남구") + Affix(suffix, "구", active=False) → "강남"
-        Keyword("강남구") + Affix(suffix, "구", active=True)  → "강남구"
+    Affix stripping is controlled by campaign_affix_overrides:
+        No override for (keyword, affix) → affix kept (default active)
+        Override active=False            → affix stripped
+        Override active=True             → affix kept (explicit)
     """
+    overrides = _build_override_lookup(
+        getattr(combo.campaign, "affix_overrides", [])
+    )
     values: dict[str, str] = {}
     for kw in sorted(combo.keywords, key=lambda k: getattr(k.category, "id", 0)):
-        values[kw.category.slug] = _apply_affixes(kw.value, getattr(kw, "affixes", []))
+        values[kw.category.slug] = _apply_affixes(
+            kw.value,
+            getattr(kw, "affixes", []),
+            overrides,
+            kw.id,
+        )
     return values
 
 
-def _apply_affixes(value: str, affixes: list[Any]) -> str:
+def _build_override_lookup(
+    overrides: list[Any],
+) -> dict[tuple[int, int], bool]:
     """
-    Strip inactive affixes from a keyword value.
+    Build a (keyword_id, affix_id) -> active lookup from override records.
+    """
+    return {
+        (o.keyword_id, o.affix_id): o.active
+        for o in overrides
+    }
 
-    Only inactive (active=False) affixes are stripped.
-    Active affixes mean the affix is intentionally part of the value.
+
+def _apply_affixes(
+    value: str,
+    affixes: list[Any],
+    overrides: dict[tuple[int, int], bool],
+    keyword_id: int,
+) -> str:
+    """
+    Strip affixes from a keyword value based on campaign overrides.
+
+    Only affixes explicitly overridden with active=False are stripped.
+    No override means the affix is kept (default behavior).
     """
     for affix in affixes:
-        if affix.active:
+        active = overrides.get((keyword_id, affix.id), True)
+        if active:
             continue
         if affix.type == "suffix" and value.endswith(affix.value):
             value = value[: -len(affix.value)]
@@ -118,13 +145,60 @@ def _apply_affixes(value: str, affixes: list[Any]) -> str:
     return value
 
 
+def _build_template(campaign: Any) -> str:
+    """
+    Derive title template string from campaign's token sequence.
+
+    keyword/pool tokens → {slug} placeholder.
+    literal tokens      → raw value text.
+    Joined with spaces in sort_order.
+    """
+    tokens = sorted(
+        getattr(campaign, "tokens", []),
+        key=lambda t: t.sort_order,
+    )
+    parts: list[str] = []
+    for token in tokens:
+        if token.token_type == "literal":
+            parts.append(token.value or "")
+        else:
+            parts.append(f"{{{token.slug}}}")
+    return " ".join(parts)
+
+
 def _build_title(combo: Any) -> TitleOption:
-    """Build a TitleOption from campaign template + combination keywords."""
+    """Build a TitleOption from campaign tokens + combination keywords."""
     campaign = combo.campaign
     return TitleOption(
-        template=campaign.title_template,
+        template=_build_template(campaign),
         values=_build_values(combo),
+        pools=_build_pools(campaign),
     )
+
+
+def _build_pools(campaign: Any) -> dict[str, tuple[str, ...]]:
+    """
+    Build slug -> pool tuple dict from campaign's pool-type tokens.
+
+    Only active palette items are included.
+    Tokens with no active items are excluded from the dict.
+    """
+    tokens = getattr(campaign, "tokens", [])
+    pools: dict[str, tuple[str, ...]] = {}
+    for token in tokens:
+        if token.token_type != "pool":
+            continue
+        palette = getattr(token, "palette", None)
+        if not palette:
+            continue
+        active_items = tuple(
+            item.value
+            for item in palette.items
+            if getattr(item, "active", True)
+        )
+        if active_items:
+            pools[token.slug] = active_items
+    return pools
 
 
 # ---------------------------------------------------------------------------

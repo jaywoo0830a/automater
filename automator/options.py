@@ -6,7 +6,7 @@ Frozen value objects — no I/O, no imports beyond stdlib.
 Public interface
 ----------------
     AccountOption       — who is posting
-    TitleOption         — title template + salts
+    TitleOption         — title template + pools
     Section             — block container (role, tone)
     PublishOption       — schedule, tags, visibility
     RunSetting          — throttling, failure handling
@@ -85,24 +85,29 @@ class TitleOption:
     Template format
     ---------------
     Python str.format()-style {slug} tokens.
-    {salt} → random salt from prefix_salts / suffix_salts.
+    Keyword category slugs are resolved from `values` (deterministic).
+    Palette slugs are resolved from `pools` (random choice).
 
-    Salt data is supplied directly — no file I/O.
-    Typically loaded from CampaignPalette(slug="salt_prefix" / "salt_suffix")
-    before constructing this option.
+    Namespace safety: values keys and pools keys must not overlap.
+    generate_title() raises ValueError on collision.
+
+    Pools data is supplied directly — no file I/O.
+    Loaded from CampaignPalette rows before constructing this option.
 
     Examples:
         TitleOption(
-            template="{region} {subject} {salt}",
+            template="{salt_prefix} {region} {subject} {salt_suffix}",
             values={"region": "강남", "subject": "수학"},
-            suffix_salts=("강력 추천", "즉시 가능"),
+            pools={
+                "salt_prefix": ("검증된", "전문"),
+                "salt_suffix": ("강력 추천", "즉시 가능"),
+            },
         )
         TitleOption(fixed_title="강남 수학 과외 추천")
     """
     template:         str              = ""
     values:           dict             = field(default_factory=dict)
-    prefix_salts:     tuple[str, ...]  = ()
-    suffix_salts:     tuple[str, ...]  = ()
+    pools:            dict[str, tuple[str, ...]] = field(default_factory=dict)
     fixed_title:      str              = ""
     has_space:        bool             = True
     add_affix:        bool             = False

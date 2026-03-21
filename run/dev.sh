@@ -2,7 +2,6 @@
 # run/dev.sh — 개발 환경 도구
 #
 #   (없음)       가상환경 활성화 후 셸 진입
-#   --server     API 서버 실행 (uvicorn --reload)
 #   --watch      파일 변경 시 unit 테스트 자동 재실행
 #   --session    네이버 로그인 후 세션 파일 저장
 #   --capture    셀렉터 캡처 도구 실행
@@ -38,40 +37,12 @@ case "${MODE}" in
     echo "  Python : $(python --version)"
     echo "  루트   : ${PROJECT_ROOT}"
     echo ""
-    echo "  bash ./run/dev.sh --server       # API 서버"
     echo "  bash ./run/test.sh               # unit 테스트"
     echo "  bash ./run/test.sh --e2e         # e2e smoke"
     echo "  bash ./run/test.sh --all         # 전체"
     echo "  bash ./run/factory.sh db-up      # MySQL 시작"
     echo ""
     exec "${SHELL}"
-    ;;
-
-  --server)
-    _require_venv
-    _load_env
-
-    PORT="${API_PORT:-8000}"
-
-    echo "========================================"
-    echo "  Automater API Server"
-    echo "========================================"
-    echo "  URL     : http://localhost:${PORT}/api/v1"
-    echo "  Docs    : http://localhost:${PORT}/docs"
-    echo "  ReDoc   : http://localhost:${PORT}/redoc"
-    echo "  DB      : ${DB_HOST:-127.0.0.1}:${DB_PORT:-3306}/${DB_NAME:-automator}"
-    echo ""
-    echo "  Ctrl+C 로 종료"
-    echo "========================================"
-    echo ""
-
-    uvicorn api.app:app \
-        --host 0.0.0.0 \
-        --port "${PORT}" \
-        --reload \
-        --reload-dir api \
-        --reload-dir factory \
-        --reload-dir automator
     ;;
 
   --watch)
@@ -133,7 +104,6 @@ PYEOF
   --help|-h)
     echo ""
     echo "  bash ./run/dev.sh              # 셸 진입"
-    echo "  bash ./run/dev.sh --server     # API 서버 (uvicorn --reload)"
     echo "  bash ./run/dev.sh --watch      # 파일 변경 감지 자동 테스트"
     echo "  bash ./run/dev.sh --session    # 네이버 세션 저장"
     echo "  bash ./run/dev.sh --capture    # 셀렉터 캡처"

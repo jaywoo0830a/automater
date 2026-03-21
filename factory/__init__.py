@@ -10,9 +10,15 @@ Public modules:
                                User for auth + ownership
                                PostLayout, LayoutSlot for dynamic body
                                PublishPreset, RunPreset (JSON config)
-                               Affix, CampaignPalette, PaletteItem for
-                               keyword derivation and runtime sampling
+                               Affix, CampaignAffixOverride,
+                               TemplateToken, CampaignPalette,
+                               PaletteItem for keyword derivation,
+                               template token resolution, and
+                               runtime sampling
     factory.combo_generator  — Cartesian product of campaign keywords
+    factory.bulk_importer   — Excel-to-combinations import pipeline
+    factory.excel_parser    — Excel file / tabular data parsing
+    factory.affix_detector  — Korean suffix/prefix auto-detection
     factory.keyword_picker   — Per-campaign keyword selection
     factory.dispatcher       — Assign combinations to accounts in batches
     factory.job_builder      — Translate Combination -> PostingSpec

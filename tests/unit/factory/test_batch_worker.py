@@ -72,7 +72,10 @@ def _account_row(username="testuser", blog_id="testblog"):
 
 
 def _keyword(slug, value, cat_id=1):
-    return SimpleNamespace(category=SimpleNamespace(slug=slug, id=cat_id), value=value)
+    return SimpleNamespace(
+        id=0, category=SimpleNamespace(slug=slug, id=cat_id),
+        value=value, affixes=[],
+    )
 
 
 def _combination(combo_id, keywords, campaign):
@@ -107,12 +110,13 @@ def _batch(batch_id, items, account, scheduled_at=None):
     )
 
 
-def _campaign(title_template="{region}"):
+def _campaign():
     return SimpleNamespace(
-        title_template=title_template,
         layout=None,
         publish_preset=None,
         run_preset=None,
+        affix_overrides=[],
+        tokens=[SimpleNamespace(slug="region", token_type="keyword", value=None, sort_order=0)],
     )
 
 

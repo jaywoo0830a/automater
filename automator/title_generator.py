@@ -42,7 +42,7 @@ def validate_template(template: str) -> None:
     if not raw_tokens:
         raise ValueError(
             "template contains no {slug} tokens — "
-            "use e.g. \"{region} {subject} {salt}\""
+            "use e.g. \"{region} {subject} {salt_suffix}\""
         )
 
     for tok in raw_tokens:
@@ -74,11 +74,14 @@ def generate_title(
     Generate a post title from a TitleOption.
 
     fixed_title -> return as-is.
-    Otherwise substitute {slug} tokens from values dict,
-    pick a random salt for {salt}.
+    Otherwise substitute {slug} tokens:
+      - tokens in values  -> deterministic substitution
+      - tokens in pools   -> random choice from pool
+
+    Raises ValueError if values and pools share any key (namespace collision).
 
     Args:
-        option: TitleOption with template, values, and optional salt tuples.
+        option: TitleOption with template, values, and optional pools.
         rng:    Optional random.Random for deterministic tests.
 
     Returns:
@@ -88,43 +91,28 @@ def generate_title(
         return option.fixed_title
 
     if not option.template or not option.template.strip():
-        if option.prefix_salts or option.suffix_salts:
+        if option.pools:
             raise ValueError(
-                "template must not be empty when salts are provided. "
+                "template must not be empty when pools are provided. "
                 "Use fixed_title for a literal title, or provide a template."
             )
         return ""
 
     validate_template(option.template)
+
+    collisions = set(option.values.keys()) & set(option.pools.keys())
+    if collisions:
+        raise ValueError(
+            f"namespace collision: {collisions} found in both values and pools"
+        )
+
     rng = rng or random.Random(option.seed)
-
-    prefix_salts = list(option.prefix_salts)
-    suffix_salts = list(option.suffix_salts)
-    all_salts = list(dict.fromkeys(
-        list(option.prefix_salts) + list(option.suffix_salts)
-    ))
-
     tokens = _TOKEN_RE.findall(option.template)
     sub = dict(option.values)
 
-    if "salt" in tokens:
-        pool = _pick_salt_pool(tokens, prefix_salts, suffix_salts, all_salts)
-        sub["salt"] = rng.choice(pool) if pool else ""
+    for token in tokens:
+        if token in option.pools:
+            pool = option.pools[token]
+            sub[token] = rng.choice(pool) if pool else ""
 
     return option.template.format(**sub)
-
-
-def _pick_salt_pool(
-    tokens: list[str],
-    prefix_salts: list[str],
-    suffix_salts: list[str],
-    all_salts: list[str],
-) -> list[str]:
-    """Select salt pool based on {salt} position in token list."""
-    idx = tokens.index("salt")
-    last_idx = len(tokens) - 1
-    if idx == 0:
-        return prefix_salts
-    if idx == last_idx:
-        return suffix_salts
-    return all_salts

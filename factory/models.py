@@ -12,13 +12,16 @@ Table map:
     Media                 → media                   (user-uploaded files)
     KeywordCategory       → keyword_categories
     Keyword               → keywords
-    Affix                 → affixes                (keyword derivation rules)
+    Affix                 → affixes                (global affix dictionary)
+    keyword_affixes       → keyword_affixes        (keyword ↔ affix M2M)
+    CampaignAffixOverride → campaign_affix_overrides (per-campaign keyword-affix toggle)
     Campaign              → campaigns              (user_id FK, 3 nullable preset FKs)
     CampaignSlot          → campaign_slots
+    TemplateToken         → template_tokens        (unified slug namespace per campaign)
     SpacingRule           → spacing_rules
     CampaignKeywordPick   → campaign_keyword_picks
-    CampaignPalette       → campaign_palettes      (runtime sampling pools)
-    PaletteItem           → palette_items
+    CampaignPalette       → campaign_palettes      (pool config for a token)
+    PaletteItem           → palette_items           (individual pool values)
     PostLayout            → post_layouts            (reusable block sequence)
     LayoutSlot            → layout_slots            (block_type + config JSON)
     PublishPreset         → publish_presets          (PublishOption as JSON config)
@@ -78,6 +81,30 @@ combination_keywords = Table(
         "keyword_id",
         Integer,
         ForeignKey("keywords.id", ondelete="CASCADE"),
+        primary_key=True,
+        nullable=False,
+    ),
+)
+
+
+# ---------------------------------------------------------------------------
+# Association table — keyword_affixes (keyword <-> affix many-to-many)
+# ---------------------------------------------------------------------------
+
+keyword_affixes = Table(
+    "keyword_affixes",
+    Base.metadata,
+    Column(
+        "keyword_id",
+        Integer,
+        ForeignKey("keywords.id", ondelete="CASCADE"),
+        primary_key=True,
+        nullable=False,
+    ),
+    Column(
+        "affix_id",
+        Integer,
+        ForeignKey("affixes.id", ondelete="CASCADE"),
         primary_key=True,
         nullable=False,
     ),
@@ -183,7 +210,7 @@ class KeywordCategory(Base):
     __tablename__ = "keyword_categories"
 
     id:         Mapped[int]      = mapped_column(Integer,    primary_key=True, autoincrement=True)
-    name:       Mapped[str]      = mapped_column(String(64), nullable=False)
+    name:       Mapped[str]      = mapped_column(String(64), nullable=False, unique=True)
     slug:       Mapped[str]      = mapped_column(String(32), nullable=False, unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime,   nullable=False, default=lambda: datetime.now(timezone.utc))
 
@@ -229,7 +256,8 @@ class Keyword(Base):
         "CampaignKeywordPick", back_populates="keyword"
     )
     affixes: Mapped[list["Affix"]] = relationship(
-        "Affix", back_populates="keyword", order_by="Affix.sort_order"
+        "Affix", secondary=keyword_affixes, back_populates="keywords",
+        order_by="Affix.sort_order",
     )
 
 
@@ -326,7 +354,6 @@ class Campaign(Base):
     run_preset_id:      Mapped[Optional[int]] = mapped_column(Integer,     ForeignKey("run_presets.id"), nullable=True)
     name:               Mapped[str]           = mapped_column(String(128), nullable=False)
     description:        Mapped[Optional[str]] = mapped_column(Text,        nullable=True)
-    title_template:     Mapped[str]           = mapped_column(String(256), nullable=False, default="")
     config:             Mapped[dict[str, Any] | None]= mapped_column(JSON, nullable=True)
     status:             Mapped[str]           = mapped_column(String(16),  nullable=False, default="active")
     created_at:         Mapped[datetime]      = mapped_column(DateTime,    nullable=False, default=lambda: datetime.now(timezone.utc))
@@ -337,8 +364,9 @@ class Campaign(Base):
     layout:         Mapped[Optional["PostLayout"]]       = relationship("PostLayout",   back_populates="campaigns")
     publish_preset: Mapped[Optional["PublishPreset"]]    = relationship("PublishPreset", back_populates="campaigns")
     run_preset:     Mapped[Optional["RunPreset"]]        = relationship("RunPreset",    back_populates="campaigns")
-    slots:          Mapped[list["CampaignSlot"]]         = relationship(
-        "CampaignSlot", back_populates="campaign", order_by="CampaignSlot.sort_order"
+    tokens:         Mapped[list["TemplateToken"]]        = relationship(
+        "TemplateToken", back_populates="campaign",
+        order_by="TemplateToken.sort_order", cascade="all, delete-orphan",
     )
     spacing_rules:  Mapped[list["SpacingRule"]]          = relationship("SpacingRule",   back_populates="campaign")
     combinations:   Mapped[list["Combination"]]          = relationship("Combination",   back_populates="campaign")
@@ -346,25 +374,51 @@ class Campaign(Base):
     picks:          Mapped[list["CampaignKeywordPick"]]  = relationship(
         "CampaignKeywordPick", back_populates="campaign"
     )
-    palettes:       Mapped[list["CampaignPalette"]]      = relationship(
-        "CampaignPalette", back_populates="campaign", order_by="CampaignPalette.slug"
+    affix_overrides: Mapped[list["CampaignAffixOverride"]] = relationship(
+        "CampaignAffixOverride", back_populates="campaign",
     )
 
 
 # ---------------------------------------------------------------------------
-# CampaignSlot
+# TemplateToken — unified slug namespace per campaign
+# ---------------------------------------------------------------------------
+
+class TemplateToken(Base):
+    __tablename__ = "template_tokens"
+    __table_args__ = (
+        UniqueConstraint("campaign_id", "slug", name="uq_campaign_token_slug"),
+    )
+
+    id:          Mapped[int]           = mapped_column(Integer,    primary_key=True, autoincrement=True)
+    campaign_id: Mapped[int]           = mapped_column(Integer,    ForeignKey("campaigns.id", ondelete="CASCADE"), nullable=False)
+    slug:        Mapped[str]           = mapped_column(String(64), nullable=False)
+    token_type:  Mapped[str]           = mapped_column(String(16), nullable=False)  # "keyword" | "pool" | "literal"
+    value:       Mapped[Optional[str]] = mapped_column(String(128), nullable=True)  # text for literal tokens
+    sort_order:  Mapped[int]           = mapped_column(Integer,    nullable=False, default=0)
+    created_at:  Mapped[datetime]      = mapped_column(DateTime,   nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    # relationships
+    campaign: Mapped["Campaign"]                  = relationship("Campaign",        back_populates="tokens")
+    slot:     Mapped[Optional["CampaignSlot"]]    = relationship(
+        "CampaignSlot", back_populates="token", uselist=False, cascade="all, delete-orphan",
+    )
+    palette:  Mapped[Optional["CampaignPalette"]] = relationship(
+        "CampaignPalette", back_populates="token", uselist=False, cascade="all, delete-orphan",
+    )
+
+
+# ---------------------------------------------------------------------------
+# CampaignSlot — keyword category binding for a token
 # ---------------------------------------------------------------------------
 
 class CampaignSlot(Base):
     __tablename__ = "campaign_slots"
 
-    campaign_id: Mapped[int]      = mapped_column(Integer,  ForeignKey("campaigns.id"),          primary_key=True)
-    category_id: Mapped[int]      = mapped_column(Integer,  ForeignKey("keyword_categories.id"), primary_key=True)
-    sort_order:  Mapped[int]      = mapped_column(Integer,  nullable=False, default=0)
-    created_at:  Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    token_id:    Mapped[int] = mapped_column(Integer, ForeignKey("template_tokens.id", ondelete="CASCADE"), primary_key=True)
+    category_id: Mapped[int] = mapped_column(Integer, ForeignKey("keyword_categories.id"), nullable=False)
 
     # relationships
-    campaign: Mapped["Campaign"]         = relationship("Campaign",         back_populates="slots")
+    token:    Mapped["TemplateToken"]    = relationship("TemplateToken",    back_populates="slot")
     category: Mapped["KeywordCategory"]  = relationship("KeywordCategory",  back_populates="slots")
 
 
@@ -480,47 +534,72 @@ class BatchItem(Base):
 
 
 # ---------------------------------------------------------------------------
-# Affix — prefix/suffix derivation rules for a keyword stem
+# Affix — global affix dictionary (prefix/suffix values)
 # ---------------------------------------------------------------------------
 
 class Affix(Base):
     __tablename__ = "affixes"
     __table_args__ = (
-        UniqueConstraint("keyword_id", "type", "value", name="uq_keyword_affix"),
+        UniqueConstraint("type", "value", name="uq_affix_type_value"),
     )
 
     id:         Mapped[int]      = mapped_column(Integer,    primary_key=True, autoincrement=True)
-    keyword_id: Mapped[int]      = mapped_column(Integer,    ForeignKey("keywords.id", ondelete="CASCADE"), nullable=False)
     type:       Mapped[str]      = mapped_column(String(16), nullable=False)  # "prefix" | "suffix"
     value:      Mapped[str]      = mapped_column(String(64), nullable=False)
     sort_order: Mapped[int]      = mapped_column(Integer,    nullable=False, default=0)
-    active:     Mapped[bool]     = mapped_column(Boolean,    nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime,   nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # relationships
-    keyword: Mapped["Keyword"] = relationship("Keyword", back_populates="affixes")
+    keywords: Mapped[list["Keyword"]] = relationship(
+        "Keyword", secondary=keyword_affixes, back_populates="affixes",
+    )
+    overrides: Mapped[list["CampaignAffixOverride"]] = relationship(
+        "CampaignAffixOverride", back_populates="affix",
+    )
 
 
 # ---------------------------------------------------------------------------
-# CampaignPalette — runtime sampling pool (replaces salts.json)
+# CampaignAffixOverride — per-campaign, per-keyword affix toggle
+# ---------------------------------------------------------------------------
+
+class CampaignAffixOverride(Base):
+    __tablename__ = "campaign_affix_overrides"
+    __table_args__ = (
+        UniqueConstraint(
+            "campaign_id", "keyword_id", "affix_id",
+            name="uq_campaign_keyword_affix",
+        ),
+    )
+
+    id:          Mapped[int]      = mapped_column(Integer,  primary_key=True, autoincrement=True)
+    campaign_id: Mapped[int]      = mapped_column(Integer,  ForeignKey("campaigns.id", ondelete="CASCADE"), nullable=False)
+    keyword_id:  Mapped[int]      = mapped_column(Integer,  ForeignKey("keywords.id", ondelete="CASCADE"),  nullable=False)
+    affix_id:    Mapped[int]      = mapped_column(Integer,  ForeignKey("affixes.id", ondelete="CASCADE"),   nullable=False)
+    active:      Mapped[bool]     = mapped_column(Boolean,  nullable=False, default=True)
+    created_at:  Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    # relationships
+    campaign: Mapped["Campaign"] = relationship("Campaign", back_populates="affix_overrides")
+    keyword:  Mapped["Keyword"]  = relationship("Keyword")
+    affix:    Mapped["Affix"]    = relationship("Affix",    back_populates="overrides")
+
+
+# ---------------------------------------------------------------------------
+# CampaignPalette — runtime sampling pool for a token
 # ---------------------------------------------------------------------------
 
 class CampaignPalette(Base):
     __tablename__ = "campaign_palettes"
-    __table_args__ = (
-        UniqueConstraint("campaign_id", "slug", name="uq_campaign_palette"),
-    )
 
-    id:          Mapped[int]      = mapped_column(Integer,    primary_key=True, autoincrement=True)
-    campaign_id: Mapped[int]      = mapped_column(Integer,    ForeignKey("campaigns.id", ondelete="CASCADE"), nullable=False)
-    slug:        Mapped[str]      = mapped_column(String(64), nullable=False)  # "salt_prefix", "salt_suffix", "cta"
-    strategy:    Mapped[str]      = mapped_column(String(16), nullable=False, default="random")  # "random" | "sequential"
-    created_at:  Mapped[datetime] = mapped_column(DateTime,   nullable=False, default=lambda: datetime.now(timezone.utc))
+    token_id:   Mapped[int] = mapped_column(Integer,    ForeignKey("template_tokens.id", ondelete="CASCADE"), primary_key=True)
+    strategy:   Mapped[str] = mapped_column(String(16), nullable=False, default="random")  # "random" | "sequential"
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # relationships
-    campaign: Mapped["Campaign"]         = relationship("Campaign", back_populates="palettes")
-    items:    Mapped[list["PaletteItem"]] = relationship(
-        "PaletteItem", back_populates="palette", order_by="PaletteItem.sort_order"
+    token: Mapped["TemplateToken"]         = relationship("TemplateToken", back_populates="palette")
+    items: Mapped[list["PaletteItem"]]     = relationship(
+        "PaletteItem", back_populates="palette", order_by="PaletteItem.sort_order",
+        cascade="all, delete-orphan",
     )
 
 
@@ -532,7 +611,7 @@ class PaletteItem(Base):
     __tablename__ = "palette_items"
 
     id:         Mapped[int]      = mapped_column(Integer,     primary_key=True, autoincrement=True)
-    palette_id: Mapped[int]      = mapped_column(Integer,     ForeignKey("campaign_palettes.id", ondelete="CASCADE"), nullable=False)
+    palette_id: Mapped[int]      = mapped_column(Integer,     ForeignKey("campaign_palettes.token_id", ondelete="CASCADE"), nullable=False)
     value:      Mapped[str]      = mapped_column(String(256), nullable=False)
     sort_order: Mapped[int]      = mapped_column(Integer,     nullable=False, default=0)
     active:     Mapped[bool]     = mapped_column(Boolean,     nullable=False, default=True)

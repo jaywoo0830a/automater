@@ -20,6 +20,7 @@ from factory.models import (
     CampaignKeywordPick,
     CampaignSlot,
     Keyword,
+    TemplateToken,
 )
 
 # Re-export the type alias so callers can type-hint without importing models
@@ -46,16 +47,18 @@ class CampaignKeywordPicker:
     def _slots(self) -> Sequence[CampaignSlot]:
         return self._session.scalars(
             select(CampaignSlot)
-            .where(CampaignSlot.campaign_id == self._campaign_id)
-            .order_by(CampaignSlot.sort_order)
+            .join(TemplateToken)
+            .where(TemplateToken.campaign_id == self._campaign_id)
+            .order_by(TemplateToken.sort_order)
         ).all()
 
     def _active_keywords_for_campaign(self) -> Sequence[Keyword]:
         return self._session.scalars(
             select(Keyword)
             .join(CampaignSlot, Keyword.category_id == CampaignSlot.category_id)
+            .join(TemplateToken, CampaignSlot.token_id == TemplateToken.id)
             .where(
-                CampaignSlot.campaign_id == self._campaign_id,
+                TemplateToken.campaign_id == self._campaign_id,
                 Keyword.active == True,  # noqa: E712
             )
         ).all()
@@ -171,8 +174,8 @@ class CampaignKeywordPicker:
         Return current picks keyed by category_id (machine-readable).
 
         Returns:
-            {1: [101, 102], 2: None, 3: None}
-            None means "no filter — use all active keywords".
+            {1: [101, 102], 2: [], 3: []}
+            Empty list means "no picks for this category".
         """
         slots = self._slots()
         picks = self._session.scalars(
@@ -180,11 +183,10 @@ class CampaignKeywordPicker:
             .where(CampaignKeywordPick.campaign_id == self._campaign_id)
         ).all()
 
-        result: CategoryPicks = {s.category_id: None for s in slots}
+        result: CategoryPicks = {s.category_id: [] for s in slots}
         for pick in picks:
             cat_id = pick.category_id
             if cat_id in result:
-                if result[cat_id] is None:
-                    result[cat_id] = []
                 result[cat_id].append(pick.keyword_id)
+        return result
         return result

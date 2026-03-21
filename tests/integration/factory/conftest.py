@@ -26,8 +26,8 @@ from sqlalchemy.orm import Session
 from factory.db import create_schema, drop_schema
 from factory.models import (
     Base, User, Platform, Campaign, KeywordCategory,
-    Keyword, CampaignSlot, SpacingRule,
-    Affix, CampaignPalette, PaletteItem,
+    Keyword, TemplateToken, CampaignSlot, CampaignKeywordPick, SpacingRule,
+    Affix, CampaignAffixOverride, CampaignPalette, PaletteItem,
 )
 
 
@@ -85,20 +85,23 @@ def session(engine) -> Session:
 def make_campaign(
     session: Session,
     *,
-    with_slots:    bool = True,
-    with_keywords: bool = True,
+    with_categories: bool = True,
+    with_slots:      bool = True,
+    with_keywords:   bool = True,
+    with_picks:      bool = True,
 ) -> Campaign:
     """
     최소한의 완전한 캠페인 픽스처를 삽입한다.
 
         Platform 1개
         Campaign 1개
-        KeywordCategory 3개: region / subject / learning_type
+        KeywordCategory 3개 (with_categories=True): region / subject / learning_type
         Keywords (with_keywords=True):
             region:        강남구(active), 수원시(active), 성남시(inactive)
             subject:       수학, 영어
             learning_type: 과외, 학원
-        CampaignSlots (with_slots=True)
+        CampaignSlots (with_slots=True) — requires with_categories
+        CampaignKeywordPicks (with_picks=True): all active keywords
         SpacingRule 1개 (active)
     """
     platform = Platform(
@@ -120,11 +123,13 @@ def make_campaign(
         user_id        = user.id,
         platform_id    = platform.id,
         name           = "Test Campaign",
-        title_template = "{region} {subject} {learning_type}",
         status         = "active",
     )
     session.add(campaign)
     session.flush()
+
+    if not with_categories:
+        return campaign
 
     region_cat  = KeywordCategory(name="지역",     slug="region")
     subject_cat = KeywordCategory(name="과목",     slug="subject")
@@ -133,10 +138,26 @@ def make_campaign(
     session.flush()
 
     if with_slots:
+        # Keyword tokens — one per category
+        token_region = TemplateToken(
+            campaign_id=campaign.id, slug="region",
+            token_type="keyword", sort_order=0,
+        )
+        token_subject = TemplateToken(
+            campaign_id=campaign.id, slug="subject",
+            token_type="keyword", sort_order=1,
+        )
+        token_lt = TemplateToken(
+            campaign_id=campaign.id, slug="learning_type",
+            token_type="keyword", sort_order=2,
+        )
+        session.add_all([token_region, token_subject, token_lt])
+        session.flush()
+
         session.add_all([
-            CampaignSlot(campaign_id=campaign.id, category_id=region_cat.id,  sort_order=0),
-            CampaignSlot(campaign_id=campaign.id, category_id=subject_cat.id, sort_order=1),
-            CampaignSlot(campaign_id=campaign.id, category_id=lt_cat.id,      sort_order=2),
+            CampaignSlot(token_id=token_region.id,  category_id=region_cat.id),
+            CampaignSlot(token_id=token_subject.id, category_id=subject_cat.id),
+            CampaignSlot(token_id=token_lt.id,      category_id=lt_cat.id),
         ])
         session.flush()
 
@@ -160,33 +181,59 @@ def make_campaign(
         ))
         session.flush()
 
-        # Affix examples — keyword derivation rules
+        # Picks — explicitly bind active keywords to campaign
+        if with_picks:
+            active_keywords = session.scalars(
+                select(Keyword).where(Keyword.active == True)  # noqa: E712
+            ).all()
+            for kw in active_keywords:
+                session.add(CampaignKeywordPick(
+                    campaign_id=campaign.id,
+                    category_id=kw.category_id,
+                    keyword_id=kw.id,
+                ))
+            session.flush()
+
+        # Affix examples — global affix dictionary + keyword links
+        affix_gu = Affix(type="suffix", value="구", sort_order=0)
+        affix_dong_suffix = Affix(type="suffix", value="동", sort_order=1)
+        affix_dong_prefix = Affix(type="prefix", value="동", sort_order=0)
+        session.add_all([affix_gu, affix_dong_suffix, affix_dong_prefix])
+        session.flush()
+
         gangnam = session.scalars(
             select(Keyword).where(Keyword.value == "강남구")
         ).first()
         if gangnam:
-            session.add_all([
-                Affix(keyword_id=gangnam.id, type="suffix", value="구", sort_order=0),
-                Affix(keyword_id=gangnam.id, type="suffix", value="동", sort_order=1),
-                Affix(keyword_id=gangnam.id, type="prefix", value="동", sort_order=0),
-            ])
+            gangnam.affixes = [affix_gu, affix_dong_suffix, affix_dong_prefix]
             session.flush()
 
-        # Palette examples — runtime sampling pools (replaces salts.json)
-        salt_prefix = CampaignPalette(
-            campaign_id=campaign.id, slug="salt_prefix", strategy="random",
+        # Palette tokens — runtime sampling pools
+        token_salt_prefix = TemplateToken(
+            campaign_id=campaign.id, slug="salt_prefix",
+            token_type="pool", sort_order=10,
         )
-        salt_suffix = CampaignPalette(
-            campaign_id=campaign.id, slug="salt_suffix", strategy="random",
+        token_salt_suffix = TemplateToken(
+            campaign_id=campaign.id, slug="salt_suffix",
+            token_type="pool", sort_order=11,
         )
-        session.add_all([salt_prefix, salt_suffix])
+        session.add_all([token_salt_prefix, token_salt_suffix])
+        session.flush()
+
+        palette_prefix = CampaignPalette(
+            token_id=token_salt_prefix.id, strategy="random",
+        )
+        palette_suffix = CampaignPalette(
+            token_id=token_salt_suffix.id, strategy="random",
+        )
+        session.add_all([palette_prefix, palette_suffix])
         session.flush()
 
         session.add_all([
-            PaletteItem(palette_id=salt_prefix.id, value="검증된",   sort_order=0),
-            PaletteItem(palette_id=salt_prefix.id, value="전문",     sort_order=1),
-            PaletteItem(palette_id=salt_suffix.id, value="강력 추천", sort_order=0),
-            PaletteItem(palette_id=salt_suffix.id, value="즉시 가능", sort_order=1),
+            PaletteItem(palette_id=palette_prefix.token_id, value="검증된",   sort_order=0),
+            PaletteItem(palette_id=palette_prefix.token_id, value="전문",     sort_order=1),
+            PaletteItem(palette_id=palette_suffix.token_id, value="강력 추천", sort_order=0),
+            PaletteItem(palette_id=palette_suffix.token_id, value="즉시 가능", sort_order=1),
         ])
         session.flush()
 
