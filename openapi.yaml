@@ -1,0 +1,1768 @@
+openapi: 3.2.0
+info:
+  title: Automater API
+  version: 2.0.0
+  description: |
+    Blog automation campaign management API.
+
+    Core workflow:
+      1. Create a campaign
+      2. Import keywords (via Excel or manually)
+      3. Configure template tokens (keyword / pool / literal)
+      4. Generate combinations
+      5. Dispatch batches to platform accounts
+      6. Monitor batch execution
+
+servers:
+  - url: /api/v2
+    description: Development
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: auth
+    description: Registration, login, current user
+  - name: platforms
+    description: Supported blog platforms (read-only)
+  - name: accounts
+    description: User's platform accounts (blog login credentials)
+  - name: campaigns
+    description: Campaign CRUD and overview
+  - name: tokens
+    description: Title template tokens per campaign (keyword / pool / literal)
+  - name: picks
+    description: Keyword selection per campaign per category
+  - name: affix-overrides
+    description: Per-campaign, per-keyword affix toggle (체크박스)
+  - name: spacing-rules
+    description: Spacing patterns per campaign
+  - name: combinations
+    description: Generated keyword combinations
+  - name: batches
+    description: Batch dispatch and monitoring
+  - name: bulk-import
+    description: Eric/Minji workflow — Excel upload to combinations
+  - name: keywords
+    description: Global keyword categories and keywords
+  - name: affixes
+    description: Global affix dictionary (동, 구, 시, ...)
+  - name: layouts
+    description: Reusable post body templates
+  - name: presets
+    description: Publish and run setting presets
+  - name: media
+    description: User-uploaded images and files
+
+# =========================================================================
+# Paths
+# =========================================================================
+paths:
+
+  # -----------------------------------------------------------------------
+  # Auth
+  # -----------------------------------------------------------------------
+
+  /auth/register:
+    post:
+      tags: [auth]
+      operationId: register
+      summary: Create a new user account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthTokenResponse"
+
+  /auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Authenticate and receive JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthTokenResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/me:
+    get:
+      tags: [auth]
+      operationId: getMe
+      summary: Current user profile
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  # -----------------------------------------------------------------------
+  # Platforms
+  # -----------------------------------------------------------------------
+
+  /platforms:
+    get:
+      tags: [platforms]
+      operationId: listPlatforms
+      summary: List supported platforms
+      responses:
+        "200":
+          description: Platform list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Platform"
+
+  # -----------------------------------------------------------------------
+  # Accounts
+  # -----------------------------------------------------------------------
+
+  /accounts:
+    get:
+      tags: [accounts]
+      operationId: listAccounts
+      summary: List user's platform accounts
+      responses:
+        "200":
+          description: Account list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Account"
+    post:
+      tags: [accounts]
+      operationId: createAccount
+      summary: Register a platform account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountCreate"
+      responses:
+        "201":
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+
+  /accounts/{accountId}:
+    parameters:
+      - $ref: "#/components/parameters/accountId"
+    get:
+      tags: [accounts]
+      operationId: getAccount
+      summary: Get account details
+      responses:
+        "200":
+          description: Account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [accounts]
+      operationId: updateAccount
+      summary: Update account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+    delete:
+      tags: [accounts]
+      operationId: deleteAccount
+      summary: Delete account
+      responses:
+        "204":
+          description: Deleted
+
+  # -----------------------------------------------------------------------
+  # Campaigns
+  # -----------------------------------------------------------------------
+
+  /campaigns:
+    get:
+      tags: [campaigns]
+      operationId: listCampaigns
+      summary: List user's campaigns
+      responses:
+        "200":
+          description: Campaign list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CampaignSummary"
+    post:
+      tags: [campaigns]
+      operationId: createCampaign
+      summary: Create a campaign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CampaignCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+
+  /campaigns/{campaignId}:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+    get:
+      tags: [campaigns]
+      operationId: getCampaign
+      summary: Campaign detail with tokens, picks, stats
+      responses:
+        "200":
+          description: Full campaign detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [campaigns]
+      operationId: updateCampaign
+      summary: Update campaign metadata
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CampaignUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+    delete:
+      tags: [campaigns]
+      operationId: deleteCampaign
+      summary: Delete campaign
+      responses:
+        "204":
+          description: Deleted
+
+  /campaigns/{campaignId}/overview:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+    get:
+      tags: [campaigns]
+      operationId: getCampaignOverview
+      summary: Dashboard stats (combo count, batch status, derived template)
+      responses:
+        "200":
+          description: Overview stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignOverview"
+
+  # -----------------------------------------------------------------------
+  # Template Tokens
+  # -----------------------------------------------------------------------
+
+  /campaigns/{campaignId}/tokens:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+    get:
+      tags: [tokens]
+      operationId: listTokens
+      summary: List tokens in sort_order (derives title template)
+      responses:
+        "200":
+          description: Token list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TemplateToken"
+    post:
+      tags: [tokens]
+      operationId: createToken
+      summary: Add a token (keyword, pool, or literal)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TemplateTokenCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemplateToken"
+        "409":
+          description: Slug collision within campaign
+
+  /campaigns/{campaignId}/tokens/reorder:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+    put:
+      tags: [tokens]
+      operationId: reorderTokens
+      summary: Reorder tokens (changes derived template)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token_ids]
+              properties:
+                token_ids:
+                  type: array
+                  items:
+                    type: integer
+                  description: Token IDs in desired order
+      responses:
+        "200":
+          description: Reordered
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TemplateToken"
+
+  /campaigns/{campaignId}/tokens/{tokenId}:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+      - $ref: "#/components/parameters/tokenId"
+    patch:
+      tags: [tokens]
+      operationId: updateToken
+      summary: Update token (slug, value for literal, palette items for pool)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TemplateTokenUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemplateToken"
+    delete:
+      tags: [tokens]
+      operationId: deleteToken
+      summary: Delete token (cascade deletes slot or palette)
+      responses:
+        "204":
+          description: Deleted
+
+  # -----------------------------------------------------------------------
+  # Picks
+  # -----------------------------------------------------------------------
+
+  /campaigns/{campaignId}/picks:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+    get:
+      tags: [picks]
+      operationId: listPicks
+      summary: Current picks per category
+      responses:
+        "200":
+          description: Pick map
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: array
+                  items:
+                    type: string
+                description: "{category_slug: [keyword_values]}"
+                example:
+                  region: ["강남구", "수원시"]
+                  subject: []
+    put:
+      tags: [picks]
+      operationId: savePicks
+      summary: Replace picks for one category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SavePicksRequest"
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+
+  # -----------------------------------------------------------------------
+  # Affix Overrides
+  # -----------------------------------------------------------------------
+
+  /campaigns/{campaignId}/affix-overrides:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+    get:
+      tags: [affix-overrides]
+      operationId: listAffixOverrides
+      summary: List affix overrides for this campaign
+      responses:
+        "200":
+          description: Override list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AffixOverride"
+    put:
+      tags: [affix-overrides]
+      operationId: upsertAffixOverride
+      summary: Set active/inactive for a (keyword, affix) pair
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AffixOverrideUpsert"
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AffixOverride"
+
+  # -----------------------------------------------------------------------
+  # Spacing Rules
+  # -----------------------------------------------------------------------
+
+  /campaigns/{campaignId}/spacing-rules:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+    get:
+      tags: [spacing-rules]
+      operationId: listSpacingRules
+      summary: List spacing rules
+      responses:
+        "200":
+          description: Rule list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SpacingRule"
+    post:
+      tags: [spacing-rules]
+      operationId: createSpacingRule
+      summary: Create a spacing rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpacingRuleCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpacingRule"
+
+  /campaigns/{campaignId}/spacing-rules/{ruleId}:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+      - $ref: "#/components/parameters/ruleId"
+    patch:
+      tags: [spacing-rules]
+      operationId: updateSpacingRule
+      summary: Update spacing rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpacingRuleUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpacingRule"
+    delete:
+      tags: [spacing-rules]
+      operationId: deleteSpacingRule
+      summary: Delete spacing rule
+      responses:
+        "204":
+          description: Deleted
+
+  # -----------------------------------------------------------------------
+  # Combinations
+  # -----------------------------------------------------------------------
+
+  /campaigns/{campaignId}/combinations:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+    get:
+      tags: [combinations]
+      operationId: listCombinations
+      summary: List combinations with pagination
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: size
+          in: query
+          schema: { type: integer, default: 50, maximum: 200 }
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [unused, used, all]
+            default: all
+      responses:
+        "200":
+          description: Paginated combinations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CombinationPage"
+
+  /campaigns/{campaignId}/combinations/generate:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+    post:
+      tags: [combinations]
+      operationId: generateCombinations
+      summary: Generate combinations from current picks + spacing rules
+      responses:
+        "200":
+          description: Generation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateResult"
+
+  # -----------------------------------------------------------------------
+  # Batches
+  # -----------------------------------------------------------------------
+
+  /campaigns/{campaignId}/batches:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+    get:
+      tags: [batches]
+      operationId: listBatches
+      summary: List batches
+      responses:
+        "200":
+          description: Batch list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Batch"
+    post:
+      tags: [batches]
+      operationId: dispatchBatch
+      summary: Dispatch a batch of combinations to an account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DispatchRequest"
+      responses:
+        "201":
+          description: Batch dispatched
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Batch"
+
+  /campaigns/{campaignId}/batches/{batchId}:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+      - $ref: "#/components/parameters/batchId"
+    get:
+      tags: [batches]
+      operationId: getBatch
+      summary: Batch detail with items
+      responses:
+        "200":
+          description: Batch with items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchDetail"
+
+  # -----------------------------------------------------------------------
+  # Bulk Import — Eric/Minji workflow
+  # -----------------------------------------------------------------------
+
+  /campaigns/{campaignId}/import/keywords:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+    post:
+      tags: [bulk-import]
+      operationId: importKeywords
+      summary: Import keywords from dict
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportKeywordsRequest"
+      responses:
+        "200":
+          description: Import result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportResult"
+
+  /campaigns/{campaignId}/import/excel:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+    post:
+      tags: [bulk-import]
+      operationId: importExcel
+      summary: Upload Excel and import keywords
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: ".xlsx file"
+                header_map:
+                  type: string
+                  description: "JSON string of {header_name: slug} overrides"
+                auto_detect_affixes:
+                  type: boolean
+                  default: false
+      responses:
+        "200":
+          description: Import result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportResult"
+
+  /campaigns/{campaignId}/import/pools:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+    post:
+      tags: [bulk-import]
+      operationId: importPools
+      summary: Import palette pools (salts, CTAs, etc.)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportPoolsRequest"
+      responses:
+        "200":
+          description: Pool import result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PoolImportResult"
+
+  /campaigns/{campaignId}/import/generate:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+    post:
+      tags: [bulk-import]
+      operationId: importGenerate
+      summary: Clean stale combos + generate new ones
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                spacing_patterns:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties:
+                      type: integer
+                  description: Custom patterns. null = auto-create default.
+      responses:
+        "200":
+          description: Generate result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateResult"
+
+  /campaigns/{campaignId}/reset/soft:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+    post:
+      tags: [bulk-import]
+      operationId: softReset
+      summary: Delete undispatched combinations only
+      responses:
+        "200":
+          description: Reset result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResetResult"
+
+  /campaigns/{campaignId}/reset/hard:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+    post:
+      tags: [bulk-import]
+      operationId: hardReset
+      summary: Delete everything except dispatched combos and batch history
+      responses:
+        "200":
+          description: Reset result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResetResult"
+
+  # -----------------------------------------------------------------------
+  # Keywords (global)
+  # -----------------------------------------------------------------------
+
+  /keyword-categories:
+    get:
+      tags: [keywords]
+      operationId: listCategories
+      summary: List all keyword categories
+      responses:
+        "200":
+          description: Category list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/KeywordCategory"
+    post:
+      tags: [keywords]
+      operationId: createCategory
+      summary: Create a keyword category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KeywordCategoryCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeywordCategory"
+
+  /keyword-categories/{categoryId}/keywords:
+    parameters:
+      - $ref: "#/components/parameters/categoryId"
+    get:
+      tags: [keywords]
+      operationId: listKeywords
+      summary: List keywords in a category
+      responses:
+        "200":
+          description: Keyword list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Keyword"
+    post:
+      tags: [keywords]
+      operationId: createKeyword
+      summary: Create a keyword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KeywordCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Keyword"
+
+  /keywords/{keywordId}:
+    parameters:
+      - $ref: "#/components/parameters/keywordId"
+    patch:
+      tags: [keywords]
+      operationId: updateKeyword
+      summary: Update keyword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KeywordUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Keyword"
+    delete:
+      tags: [keywords]
+      operationId: deleteKeyword
+      summary: Delete keyword
+      responses:
+        "204":
+          description: Deleted
+
+  # -----------------------------------------------------------------------
+  # Affixes (global)
+  # -----------------------------------------------------------------------
+
+  /affixes:
+    get:
+      tags: [affixes]
+      operationId: listAffixes
+      summary: List all affixes
+      responses:
+        "200":
+          description: Affix list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Affix"
+    post:
+      tags: [affixes]
+      operationId: createAffix
+      summary: Create an affix
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AffixCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Affix"
+
+  /affixes/{affixId}:
+    parameters:
+      - $ref: "#/components/parameters/affixId"
+    delete:
+      tags: [affixes]
+      operationId: deleteAffix
+      summary: Delete affix
+      responses:
+        "204":
+          description: Deleted
+
+  # -----------------------------------------------------------------------
+  # Layouts
+  # -----------------------------------------------------------------------
+
+  /layouts:
+    get:
+      tags: [layouts]
+      operationId: listLayouts
+      summary: List user's layouts
+      responses:
+        "200":
+          description: Layout list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PostLayout"
+    post:
+      tags: [layouts]
+      operationId: createLayout
+      summary: Create a layout with slots
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PostLayoutCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostLayout"
+
+  /layouts/{layoutId}:
+    parameters:
+      - $ref: "#/components/parameters/layoutId"
+    get:
+      tags: [layouts]
+      operationId: getLayout
+      summary: Layout detail with slots
+      responses:
+        "200":
+          description: Layout
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostLayout"
+    delete:
+      tags: [layouts]
+      operationId: deleteLayout
+      summary: Delete layout (cascade deletes slots)
+      responses:
+        "204":
+          description: Deleted
+
+  # -----------------------------------------------------------------------
+  # Presets
+  # -----------------------------------------------------------------------
+
+  /presets/publish:
+    get:
+      tags: [presets]
+      operationId: listPublishPresets
+      summary: List publish presets
+      responses:
+        "200":
+          description: Preset list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PublishPreset"
+    post:
+      tags: [presets]
+      operationId: createPublishPreset
+      summary: Create publish preset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PresetCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublishPreset"
+
+  /presets/run:
+    get:
+      tags: [presets]
+      operationId: listRunPresets
+      summary: List run presets
+      responses:
+        "200":
+          description: Preset list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RunPreset"
+    post:
+      tags: [presets]
+      operationId: createRunPreset
+      summary: Create run preset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PresetCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunPreset"
+
+  # -----------------------------------------------------------------------
+  # Media
+  # -----------------------------------------------------------------------
+
+  /media:
+    get:
+      tags: [media]
+      operationId: listMedia
+      summary: List user's uploaded files
+      responses:
+        "200":
+          description: Media list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Media"
+    post:
+      tags: [media]
+      operationId: uploadMedia
+      summary: Upload image/file
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Uploaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Media"
+
+  /media/{mediaId}:
+    parameters:
+      - $ref: "#/components/parameters/mediaId"
+    delete:
+      tags: [media]
+      operationId: deleteMedia
+      summary: Delete media
+      responses:
+        "204":
+          description: Deleted
+
+# =========================================================================
+# Components
+# =========================================================================
+components:
+
+  # -----------------------------------------------------------------------
+  # Security
+  # -----------------------------------------------------------------------
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  # -----------------------------------------------------------------------
+  # Parameters
+  # -----------------------------------------------------------------------
+  parameters:
+    campaignId:
+      name: campaignId
+      in: path
+      required: true
+      schema: { type: integer }
+    tokenId:
+      name: tokenId
+      in: path
+      required: true
+      schema: { type: integer }
+    accountId:
+      name: accountId
+      in: path
+      required: true
+      schema: { type: integer }
+    ruleId:
+      name: ruleId
+      in: path
+      required: true
+      schema: { type: integer }
+    batchId:
+      name: batchId
+      in: path
+      required: true
+      schema: { type: integer }
+    categoryId:
+      name: categoryId
+      in: path
+      required: true
+      schema: { type: integer }
+    keywordId:
+      name: keywordId
+      in: path
+      required: true
+      schema: { type: integer }
+    affixId:
+      name: affixId
+      in: path
+      required: true
+      schema: { type: integer }
+    layoutId:
+      name: layoutId
+      in: path
+      required: true
+      schema: { type: integer }
+    mediaId:
+      name: mediaId
+      in: path
+      required: true
+      schema: { type: integer }
+
+  # -----------------------------------------------------------------------
+  # Responses
+  # -----------------------------------------------------------------------
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Authentication failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  # -----------------------------------------------------------------------
+  # Schemas
+  # -----------------------------------------------------------------------
+  schemas:
+
+    Error:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: string
+
+    # -- Auth --
+
+    RegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+        display_name: { type: string }
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+
+    AuthTokenResponse:
+      type: object
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, default: bearer }
+        user:
+          $ref: "#/components/schemas/User"
+
+    User:
+      type: object
+      properties:
+        id: { type: integer }
+        email: { type: string }
+        display_name: { type: string }
+        role: { type: string, enum: [operator, admin] }
+        status: { type: string }
+        created_at: { type: string, format: date-time }
+
+    # -- Platform --
+
+    Platform:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        slug: { type: string }
+        base_url: { type: string }
+        status: { type: string }
+
+    # -- Account --
+
+    Account:
+      type: object
+      properties:
+        id: { type: integer }
+        platform_id: { type: integer }
+        platform_name: { type: string }
+        username: { type: string }
+        cooldown_days: { type: integer }
+        last_used_at: { type: string, format: date-time, nullable: true }
+        status: { type: string }
+        note: { type: string }
+        created_at: { type: string, format: date-time }
+
+    AccountCreate:
+      type: object
+      required: [platform_id, username, password]
+      properties:
+        platform_id: { type: integer }
+        username: { type: string }
+        password: { type: string }
+        cooldown_days: { type: integer, default: 14 }
+        note: { type: string }
+
+    AccountUpdate:
+      type: object
+      properties:
+        password: { type: string }
+        cooldown_days: { type: integer }
+        status: { type: string }
+        note: { type: string }
+
+    # -- Campaign --
+
+    CampaignSummary:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        platform_name: { type: string }
+        status: { type: string }
+        combination_count: { type: integer }
+        batch_count: { type: integer }
+        created_at: { type: string, format: date-time }
+
+    Campaign:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        platform_id: { type: integer }
+        layout_id: { type: integer, nullable: true }
+        publish_preset_id: { type: integer, nullable: true }
+        run_preset_id: { type: integer, nullable: true }
+        config: { type: object, nullable: true }
+        status: { type: string }
+        derived_template: { type: string, description: "Auto-derived from tokens" }
+        tokens:
+          type: array
+          items:
+            $ref: "#/components/schemas/TemplateToken"
+        created_at: { type: string, format: date-time }
+
+    CampaignCreate:
+      type: object
+      required: [name, platform_id]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        platform_id: { type: integer }
+        layout_id: { type: integer }
+        publish_preset_id: { type: integer }
+        run_preset_id: { type: integer }
+
+    CampaignUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
+        layout_id: { type: integer, nullable: true }
+        publish_preset_id: { type: integer, nullable: true }
+        run_preset_id: { type: integer, nullable: true }
+        status: { type: string }
+
+    CampaignOverview:
+      type: object
+      properties:
+        campaign_id: { type: integer }
+        derived_template: { type: string }
+        token_count: { type: integer }
+        combination_total: { type: integer }
+        combination_unused: { type: integer }
+        combination_used: { type: integer }
+        batch_pending: { type: integer }
+        batch_running: { type: integer }
+        batch_completed: { type: integer }
+
+    # -- Template Token --
+
+    TemplateToken:
+      type: object
+      properties:
+        id: { type: integer }
+        slug: { type: string }
+        token_type: { type: string, enum: [keyword, pool, literal] }
+        sort_order: { type: integer }
+        value: { type: string, nullable: true, description: "Literal text (literal type only)" }
+        category_id: { type: integer, nullable: true, description: "Keyword category (keyword type only)" }
+        category_name: { type: string, nullable: true }
+        palette:
+          $ref: "#/components/schemas/Palette"
+          nullable: true
+          description: "Pool config (pool type only)"
+        created_at: { type: string, format: date-time }
+
+    TemplateTokenCreate:
+      type: object
+      required: [slug, token_type]
+      properties:
+        slug: { type: string }
+        token_type: { type: string, enum: [keyword, pool, literal] }
+        sort_order: { type: integer }
+        value: { type: string, description: "Required for literal" }
+        category_id: { type: integer, description: "Required for keyword" }
+        palette:
+          type: object
+          properties:
+            strategy: { type: string, enum: [random, sequential], default: random }
+            items:
+              type: array
+              items: { type: string }
+
+    TemplateTokenUpdate:
+      type: object
+      properties:
+        slug: { type: string }
+        value: { type: string }
+
+    Palette:
+      type: object
+      properties:
+        strategy: { type: string, enum: [random, sequential] }
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PaletteItem"
+
+    PaletteItem:
+      type: object
+      properties:
+        id: { type: integer }
+        value: { type: string }
+        sort_order: { type: integer }
+        active: { type: boolean }
+
+    # -- Picks --
+
+    SavePicksRequest:
+      type: object
+      required: [category_slug, values]
+      properties:
+        category_slug: { type: string }
+        values:
+          type: array
+          items: { type: string }
+          description: "Empty = clear picks for this category"
+
+    # -- Affix Override --
+
+    AffixOverride:
+      type: object
+      properties:
+        id: { type: integer }
+        keyword_id: { type: integer }
+        keyword_value: { type: string }
+        affix_id: { type: integer }
+        affix_type: { type: string }
+        affix_value: { type: string }
+        active: { type: boolean }
+
+    AffixOverrideUpsert:
+      type: object
+      required: [keyword_id, affix_id, active]
+      properties:
+        keyword_id: { type: integer }
+        affix_id: { type: integer }
+        active: { type: boolean }
+
+    # -- Spacing Rule --
+
+    SpacingRule:
+      type: object
+      properties:
+        id: { type: integer }
+        pattern:
+          type: object
+          additionalProperties: { type: integer }
+        description: { type: string }
+        active: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    SpacingRuleCreate:
+      type: object
+      required: [pattern]
+      properties:
+        pattern:
+          type: object
+          additionalProperties: { type: integer }
+        description: { type: string }
+
+    SpacingRuleUpdate:
+      type: object
+      properties:
+        pattern:
+          type: object
+          additionalProperties: { type: integer }
+        description: { type: string }
+        active: { type: boolean }
+
+    # -- Combination --
+
+    Combination:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        spacing_rule_id: { type: integer, nullable: true }
+        keywords:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              category_slug: { type: string }
+              value: { type: string }
+              display_value: { type: string }
+        used_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    CombinationPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Combination"
+        total: { type: integer }
+        page: { type: integer }
+        size: { type: integer }
+        pages: { type: integer }
+
+    # -- Batch --
+
+    Batch:
+      type: object
+      properties:
+        id: { type: integer }
+        campaign_id: { type: integer }
+        account_id: { type: integer }
+        account_username: { type: string }
+        scheduled_at: { type: string, format: date-time }
+        status: { type: string, enum: [pending, running, completed, failed] }
+        item_count: { type: integer }
+        created_at: { type: string, format: date-time }
+        started_at: { type: string, format: date-time, nullable: true }
+        completed_at: { type: string, format: date-time, nullable: true }
+
+    BatchDetail:
+      allOf:
+        - $ref: "#/components/schemas/Batch"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/BatchItem"
+
+    BatchItem:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        combination_id: { type: integer, format: int64 }
+        status: { type: string, enum: [pending, running, completed, failed] }
+        result_url: { type: string, nullable: true }
+        error_message: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time, nullable: true }
+
+    DispatchRequest:
+      type: object
+      required: [account_id, scheduled_at]
+      properties:
+        account_id: { type: integer }
+        scheduled_at: { type: string, format: date-time }
+        max_items: { type: integer, description: "Limit items per batch" }
+
+    # -- Bulk Import --
+
+    ImportKeywordsRequest:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+          description: "{category_slug: [values]}"
+          example:
+            region: ["수리동", "산본동"]
+            subject: ["수학", "영어"]
+        auto_detect_affixes:
+          type: boolean
+          default: false
+
+    ImportPoolsRequest:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+          description: "{pool_slug: [values]}"
+          example:
+            salt_prefix: ["검증된", "전문"]
+            salt_suffix: ["강력 추천"]
+
+    ImportResult:
+      type: object
+      properties:
+        categories_created: { type: integer }
+        keywords_created: { type: integer }
+        keywords_existing: { type: integer }
+        tokens_created: { type: integer }
+        picks_set: { type: integer }
+
+    PoolImportResult:
+      type: object
+      properties:
+        pools_created: { type: integer }
+        items_created: { type: integer }
+        items_existing: { type: integer }
+
+    GenerateResult:
+      type: object
+      properties:
+        combinations_generated: { type: integer }
+        combinations_stale: { type: integer }
+        spacing_rules_created: { type: integer }
+
+    ResetResult:
+      type: object
+      properties:
+        combinations_removed: { type: integer }
+        combinations_preserved: { type: integer }
+        tokens_removed: { type: integer }
+        picks_removed: { type: integer }
+        spacing_rules_removed: { type: integer }
+
+    # -- Keywords (global) --
+
+    KeywordCategory:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        slug: { type: string }
+        keyword_count: { type: integer }
+        created_at: { type: string, format: date-time }
+
+    KeywordCategoryCreate:
+      type: object
+      required: [name, slug]
+      properties:
+        name: { type: string, description: "Display name (한글 OK)" }
+        slug: { type: string, pattern: "^[a-z][a-z0-9_]*$" }
+
+    Keyword:
+      type: object
+      properties:
+        id: { type: integer }
+        category_id: { type: integer }
+        value: { type: string }
+        display_value: { type: string }
+        active: { type: boolean }
+        sort_order: { type: integer }
+        affixes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Affix"
+        created_at: { type: string, format: date-time }
+
+    KeywordCreate:
+      type: object
+      required: [value]
+      properties:
+        value: { type: string }
+        display_value: { type: string }
+
+    KeywordUpdate:
+      type: object
+      properties:
+        value: { type: string }
+        display_value: { type: string }
+        active: { type: boolean }
+        sort_order: { type: integer }
+
+    # -- Affix --
+
+    Affix:
+      type: object
+      properties:
+        id: { type: integer }
+        type: { type: string, enum: [prefix, suffix] }
+        value: { type: string }
+        sort_order: { type: integer }
+
+    AffixCreate:
+      type: object
+      required: [type, value]
+      properties:
+        type: { type: string, enum: [prefix, suffix] }
+        value: { type: string }
+
+    # -- Layout --
+
+    PostLayout:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        slots:
+          type: array
+          items:
+            $ref: "#/components/schemas/LayoutSlot"
+        created_at: { type: string, format: date-time }
+
+    PostLayoutCreate:
+      type: object
+      required: [name, slots]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        slots:
+          type: array
+          items:
+            type: object
+            required: [sort_order, block_type]
+            properties:
+              sort_order: { type: integer }
+              block_type: { type: string }
+              config: { type: object }
+
+    LayoutSlot:
+      type: object
+      properties:
+        id: { type: integer }
+        sort_order: { type: integer }
+        block_type: { type: string }
+        config: { type: object }
+
+    # -- Presets --
+
+    PublishPreset:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        config: { type: object }
+        created_at: { type: string, format: date-time }
+
+    RunPreset:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        config: { type: object }
+        created_at: { type: string, format: date-time }
+
+    PresetCreate:
+      type: object
+      required: [name, config]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        config: { type: object }
+
+    # -- Media --
+
+    Media:
+      type: object
+      properties:
+        id: { type: integer }
+        original_name: { type: string }
+        content_type: { type: string }
+        storage_path: { type: string }
+        size_bytes: { type: integer }
+        created_at: { type: string, format: date-time }
