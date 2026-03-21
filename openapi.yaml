@@ -5,13 +5,9 @@ info:
   description: |
     Blog automation campaign management API.
 
-    Core workflow:
-      1. Create a campaign
-      2. Import keywords (via Excel or manually)
-      3. Configure template tokens (keyword / pool / literal)
-      4. Generate combinations
-      5. Dispatch batches to platform accounts
-      6. Monitor batch execution
+    Two user profiles:
+      - General user (민지): Excel upload → generate → dispatch
+      - Power user (운영자): Full entity control, manual token/keyword/affix management
 
 servers:
   - url: /api/v2
@@ -22,52 +18,55 @@ security:
 
 tags:
   - name: auth
-    description: Registration, login, current user
+    description: Registration, login, profile
   - name: platforms
     description: Supported blog platforms (read-only)
   - name: accounts
-    description: User's platform accounts (blog login credentials)
+    description: Platform login credentials
   - name: campaigns
-    description: Campaign CRUD and overview
+    description: Campaign CRUD
   - name: tokens
-    description: Title template tokens per campaign (keyword / pool / literal)
+    description: Title template tokens (keyword / pool / literal)
+  - name: palette-items
+    description: Individual pool values within a token
   - name: picks
-    description: Keyword selection per campaign per category
+    description: Per-campaign keyword selection
   - name: affix-overrides
-    description: Per-campaign, per-keyword affix toggle (체크박스)
+    description: Per-campaign, per-keyword affix toggle
   - name: spacing-rules
-    description: Spacing patterns per campaign
+    description: Spacing patterns for title generation
   - name: combinations
     description: Generated keyword combinations
   - name: batches
     description: Batch dispatch and monitoring
   - name: bulk-import
-    description: Eric/Minji workflow — Excel upload to combinations
+    description: Excel → combinations convenience pipeline
+  - name: keyword-categories
+    description: Global keyword category registry
   - name: keywords
-    description: Global keyword categories and keywords
+    description: Global keyword registry
   - name: affixes
-    description: Global affix dictionary (동, 구, 시, ...)
+    description: Global affix dictionary
   - name: layouts
     description: Reusable post body templates
+  - name: layout-slots
+    description: Individual blocks within a layout
   - name: presets
     description: Publish and run setting presets
   - name: media
     description: User-uploaded images and files
 
-# =========================================================================
-# Paths
-# =========================================================================
 paths:
 
-  # -----------------------------------------------------------------------
+  # =====================================================================
   # Auth
-  # -----------------------------------------------------------------------
+  # =====================================================================
 
   /auth/register:
     post:
       tags: [auth]
       operationId: register
-      summary: Create a new user account
+      summary: Create user account
       security: []
       requestBody:
         required: true
@@ -77,7 +76,7 @@ paths:
               $ref: "#/components/schemas/RegisterRequest"
       responses:
         "201":
-          description: User created
+          description: Created
           content:
             application/json:
               schema:
@@ -97,7 +96,7 @@ paths:
               $ref: "#/components/schemas/LoginRequest"
       responses:
         "200":
-          description: Login successful
+          description: OK
           content:
             application/json:
               schema:
@@ -112,15 +111,32 @@ paths:
       summary: Current user profile
       responses:
         "200":
-          description: Current user
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    patch:
+      tags: [auth]
+      operationId: updateMe
+      summary: Update display name or password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMeRequest"
+      responses:
+        "200":
+          description: Updated
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/User"
 
-  # -----------------------------------------------------------------------
+  # =====================================================================
   # Platforms
-  # -----------------------------------------------------------------------
+  # =====================================================================
 
   /platforms:
     get:
@@ -129,7 +145,7 @@ paths:
       summary: List supported platforms
       responses:
         "200":
-          description: Platform list
+          description: OK
           content:
             application/json:
               schema:
@@ -137,9 +153,24 @@ paths:
                 items:
                   $ref: "#/components/schemas/Platform"
 
-  # -----------------------------------------------------------------------
+  /platforms/{platformId}:
+    parameters:
+      - $ref: "#/components/parameters/platformId"
+    get:
+      tags: [platforms]
+      operationId: getPlatform
+      summary: Get platform details
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Platform"
+
+  # =====================================================================
   # Accounts
-  # -----------------------------------------------------------------------
+  # =====================================================================
 
   /accounts:
     get:
@@ -148,7 +179,7 @@ paths:
       summary: List user's platform accounts
       responses:
         "200":
-          description: Account list
+          description: OK
           content:
             application/json:
               schema:
@@ -167,7 +198,7 @@ paths:
               $ref: "#/components/schemas/AccountCreate"
       responses:
         "201":
-          description: Account created
+          description: Created
           content:
             application/json:
               schema:
@@ -182,7 +213,7 @@ paths:
       summary: Get account details
       responses:
         "200":
-          description: Account
+          description: OK
           content:
             application/json:
               schema:
@@ -192,7 +223,7 @@ paths:
     patch:
       tags: [accounts]
       operationId: updateAccount
-      summary: Update account
+      summary: Update account fields
       requestBody:
         required: true
         content:
@@ -214,9 +245,9 @@ paths:
         "204":
           description: Deleted
 
-  # -----------------------------------------------------------------------
+  # =====================================================================
   # Campaigns
-  # -----------------------------------------------------------------------
+  # =====================================================================
 
   /campaigns:
     get:
@@ -225,7 +256,7 @@ paths:
       summary: List user's campaigns
       responses:
         "200":
-          description: Campaign list
+          description: OK
           content:
             application/json:
               schema:
@@ -256,10 +287,10 @@ paths:
     get:
       tags: [campaigns]
       operationId: getCampaign
-      summary: Campaign detail with tokens, picks, stats
+      summary: Full campaign detail (tokens, derived template)
       responses:
         "200":
-          description: Full campaign detail
+          description: OK
           content:
             application/json:
               schema:
@@ -269,7 +300,7 @@ paths:
     patch:
       tags: [campaigns]
       operationId: updateCampaign
-      summary: Update campaign metadata
+      summary: Update campaign metadata or preset bindings
       requestBody:
         required: true
         content:
@@ -297,18 +328,71 @@ paths:
     get:
       tags: [campaigns]
       operationId: getCampaignOverview
-      summary: Dashboard stats (combo count, batch status, derived template)
+      summary: Dashboard stats
       responses:
         "200":
-          description: Overview stats
+          description: OK
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/CampaignOverview"
 
-  # -----------------------------------------------------------------------
+  /campaigns/{campaignId}/clone:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+    post:
+      tags: [campaigns]
+      operationId: cloneCampaign
+      summary: Clone campaign (tokens, picks, spacing rules)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  description: Name for the cloned campaign
+      responses:
+        "201":
+          description: Cloned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+
+  /campaigns/{campaignId}/preview-title:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+    get:
+      tags: [campaigns]
+      operationId: previewTitle
+      summary: Generate a sample title from current tokens and picks
+      parameters:
+        - name: seed
+          in: query
+          schema:
+            type: integer
+          description: Random seed for reproducible preview
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  template:
+                    type: string
+                  sample_title:
+                    type: string
+                  values_used:
+                    type: object
+
+  # =====================================================================
   # Template Tokens
-  # -----------------------------------------------------------------------
+  # =====================================================================
 
   /campaigns/{campaignId}/tokens:
     parameters:
@@ -316,10 +400,10 @@ paths:
     get:
       tags: [tokens]
       operationId: listTokens
-      summary: List tokens in sort_order (derives title template)
+      summary: List tokens in sort_order
       responses:
         "200":
-          description: Token list
+          description: OK
           content:
             application/json:
               schema:
@@ -329,7 +413,7 @@ paths:
     post:
       tags: [tokens]
       operationId: createToken
-      summary: Add a token (keyword, pool, or literal)
+      summary: Create a token (keyword, pool, or literal)
       requestBody:
         required: true
         content:
@@ -344,7 +428,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/TemplateToken"
         "409":
-          description: Slug collision within campaign
+          description: Slug collision
 
   /campaigns/{campaignId}/tokens/reorder:
     parameters:
@@ -352,7 +436,7 @@ paths:
     put:
       tags: [tokens]
       operationId: reorderTokens
-      summary: Reorder tokens (changes derived template)
+      summary: Set token order (changes derived template)
       requestBody:
         required: true
         content:
@@ -365,7 +449,6 @@ paths:
                   type: array
                   items:
                     type: integer
-                  description: Token IDs in desired order
       responses:
         "200":
           description: Reordered
@@ -380,10 +463,21 @@ paths:
     parameters:
       - $ref: "#/components/parameters/campaignId"
       - $ref: "#/components/parameters/tokenId"
+    get:
+      tags: [tokens]
+      operationId: getToken
+      summary: Get token detail (with palette if pool)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemplateToken"
     patch:
       tags: [tokens]
       operationId: updateToken
-      summary: Update token (slug, value for literal, palette items for pool)
+      summary: Update slug, value, or category binding
       requestBody:
         required: true
         content:
@@ -405,9 +499,102 @@ paths:
         "204":
           description: Deleted
 
-  # -----------------------------------------------------------------------
+  # =====================================================================
+  # Palette Items (within a pool token)
+  # =====================================================================
+
+  /campaigns/{campaignId}/tokens/{tokenId}/items:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+      - $ref: "#/components/parameters/tokenId"
+    get:
+      tags: [palette-items]
+      operationId: listPaletteItems
+      summary: List items in a pool token's palette
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PaletteItem"
+    post:
+      tags: [palette-items]
+      operationId: createPaletteItem
+      summary: Add a value to the palette
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaletteItemCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaletteItem"
+
+  /campaigns/{campaignId}/tokens/{tokenId}/items/reorder:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+      - $ref: "#/components/parameters/tokenId"
+    put:
+      tags: [palette-items]
+      operationId: reorderPaletteItems
+      summary: Set item order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [item_ids]
+              properties:
+                item_ids:
+                  type: array
+                  items:
+                    type: integer
+      responses:
+        "200":
+          description: Reordered
+
+  /campaigns/{campaignId}/tokens/{tokenId}/items/{itemId}:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+      - $ref: "#/components/parameters/tokenId"
+      - $ref: "#/components/parameters/itemId"
+    patch:
+      tags: [palette-items]
+      operationId: updatePaletteItem
+      summary: Update value or active flag
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaletteItemUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaletteItem"
+    delete:
+      tags: [palette-items]
+      operationId: deletePaletteItem
+      summary: Remove item from palette
+      responses:
+        "204":
+          description: Deleted
+
+  # =====================================================================
   # Picks
-  # -----------------------------------------------------------------------
+  # =====================================================================
 
   /campaigns/{campaignId}/picks:
     parameters:
@@ -418,7 +605,7 @@ paths:
       summary: Current picks per category
       responses:
         "200":
-          description: Pick map
+          description: OK
           content:
             application/json:
               schema:
@@ -427,10 +614,6 @@ paths:
                   type: array
                   items:
                     type: string
-                description: "{category_slug: [keyword_values]}"
-                example:
-                  region: ["강남구", "수원시"]
-                  subject: []
     put:
       tags: [picks]
       operationId: savePicks
@@ -451,10 +634,17 @@ paths:
                 properties:
                   count:
                     type: integer
+    delete:
+      tags: [picks]
+      operationId: clearAllPicks
+      summary: Clear all picks for this campaign
+      responses:
+        "204":
+          description: Cleared
 
-  # -----------------------------------------------------------------------
+  # =====================================================================
   # Affix Overrides
-  # -----------------------------------------------------------------------
+  # =====================================================================
 
   /campaigns/{campaignId}/affix-overrides:
     parameters:
@@ -462,10 +652,10 @@ paths:
     get:
       tags: [affix-overrides]
       operationId: listAffixOverrides
-      summary: List affix overrides for this campaign
+      summary: List overrides for this campaign
       responses:
         "200":
-          description: Override list
+          description: OK
           content:
             application/json:
               schema:
@@ -475,7 +665,7 @@ paths:
     put:
       tags: [affix-overrides]
       operationId: upsertAffixOverride
-      summary: Set active/inactive for a (keyword, affix) pair
+      summary: Set active/inactive for one (keyword, affix) pair
       requestBody:
         required: true
         content:
@@ -490,9 +680,50 @@ paths:
               schema:
                 $ref: "#/components/schemas/AffixOverride"
 
-  # -----------------------------------------------------------------------
+  /campaigns/{campaignId}/affix-overrides/bulk:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+    put:
+      tags: [affix-overrides]
+      operationId: bulkSetAffixOverrides
+      summary: Set multiple overrides at once
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [overrides]
+              properties:
+                overrides:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/AffixOverrideUpsert"
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AffixOverride"
+
+  /campaigns/{campaignId}/affix-overrides/{overrideId}:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+      - $ref: "#/components/parameters/overrideId"
+    delete:
+      tags: [affix-overrides]
+      operationId: deleteAffixOverride
+      summary: Remove override (revert to default active=true)
+      responses:
+        "204":
+          description: Deleted
+
+  # =====================================================================
   # Spacing Rules
-  # -----------------------------------------------------------------------
+  # =====================================================================
 
   /campaigns/{campaignId}/spacing-rules:
     parameters:
@@ -503,7 +734,7 @@ paths:
       summary: List spacing rules
       responses:
         "200":
-          description: Rule list
+          description: OK
           content:
             application/json:
               schema:
@@ -532,10 +763,21 @@ paths:
     parameters:
       - $ref: "#/components/parameters/campaignId"
       - $ref: "#/components/parameters/ruleId"
+    get:
+      tags: [spacing-rules]
+      operationId: getSpacingRule
+      summary: Get rule detail
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpacingRule"
     patch:
       tags: [spacing-rules]
       operationId: updateSpacingRule
-      summary: Update spacing rule
+      summary: Update pattern, description, or active flag
       requestBody:
         required: true
         content:
@@ -552,14 +794,14 @@ paths:
     delete:
       tags: [spacing-rules]
       operationId: deleteSpacingRule
-      summary: Delete spacing rule
+      summary: Delete rule
       responses:
         "204":
           description: Deleted
 
-  # -----------------------------------------------------------------------
+  # =====================================================================
   # Combinations
-  # -----------------------------------------------------------------------
+  # =====================================================================
 
   /campaigns/{campaignId}/combinations:
     parameters:
@@ -567,7 +809,7 @@ paths:
     get:
       tags: [combinations]
       operationId: listCombinations
-      summary: List combinations with pagination
+      summary: Paginated combination list
       parameters:
         - name: page
           in: query
@@ -583,7 +825,7 @@ paths:
             default: all
       responses:
         "200":
-          description: Paginated combinations
+          description: OK
           content:
             application/json:
               schema:
@@ -595,18 +837,63 @@ paths:
     post:
       tags: [combinations]
       operationId: generateCombinations
-      summary: Generate combinations from current picks + spacing rules
+      summary: Generate from current picks + spacing rules (dedup, no stale cleanup)
       responses:
         "200":
-          description: Generation result
+          description: OK
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/GenerateResult"
 
-  # -----------------------------------------------------------------------
+  /campaigns/{campaignId}/combinations/{combinationId}:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+      - $ref: "#/components/parameters/combinationId"
+    get:
+      tags: [combinations]
+      operationId: getCombination
+      summary: Combination detail with keywords
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Combination"
+    delete:
+      tags: [combinations]
+      operationId: deleteCombination
+      summary: Delete one combination (fails if dispatched)
+      responses:
+        "204":
+          description: Deleted
+        "409":
+          description: Cannot delete — has batch items
+
+  /campaigns/{campaignId}/combinations/delete-unused:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+    post:
+      tags: [combinations]
+      operationId: deleteUnusedCombinations
+      summary: Delete all undispatched combinations
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: integer
+                  preserved:
+                    type: integer
+
+  # =====================================================================
   # Batches
-  # -----------------------------------------------------------------------
+  # =====================================================================
 
   /campaigns/{campaignId}/batches:
     parameters:
@@ -617,7 +904,7 @@ paths:
       summary: List batches
       responses:
         "200":
-          description: Batch list
+          description: OK
           content:
             application/json:
               schema:
@@ -627,7 +914,7 @@ paths:
     post:
       tags: [batches]
       operationId: dispatchBatch
-      summary: Dispatch a batch of combinations to an account
+      summary: Dispatch combinations to an account
       requestBody:
         required: true
         content:
@@ -636,7 +923,7 @@ paths:
               $ref: "#/components/schemas/DispatchRequest"
       responses:
         "201":
-          description: Batch dispatched
+          description: Dispatched
           content:
             application/json:
               schema:
@@ -652,36 +939,33 @@ paths:
       summary: Batch detail with items
       responses:
         "200":
-          description: Batch with items
+          description: OK
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/BatchDetail"
 
-  # -----------------------------------------------------------------------
-  # Bulk Import — Eric/Minji workflow
-  # -----------------------------------------------------------------------
-
-  /campaigns/{campaignId}/import/keywords:
+  /campaigns/{campaignId}/batches/{batchId}/cancel:
     parameters:
       - $ref: "#/components/parameters/campaignId"
+      - $ref: "#/components/parameters/batchId"
     post:
-      tags: [bulk-import]
-      operationId: importKeywords
-      summary: Import keywords from dict
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ImportKeywordsRequest"
+      tags: [batches]
+      operationId: cancelBatch
+      summary: Cancel a pending batch
       responses:
         "200":
-          description: Import result
+          description: Cancelled
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ImportResult"
+                $ref: "#/components/schemas/Batch"
+        "409":
+          description: Cannot cancel — already running or completed
+
+  # =====================================================================
+  # Bulk Import
+  # =====================================================================
 
   /campaigns/{campaignId}/import/excel:
     parameters:
@@ -689,7 +973,7 @@ paths:
     post:
       tags: [bulk-import]
       operationId: importExcel
-      summary: Upload Excel and import keywords
+      summary: Upload Excel → auto-import keywords
       requestBody:
         required: true
         content:
@@ -701,16 +985,36 @@ paths:
                 file:
                   type: string
                   format: binary
-                  description: ".xlsx file"
                 header_map:
                   type: string
-                  description: "JSON string of {header_name: slug} overrides"
+                  description: "JSON {header: slug} overrides"
                 auto_detect_affixes:
                   type: boolean
                   default: false
       responses:
         "200":
-          description: Import result
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportResult"
+
+  /campaigns/{campaignId}/import/keywords:
+    parameters:
+      - $ref: "#/components/parameters/campaignId"
+    post:
+      tags: [bulk-import]
+      operationId: importKeywords
+      summary: Import keywords from JSON dict
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportKeywordsRequest"
+      responses:
+        "200":
+          description: OK
           content:
             application/json:
               schema:
@@ -722,7 +1026,7 @@ paths:
     post:
       tags: [bulk-import]
       operationId: importPools
-      summary: Import palette pools (salts, CTAs, etc.)
+      summary: Import palette pools
       requestBody:
         required: true
         content:
@@ -731,7 +1035,7 @@ paths:
               $ref: "#/components/schemas/ImportPoolsRequest"
       responses:
         "200":
-          description: Pool import result
+          description: OK
           content:
             application/json:
               schema:
@@ -743,7 +1047,7 @@ paths:
     post:
       tags: [bulk-import]
       operationId: importGenerate
-      summary: Clean stale combos + generate new ones
+      summary: Cleanup stale + generate new combinations
       requestBody:
         content:
           application/json:
@@ -756,10 +1060,9 @@ paths:
                     type: object
                     additionalProperties:
                       type: integer
-                  description: Custom patterns. null = auto-create default.
       responses:
         "200":
-          description: Generate result
+          description: OK
           content:
             application/json:
               schema:
@@ -774,7 +1077,7 @@ paths:
       summary: Delete undispatched combinations only
       responses:
         "200":
-          description: Reset result
+          description: OK
           content:
             application/json:
               schema:
@@ -786,27 +1089,27 @@ paths:
     post:
       tags: [bulk-import]
       operationId: hardReset
-      summary: Delete everything except dispatched combos and batch history
+      summary: Reset everything except dispatch history
       responses:
         "200":
-          description: Reset result
+          description: OK
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ResetResult"
 
-  # -----------------------------------------------------------------------
-  # Keywords (global)
-  # -----------------------------------------------------------------------
+  # =====================================================================
+  # Keyword Categories (global)
+  # =====================================================================
 
   /keyword-categories:
     get:
-      tags: [keywords]
+      tags: [keyword-categories]
       operationId: listCategories
-      summary: List all keyword categories
+      summary: List all categories
       responses:
         "200":
-          description: Category list
+          description: OK
           content:
             application/json:
               schema:
@@ -814,9 +1117,9 @@ paths:
                 items:
                   $ref: "#/components/schemas/KeywordCategory"
     post:
-      tags: [keywords]
+      tags: [keyword-categories]
       operationId: createCategory
-      summary: Create a keyword category
+      summary: Create a category
       requestBody:
         required: true
         content:
@@ -831,16 +1134,67 @@ paths:
               schema:
                 $ref: "#/components/schemas/KeywordCategory"
 
+  /keyword-categories/{categoryId}:
+    parameters:
+      - $ref: "#/components/parameters/categoryId"
+    get:
+      tags: [keyword-categories]
+      operationId: getCategory
+      summary: Category detail with keyword count
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeywordCategory"
+    patch:
+      tags: [keyword-categories]
+      operationId: updateCategory
+      summary: Update name or slug
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KeywordCategoryUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeywordCategory"
+    delete:
+      tags: [keyword-categories]
+      operationId: deleteCategory
+      summary: Delete category (fails if keywords exist)
+      responses:
+        "204":
+          description: Deleted
+        "409":
+          description: Has keywords
+
+  # =====================================================================
+  # Keywords (global)
+  # =====================================================================
+
   /keyword-categories/{categoryId}/keywords:
     parameters:
       - $ref: "#/components/parameters/categoryId"
     get:
       tags: [keywords]
       operationId: listKeywords
-      summary: List keywords in a category
+      summary: List keywords in category
+      parameters:
+        - name: active
+          in: query
+          schema:
+            type: boolean
+          description: Filter by active status
       responses:
         "200":
-          description: Keyword list
+          description: OK
           content:
             application/json:
               schema:
@@ -850,7 +1204,7 @@ paths:
     post:
       tags: [keywords]
       operationId: createKeyword
-      summary: Create a keyword
+      summary: Create one keyword
       requestBody:
         required: true
         content:
@@ -865,13 +1219,56 @@ paths:
               schema:
                 $ref: "#/components/schemas/Keyword"
 
+  /keyword-categories/{categoryId}/keywords/bulk:
+    parameters:
+      - $ref: "#/components/parameters/categoryId"
+    post:
+      tags: [keywords]
+      operationId: bulkCreateKeywords
+      summary: Create multiple keywords at once
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [values]
+              properties:
+                values:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created:
+                    type: integer
+                  existing:
+                    type: integer
+
   /keywords/{keywordId}:
     parameters:
       - $ref: "#/components/parameters/keywordId"
+    get:
+      tags: [keywords]
+      operationId: getKeyword
+      summary: Keyword detail with affixes
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Keyword"
     patch:
       tags: [keywords]
       operationId: updateKeyword
-      summary: Update keyword
+      summary: Update value, display_value, active, sort_order
       requestBody:
         required: true
         content:
@@ -893,9 +1290,51 @@ paths:
         "204":
           description: Deleted
 
-  # -----------------------------------------------------------------------
+  /keywords/{keywordId}/affixes:
+    parameters:
+      - $ref: "#/components/parameters/keywordId"
+    get:
+      tags: [keywords]
+      operationId: listKeywordAffixes
+      summary: List affixes linked to this keyword
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Affix"
+    put:
+      tags: [keywords]
+      operationId: setKeywordAffixes
+      summary: Replace affix links for this keyword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [affix_ids]
+              properties:
+                affix_ids:
+                  type: array
+                  items:
+                    type: integer
+      responses:
+        "200":
+          description: Linked
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Affix"
+
+  # =====================================================================
   # Affixes (global)
-  # -----------------------------------------------------------------------
+  # =====================================================================
 
   /affixes:
     get:
@@ -904,7 +1343,7 @@ paths:
       summary: List all affixes
       responses:
         "200":
-          description: Affix list
+          description: OK
           content:
             application/json:
               schema:
@@ -932,6 +1371,34 @@ paths:
   /affixes/{affixId}:
     parameters:
       - $ref: "#/components/parameters/affixId"
+    get:
+      tags: [affixes]
+      operationId: getAffix
+      summary: Affix detail with linked keyword count
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Affix"
+    patch:
+      tags: [affixes]
+      operationId: updateAffix
+      summary: Update value or sort_order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AffixUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Affix"
     delete:
       tags: [affixes]
       operationId: deleteAffix
@@ -940,9 +1407,9 @@ paths:
         "204":
           description: Deleted
 
-  # -----------------------------------------------------------------------
+  # =====================================================================
   # Layouts
-  # -----------------------------------------------------------------------
+  # =====================================================================
 
   /layouts:
     get:
@@ -951,7 +1418,7 @@ paths:
       summary: List user's layouts
       responses:
         "200":
-          description: Layout list
+          description: OK
           content:
             application/json:
               schema:
@@ -961,7 +1428,7 @@ paths:
     post:
       tags: [layouts]
       operationId: createLayout
-      summary: Create a layout with slots
+      summary: Create layout with slots
       requestBody:
         required: true
         content:
@@ -982,10 +1449,32 @@ paths:
     get:
       tags: [layouts]
       operationId: getLayout
-      summary: Layout detail with slots
+      summary: Layout with slots
       responses:
         "200":
-          description: Layout
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostLayout"
+    patch:
+      tags: [layouts]
+      operationId: updateLayout
+      summary: Update name or description
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+      responses:
+        "200":
+          description: Updated
           content:
             application/json:
               schema:
@@ -993,14 +1482,91 @@ paths:
     delete:
       tags: [layouts]
       operationId: deleteLayout
-      summary: Delete layout (cascade deletes slots)
+      summary: Delete layout (cascade slots)
       responses:
         "204":
           description: Deleted
 
-  # -----------------------------------------------------------------------
+  # =====================================================================
+  # Layout Slots
+  # =====================================================================
+
+  /layouts/{layoutId}/slots:
+    parameters:
+      - $ref: "#/components/parameters/layoutId"
+    post:
+      tags: [layout-slots]
+      operationId: createLayoutSlot
+      summary: Add a block to the layout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LayoutSlotCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LayoutSlot"
+
+  /layouts/{layoutId}/slots/reorder:
+    parameters:
+      - $ref: "#/components/parameters/layoutId"
+    put:
+      tags: [layout-slots]
+      operationId: reorderLayoutSlots
+      summary: Set slot order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slot_ids]
+              properties:
+                slot_ids:
+                  type: array
+                  items:
+                    type: integer
+      responses:
+        "200":
+          description: Reordered
+
+  /layouts/{layoutId}/slots/{slotId}:
+    parameters:
+      - $ref: "#/components/parameters/layoutId"
+      - $ref: "#/components/parameters/slotId"
+    patch:
+      tags: [layout-slots]
+      operationId: updateLayoutSlot
+      summary: Update block_type or config
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LayoutSlotUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LayoutSlot"
+    delete:
+      tags: [layout-slots]
+      operationId: deleteLayoutSlot
+      summary: Remove slot from layout
+      responses:
+        "204":
+          description: Deleted
+
+  # =====================================================================
   # Presets
-  # -----------------------------------------------------------------------
+  # =====================================================================
 
   /presets/publish:
     get:
@@ -1009,13 +1575,13 @@ paths:
       summary: List publish presets
       responses:
         "200":
-          description: Preset list
+          description: OK
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/PublishPreset"
+                  $ref: "#/components/schemas/Preset"
     post:
       tags: [presets]
       operationId: createPublishPreset
@@ -1032,7 +1598,46 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PublishPreset"
+                $ref: "#/components/schemas/Preset"
+
+  /presets/publish/{presetId}:
+    parameters:
+      - $ref: "#/components/parameters/presetId"
+    get:
+      tags: [presets]
+      operationId: getPublishPreset
+      summary: Preset detail
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Preset"
+    patch:
+      tags: [presets]
+      operationId: updatePublishPreset
+      summary: Update preset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PresetUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Preset"
+    delete:
+      tags: [presets]
+      operationId: deletePublishPreset
+      summary: Delete preset
+      responses:
+        "204":
+          description: Deleted
 
   /presets/run:
     get:
@@ -1041,13 +1646,13 @@ paths:
       summary: List run presets
       responses:
         "200":
-          description: Preset list
+          description: OK
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/RunPreset"
+                  $ref: "#/components/schemas/Preset"
     post:
       tags: [presets]
       operationId: createRunPreset
@@ -1064,20 +1669,59 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RunPreset"
+                $ref: "#/components/schemas/Preset"
 
-  # -----------------------------------------------------------------------
+  /presets/run/{presetId}:
+    parameters:
+      - $ref: "#/components/parameters/presetId"
+    get:
+      tags: [presets]
+      operationId: getRunPreset
+      summary: Preset detail
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Preset"
+    patch:
+      tags: [presets]
+      operationId: updateRunPreset
+      summary: Update preset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PresetUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Preset"
+    delete:
+      tags: [presets]
+      operationId: deleteRunPreset
+      summary: Delete preset
+      responses:
+        "204":
+          description: Deleted
+
+  # =====================================================================
   # Media
-  # -----------------------------------------------------------------------
+  # =====================================================================
 
   /media:
     get:
       tags: [media]
       operationId: listMedia
-      summary: List user's uploaded files
+      summary: List user's files
       responses:
         "200":
-          description: Media list
+          description: OK
           content:
             application/json:
               schema:
@@ -1087,7 +1731,7 @@ paths:
     post:
       tags: [media]
       operationId: uploadMedia
-      summary: Upload image/file
+      summary: Upload file
       requestBody:
         required: true
         content:
@@ -1110,32 +1754,47 @@ paths:
   /media/{mediaId}:
     parameters:
       - $ref: "#/components/parameters/mediaId"
+    get:
+      tags: [media]
+      operationId: getMedia
+      summary: Media detail
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Media"
     delete:
       tags: [media]
       operationId: deleteMedia
-      summary: Delete media
+      summary: Delete file
       responses:
         "204":
           description: Deleted
 
-# =========================================================================
+# ===================================================================
 # Components
-# =========================================================================
+# ===================================================================
 components:
 
-  # -----------------------------------------------------------------------
-  # Security
-  # -----------------------------------------------------------------------
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
 
-  # -----------------------------------------------------------------------
-  # Parameters
-  # -----------------------------------------------------------------------
   parameters:
+    platformId:
+      name: platformId
+      in: path
+      required: true
+      schema: { type: integer }
+    accountId:
+      name: accountId
+      in: path
+      required: true
+      schema: { type: integer }
     campaignId:
       name: campaignId
       in: path
@@ -1146,8 +1805,13 @@ components:
       in: path
       required: true
       schema: { type: integer }
-    accountId:
-      name: accountId
+    itemId:
+      name: itemId
+      in: path
+      required: true
+      schema: { type: integer }
+    overrideId:
+      name: overrideId
       in: path
       required: true
       schema: { type: integer }
@@ -1156,6 +1820,11 @@ components:
       in: path
       required: true
       schema: { type: integer }
+    combinationId:
+      name: combinationId
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
     batchId:
       name: batchId
       in: path
@@ -1181,18 +1850,25 @@ components:
       in: path
       required: true
       schema: { type: integer }
+    slotId:
+      name: slotId
+      in: path
+      required: true
+      schema: { type: integer }
+    presetId:
+      name: presetId
+      in: path
+      required: true
+      schema: { type: integer }
     mediaId:
       name: mediaId
       in: path
       required: true
       schema: { type: integer }
 
-  # -----------------------------------------------------------------------
-  # Responses
-  # -----------------------------------------------------------------------
   responses:
     NotFound:
-      description: Resource not found
+      description: Not found
       content:
         application/json:
           schema:
@@ -1204,20 +1880,15 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
 
-  # -----------------------------------------------------------------------
-  # Schemas
-  # -----------------------------------------------------------------------
   schemas:
 
     Error:
       type: object
       required: [detail]
       properties:
-        detail:
-          type: string
+        detail: { type: string }
 
     # -- Auth --
-
     RegisterRequest:
       type: object
       required: [email, password]
@@ -1225,22 +1896,24 @@ components:
         email: { type: string, format: email }
         password: { type: string, minLength: 8 }
         display_name: { type: string }
-
     LoginRequest:
       type: object
       required: [email, password]
       properties:
         email: { type: string, format: email }
         password: { type: string }
-
+    UpdateMeRequest:
+      type: object
+      properties:
+        display_name: { type: string }
+        current_password: { type: string }
+        new_password: { type: string, minLength: 8 }
     AuthTokenResponse:
       type: object
       properties:
         access_token: { type: string }
         token_type: { type: string, default: bearer }
-        user:
-          $ref: "#/components/schemas/User"
-
+        user: { $ref: "#/components/schemas/User" }
     User:
       type: object
       properties:
@@ -1252,7 +1925,6 @@ components:
         created_at: { type: string, format: date-time }
 
     # -- Platform --
-
     Platform:
       type: object
       properties:
@@ -1263,7 +1935,6 @@ components:
         status: { type: string }
 
     # -- Account --
-
     Account:
       type: object
       properties:
@@ -1276,7 +1947,6 @@ components:
         status: { type: string }
         note: { type: string }
         created_at: { type: string, format: date-time }
-
     AccountCreate:
       type: object
       required: [platform_id, username, password]
@@ -1286,7 +1956,6 @@ components:
         password: { type: string }
         cooldown_days: { type: integer, default: 14 }
         note: { type: string }
-
     AccountUpdate:
       type: object
       properties:
@@ -1296,7 +1965,6 @@ components:
         note: { type: string }
 
     # -- Campaign --
-
     CampaignSummary:
       type: object
       properties:
@@ -1307,7 +1975,6 @@ components:
         combination_count: { type: integer }
         batch_count: { type: integer }
         created_at: { type: string, format: date-time }
-
     Campaign:
       type: object
       properties:
@@ -1320,13 +1987,11 @@ components:
         run_preset_id: { type: integer, nullable: true }
         config: { type: object, nullable: true }
         status: { type: string }
-        derived_template: { type: string, description: "Auto-derived from tokens" }
+        derived_template: { type: string }
         tokens:
           type: array
-          items:
-            $ref: "#/components/schemas/TemplateToken"
+          items: { $ref: "#/components/schemas/TemplateToken" }
         created_at: { type: string, format: date-time }
-
     CampaignCreate:
       type: object
       required: [name, platform_id]
@@ -1337,7 +2002,6 @@ components:
         layout_id: { type: integer }
         publish_preset_id: { type: integer }
         run_preset_id: { type: integer }
-
     CampaignUpdate:
       type: object
       properties:
@@ -1347,7 +2011,6 @@ components:
         publish_preset_id: { type: integer, nullable: true }
         run_preset_id: { type: integer, nullable: true }
         status: { type: string }
-
     CampaignOverview:
       type: object
       properties:
@@ -1362,7 +2025,6 @@ components:
         batch_completed: { type: integer }
 
     # -- Template Token --
-
     TemplateToken:
       type: object
       properties:
@@ -1370,15 +2032,13 @@ components:
         slug: { type: string }
         token_type: { type: string, enum: [keyword, pool, literal] }
         sort_order: { type: integer }
-        value: { type: string, nullable: true, description: "Literal text (literal type only)" }
-        category_id: { type: integer, nullable: true, description: "Keyword category (keyword type only)" }
+        value: { type: string, nullable: true }
+        category_id: { type: integer, nullable: true }
         category_name: { type: string, nullable: true }
         palette:
-          $ref: "#/components/schemas/Palette"
           nullable: true
-          description: "Pool config (pool type only)"
+          $ref: "#/components/schemas/Palette"
         created_at: { type: string, format: date-time }
-
     TemplateTokenCreate:
       type: object
       required: [slug, token_type]
@@ -1386,8 +2046,8 @@ components:
         slug: { type: string }
         token_type: { type: string, enum: [keyword, pool, literal] }
         sort_order: { type: integer }
-        value: { type: string, description: "Required for literal" }
-        category_id: { type: integer, description: "Required for keyword" }
+        value: { type: string }
+        category_id: { type: integer }
         palette:
           type: object
           properties:
@@ -1395,22 +2055,21 @@ components:
             items:
               type: array
               items: { type: string }
-
     TemplateTokenUpdate:
       type: object
       properties:
         slug: { type: string }
         value: { type: string }
+        category_id: { type: integer }
 
+    # -- Palette --
     Palette:
       type: object
       properties:
         strategy: { type: string, enum: [random, sequential] }
         items:
           type: array
-          items:
-            $ref: "#/components/schemas/PaletteItem"
-
+          items: { $ref: "#/components/schemas/PaletteItem" }
     PaletteItem:
       type: object
       properties:
@@ -1418,9 +2077,18 @@ components:
         value: { type: string }
         sort_order: { type: integer }
         active: { type: boolean }
+    PaletteItemCreate:
+      type: object
+      required: [value]
+      properties:
+        value: { type: string }
+    PaletteItemUpdate:
+      type: object
+      properties:
+        value: { type: string }
+        active: { type: boolean }
 
     # -- Picks --
-
     SavePicksRequest:
       type: object
       required: [category_slug, values]
@@ -1429,10 +2097,8 @@ components:
         values:
           type: array
           items: { type: string }
-          description: "Empty = clear picks for this category"
 
     # -- Affix Override --
-
     AffixOverride:
       type: object
       properties:
@@ -1443,7 +2109,6 @@ components:
         affix_type: { type: string }
         affix_value: { type: string }
         active: { type: boolean }
-
     AffixOverrideUpsert:
       type: object
       required: [keyword_id, affix_id, active]
@@ -1453,7 +2118,6 @@ components:
         active: { type: boolean }
 
     # -- Spacing Rule --
-
     SpacingRule:
       type: object
       properties:
@@ -1464,7 +2128,6 @@ components:
         description: { type: string }
         active: { type: boolean }
         created_at: { type: string, format: date-time }
-
     SpacingRuleCreate:
       type: object
       required: [pattern]
@@ -1473,7 +2136,6 @@ components:
           type: object
           additionalProperties: { type: integer }
         description: { type: string }
-
     SpacingRuleUpdate:
       type: object
       properties:
@@ -1484,7 +2146,6 @@ components:
         active: { type: boolean }
 
     # -- Combination --
-
     Combination:
       type: object
       properties:
@@ -1501,21 +2162,18 @@ components:
               display_value: { type: string }
         used_at: { type: string, format: date-time, nullable: true }
         created_at: { type: string, format: date-time }
-
     CombinationPage:
       type: object
       properties:
         items:
           type: array
-          items:
-            $ref: "#/components/schemas/Combination"
+          items: { $ref: "#/components/schemas/Combination" }
         total: { type: integer }
         page: { type: integer }
         size: { type: integer }
         pages: { type: integer }
 
     # -- Batch --
-
     Batch:
       type: object
       properties:
@@ -1524,12 +2182,11 @@ components:
         account_id: { type: integer }
         account_username: { type: string }
         scheduled_at: { type: string, format: date-time }
-        status: { type: string, enum: [pending, running, completed, failed] }
+        status: { type: string, enum: [pending, running, completed, failed, cancelled] }
         item_count: { type: integer }
         created_at: { type: string, format: date-time }
         started_at: { type: string, format: date-time, nullable: true }
         completed_at: { type: string, format: date-time, nullable: true }
-
     BatchDetail:
       allOf:
         - $ref: "#/components/schemas/Batch"
@@ -1537,9 +2194,7 @@ components:
           properties:
             items:
               type: array
-              items:
-                $ref: "#/components/schemas/BatchItem"
-
+              items: { $ref: "#/components/schemas/BatchItem" }
     BatchItem:
       type: object
       properties:
@@ -1550,17 +2205,15 @@ components:
         error_message: { type: string, nullable: true }
         created_at: { type: string, format: date-time }
         completed_at: { type: string, format: date-time, nullable: true }
-
     DispatchRequest:
       type: object
       required: [account_id, scheduled_at]
       properties:
         account_id: { type: integer }
         scheduled_at: { type: string, format: date-time }
-        max_items: { type: integer, description: "Limit items per batch" }
+        max_items: { type: integer }
 
     # -- Bulk Import --
-
     ImportKeywordsRequest:
       type: object
       required: [data]
@@ -1570,14 +2223,9 @@ components:
           additionalProperties:
             type: array
             items: { type: string }
-          description: "{category_slug: [values]}"
-          example:
-            region: ["수리동", "산본동"]
-            subject: ["수학", "영어"]
         auto_detect_affixes:
           type: boolean
           default: false
-
     ImportPoolsRequest:
       type: object
       required: [data]
@@ -1587,11 +2235,6 @@ components:
           additionalProperties:
             type: array
             items: { type: string }
-          description: "{pool_slug: [values]}"
-          example:
-            salt_prefix: ["검증된", "전문"]
-            salt_suffix: ["강력 추천"]
-
     ImportResult:
       type: object
       properties:
@@ -1600,21 +2243,18 @@ components:
         keywords_existing: { type: integer }
         tokens_created: { type: integer }
         picks_set: { type: integer }
-
     PoolImportResult:
       type: object
       properties:
         pools_created: { type: integer }
         items_created: { type: integer }
         items_existing: { type: integer }
-
     GenerateResult:
       type: object
       properties:
         combinations_generated: { type: integer }
         combinations_stale: { type: integer }
         spacing_rules_created: { type: integer }
-
     ResetResult:
       type: object
       properties:
@@ -1624,8 +2264,7 @@ components:
         picks_removed: { type: integer }
         spacing_rules_removed: { type: integer }
 
-    # -- Keywords (global) --
-
+    # -- Keyword Category --
     KeywordCategory:
       type: object
       properties:
@@ -1634,14 +2273,19 @@ components:
         slug: { type: string }
         keyword_count: { type: integer }
         created_at: { type: string, format: date-time }
-
     KeywordCategoryCreate:
       type: object
       required: [name, slug]
       properties:
-        name: { type: string, description: "Display name (한글 OK)" }
+        name: { type: string }
         slug: { type: string, pattern: "^[a-z][a-z0-9_]*$" }
+    KeywordCategoryUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        slug: { type: string }
 
+    # -- Keyword --
     Keyword:
       type: object
       properties:
@@ -1653,17 +2297,14 @@ components:
         sort_order: { type: integer }
         affixes:
           type: array
-          items:
-            $ref: "#/components/schemas/Affix"
+          items: { $ref: "#/components/schemas/Affix" }
         created_at: { type: string, format: date-time }
-
     KeywordCreate:
       type: object
       required: [value]
       properties:
         value: { type: string }
         display_value: { type: string }
-
     KeywordUpdate:
       type: object
       properties:
@@ -1673,7 +2314,6 @@ components:
         sort_order: { type: integer }
 
     # -- Affix --
-
     Affix:
       type: object
       properties:
@@ -1681,16 +2321,20 @@ components:
         type: { type: string, enum: [prefix, suffix] }
         value: { type: string }
         sort_order: { type: integer }
-
+        keyword_count: { type: integer }
     AffixCreate:
       type: object
       required: [type, value]
       properties:
         type: { type: string, enum: [prefix, suffix] }
         value: { type: string }
+    AffixUpdate:
+      type: object
+      properties:
+        value: { type: string }
+        sort_order: { type: integer }
 
     # -- Layout --
-
     PostLayout:
       type: object
       properties:
@@ -1699,10 +2343,8 @@ components:
         description: { type: string, nullable: true }
         slots:
           type: array
-          items:
-            $ref: "#/components/schemas/LayoutSlot"
+          items: { $ref: "#/components/schemas/LayoutSlot" }
         created_at: { type: string, format: date-time }
-
     PostLayoutCreate:
       type: object
       required: [name, slots]
@@ -1711,14 +2353,7 @@ components:
         description: { type: string }
         slots:
           type: array
-          items:
-            type: object
-            required: [sort_order, block_type]
-            properties:
-              sort_order: { type: integer }
-              block_type: { type: string }
-              config: { type: object }
-
+          items: { $ref: "#/components/schemas/LayoutSlotCreate" }
     LayoutSlot:
       type: object
       properties:
@@ -1726,10 +2361,21 @@ components:
         sort_order: { type: integer }
         block_type: { type: string }
         config: { type: object }
+    LayoutSlotCreate:
+      type: object
+      required: [sort_order, block_type]
+      properties:
+        sort_order: { type: integer }
+        block_type: { type: string }
+        config: { type: object }
+    LayoutSlotUpdate:
+      type: object
+      properties:
+        block_type: { type: string }
+        config: { type: object }
 
-    # -- Presets --
-
-    PublishPreset:
+    # -- Preset --
+    Preset:
       type: object
       properties:
         id: { type: integer }
@@ -1737,16 +2383,6 @@ components:
         description: { type: string, nullable: true }
         config: { type: object }
         created_at: { type: string, format: date-time }
-
-    RunPreset:
-      type: object
-      properties:
-        id: { type: integer }
-        name: { type: string }
-        description: { type: string, nullable: true }
-        config: { type: object }
-        created_at: { type: string, format: date-time }
-
     PresetCreate:
       type: object
       required: [name, config]
@@ -1754,9 +2390,14 @@ components:
         name: { type: string }
         description: { type: string }
         config: { type: object }
+    PresetUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
+        config: { type: object }
 
     # -- Media --
-
     Media:
       type: object
       properties:
