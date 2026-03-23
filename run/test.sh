@@ -106,11 +106,19 @@ case "${MODE}" in
     echo "── unit/factory ─────────────────────────"
     pytest tests/unit/factory/ -v
     echo ""
+    echo "── unit/cli ────────────────────────────"
+    pytest tests/unit/cli/ -v
+    echo ""
     echo "── integration/automator ────────────────"
     pytest tests/integration/automator/ -v
     echo ""
     echo "── browser ──────────────────────────────"
     pytest tests/browser/ -v
+    ;;
+
+  --cli)
+    echo "── unit/cli ────────────────────────────"
+    pytest tests/unit/cli/ -v
     ;;
 
   --integration)
@@ -143,6 +151,7 @@ case "${MODE}" in
     cat << 'HELP'
 
   bash ./run/test.sh                 # unit (DB 불필요, 가장 빠름)
+  bash ./run/test.sh --cli            # CLI 패키지만 (가장 빠름)
   bash ./run/test.sh --integration   # integration/factory (MySQL 자동)
   bash ./run/test.sh --e2e           # unit + integration + e2e smoke
   bash ./run/test.sh --all           # everything
@@ -165,6 +174,12 @@ case "${MODE}" in
       test_bulk_importer.py           BulkImporter 입력 검증
       test_excel_parser.py            엑셀 파싱 + 헤더 해석
       test_affix_detector.py          접사 자동 감지
+
+  ── tests/unit/cli/                  CLI 패키지 단위 테스트 (DB 불필요)
+      test_config_loader.py           JSON → CampaignConfig 파싱 + 검증
+      test_combo_builder.py           키워드 카테시안 곱 × 스페이싱
+      test_spec_builder.py            KeywordCombo → PostingSpec 변환
+      test_campaign_executor.py       오케스트레이터 + 계정 배분
 
   ── tests/integration/automator/     Automator 통합 테스트
       test_spec_builder.py            PostingSpec immutability

@@ -1,0 +1,69 @@
+{
+  "accounts": [
+    {
+      "username": "naver_id_1",
+      "password": "pw1",
+      "meta": {"blog_id": "myblog1"},
+      "session_path": "naver_id_1_session.json"
+    },
+    {
+      "username": "naver_id_2",
+      "password": "pw2",
+      "meta": {"blog_id": "myblog2"}
+    }
+  ],
+
+  "title": {
+    "tokens": [
+      {"slug": "salt_prefix", "type": "pool"},
+      {"slug": "region",      "type": "keyword"},
+      {"slug": "subject",     "type": "keyword"},
+      {"slug": "과외",         "type": "literal", "value": "과외"},
+      {"slug": "salt_suffix", "type": "pool"}
+    ],
+    "spacing_rules": [
+      {"salt_prefix": 1, "region": 1, "subject": 0, "과외": 1, "salt_suffix": 1},
+      {"salt_prefix": 1, "region": 0, "subject": 1, "과외": 1, "salt_suffix": 1}
+    ]
+  },
+
+  "keywords": {
+    "region":  ["강남", "서초", "잠실"],
+    "subject": ["수학", "영어"]
+  },
+
+  "palettes": {
+    "salt_prefix": ["검증된", "전문", "추천"],
+    "salt_suffix": ["강력 추천", "즉시 가능"]
+  },
+
+  "layout": [
+    {"block_type": "heading",   "config": {"level": 2, "text": "{keyword} 소개"}},
+    {"block_type": "paragraph", "config": {"keyword": "{keyword}", "tone": "informational"}},
+    {"block_type": "image",     "config": {"media_id": "1", "alt": "{keyword}"}},
+    {"block_type": "paragraph", "config": {"keyword": "{keyword}"}},
+    {"block_type": "featured",  "config": {"media_id": "2", "overlay_text": "{keyword}"}}
+  ],
+
+  "media": {
+    "base_dir": "./images",
+    "files": {"1": "body_photo.jpg", "2": "thumbnail.jpg"}
+  },
+
+  "publish": {
+    "mode": "random_window",
+    "jitter_minutes": 30,
+    "tags": ["교육", "과외", "학원"],
+    "min_tags": 12,
+    "max_tags": 20,
+    "visibility": "public"
+  },
+
+  "run": {
+    "post_interval": 60,
+    "max_daily_posts": 10,
+    "on_failure": "stop",
+    "headless": true,
+    "upload_delay_ms": 1500
+  }
+}
