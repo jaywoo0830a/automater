@@ -37,7 +37,6 @@ case "${MODE}" in
     echo "  Python : $(python --version)"
     echo "  루트   : ${PROJECT_ROOT}"
     echo ""
-    echo "  bash ./run/dev.sh --api          # API 서버 시작"
     echo "  bash ./run/test.sh               # unit 테스트"
     echo "  bash ./run/test.sh --e2e         # e2e smoke"
     echo "  bash ./run/test.sh --all         # 전체"
@@ -102,38 +101,9 @@ PYEOF
     python scripts/capture_selectors.py
     ;;
 
-  --api)
-    _require_venv
-    _load_env
-    API_PORT="${API_PORT:-8000}"
-    echo "  ── API 서버 시작 ──────────────────────"
-    echo "  Port    : ${API_PORT}"
-    echo "  Docs    : http://localhost:${API_PORT}/api/v1/docs"
-    echo "  OpenAPI : http://localhost:${API_PORT}/api/v1/openapi.json"
-    echo ""
-    uvicorn api.app:app \
-        --host 0.0.0.0 \
-        --port "${API_PORT}" \
-        --reload \
-        --reload-dir api \
-        --reload-dir factory \
-        --reload-dir automator
-    ;;
-
-  --seed)
-    _require_venv
-    _load_env
-    echo "  ── DB 초기화 + 테스트 데이터 시딩 ─────"
-    echo "  ⚠  기존 데이터가 모두 삭제됩니다."
-    echo ""
-    python dev/seed.py --clean
-    ;;
-
   --help|-h)
     echo ""
     echo "  bash ./run/dev.sh              # 셸 진입"
-    echo "  bash ./run/dev.sh --api        # API 서버 시작 (uvicorn --reload)"
-    echo "  bash ./run/dev.sh --seed       # DB 초기화 + 테스트 데이터 시딩"
     echo "  bash ./run/dev.sh --watch      # 파일 변경 감지 자동 테스트"
     echo "  bash ./run/dev.sh --session    # 네이버 세션 저장"
     echo "  bash ./run/dev.sh --capture    # 셀렉터 캡처"
