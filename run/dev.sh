@@ -123,14 +123,9 @@ PYEOF
   --seed)
     _require_venv
     _load_env
-    echo "  ── 테스트 데이터 시딩 ─────────────────"
-    python dev/seed.py
-    ;;
-
-  --seed-clean)
-    _require_venv
-    _load_env
-    echo "  ── DB 초기화 + 시딩 ─────────────────"
+    echo "  ── DB 초기화 + 테스트 데이터 시딩 ─────"
+    echo "  ⚠  기존 데이터가 모두 삭제됩니다."
+    echo ""
     python dev/seed.py --clean
     ;;
 
@@ -138,8 +133,7 @@ PYEOF
     echo ""
     echo "  bash ./run/dev.sh              # 셸 진입"
     echo "  bash ./run/dev.sh --api        # API 서버 시작 (uvicorn --reload)"
-    echo "  bash ./run/dev.sh --seed       # 테스트 데이터 시딩"
-    echo "  bash ./run/dev.sh --seed-clean # DB 초기화 후 시딩"
+    echo "  bash ./run/dev.sh --seed       # DB 초기화 + 테스트 데이터 시딩"
     echo "  bash ./run/dev.sh --watch      # 파일 변경 감지 자동 테스트"
     echo "  bash ./run/dev.sh --session    # 네이버 세션 저장"
     echo "  bash ./run/dev.sh --capture    # 셀렉터 캡처"

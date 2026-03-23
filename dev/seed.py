@@ -138,9 +138,12 @@ def seed(session: Session) -> None:
     session.add_all([affix_dong, affix_si])
     session.flush()
 
-    # 강남동 ↔ 동, 수원시 ↔ 시
-    region_keywords[0].affixes.append(affix_dong)
-    region_keywords[1].affixes.append(affix_si)
+    # Link via direct M2M insert (avoids flush-order issues)
+    from factory.models import keyword_affixes
+    session.execute(keyword_affixes.insert().values([
+        {"keyword_id": region_keywords[0].id, "affix_id": affix_dong.id},
+        {"keyword_id": region_keywords[1].id, "affix_id": affix_si.id},
+    ]))
     session.flush()
     print(f"  Affixes:  동(→강남동), 시(→수원시)")
 
