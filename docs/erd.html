@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>automater-dev ERD — Entity Relationship Diagram</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.6.1/mermaid.min.js"></script>
+<script>
+mermaid.initialize({
+  startOnLoad: true,
+  theme: 'neutral',
+  themeVariables: {
+    fontFamily: 'Georgia, serif',
+    fontSize: '13px'
+  },
+  er: { useMaxWidth: true }
+});
+</script>
+<style>
+@media print {
+  .page-break { page-break-before: always; }
+  body { font-size: 11pt; }
+}
+body {
+  font-family: Georgia, 'Nanum Myeongjo', serif;
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 40px 20px;
+  line-height: 1.8;
+  color: #111;
+}
+h1 { font-size: 2em; border-bottom: 2px solid #111; padding-bottom: 10px; margin-top: 60px; }
+h2 { font-size: 1.5em; margin-top: 40px; }
+h3 { font-size: 1.2em; margin-top: 30px; }
+pre {
+  background: #f5f5f5; border: 1px solid #ccc; padding: 16px;
+  overflow-x: auto; font-family: 'Courier New', monospace;
+  font-size: 0.85em; line-height: 1.5;
+}
+.mermaid { text-align: center; margin: 30px 0; }
+.diagram-caption {
+  text-align: center; font-size: 0.9em; color: #555;
+  margin-top: -10px; margin-bottom: 30px;
+}
+.chapter-num { font-size: 0.9em; letter-spacing: 2px; text-transform: uppercase; color: #555; }
+blockquote { border-left: 3px solid #555; margin: 20px 0; padding: 10px 20px; font-style: italic; }
+</style>
+</head>
+<body>
+
+<h1>automater-dev ERD</h1>
+<p>factory/models.py 기반 엔티티 관계 다이어그램. 총 23개 테이블, 4개 도메인 그룹으로 구성.</p>
+
+<h2>도메인 그룹 개요</h2>
+
+<p>시스템의 테이블은 네 가지 도메인 그룹으로 나뉜다.</p>
+
+<p><b>그룹 1 — 인증·소유 (Auth &amp; Ownership):</b> User, Platform, Account. 사용자가 플랫폼별 계정을 소유하고, 모든 리소스의 소유 루트가 된다.</p>
+
+<p><b>그룹 2 — 키워드 사전 (Keyword Dictionary):</b> KeywordCategory, Keyword, Affix, keyword_affixes. 글로벌 키워드 풀과 접사(접두/접미) 사전. 캠페인과 독립적으로 존재한다.</p>
+
+<p><b>그룹 3 — 캠페인 구성 (Campaign Configuration):</b> Campaign, TemplateToken, CampaignSlot, CampaignPalette, PaletteItem, CampaignKeywordPick, CampaignAffixOverride, SpacingRule, PostLayout, LayoutSlot, PublishPreset, RunPreset, Media. 캠페인의 제목 템플릿, 본문 레이아웃, 발행·실행 프리셋을 정의한다.</p>
+
+<p><b>그룹 4 — 실행 파이프라인 (Execution Pipeline):</b> Combination, combination_keywords, Batch, BatchItem. 키워드 조합 생성 → 배치 디스패치 → 개별 포스팅 실행의 흐름.</p>
+
+<div class="page-break"></div>
+<h2>그룹 1 — 인증·소유</h2>
+
+<div class="mermaid">
+erDiagram
+    USER {
+        int id PK
+        string email UK
+        string password_hash
+        string display_name
+        string role
+        string status
+        datetime created_at
+        datetime last_login_at
+    }
+
+    PLATFORM {
+        int id PK
+        string name
+        string slug UK
+        string base_url
+        string status
+        datetime created_at
+    }
+
+    ACCOUNT {
+        int id PK
+        int user_id FK
+        int platform_id FK
+        string username
+        string password_enc
+        json extra
+        datetime last_used_at
+        int cooldown_days
+        string status
+        string note
+        datetime created_at
+    }
+
+    USER ||--o{ ACCOUNT : owns
+    PLATFORM ||--o{ ACCOUNT : hosts
+</div>
+<p class="diagram-caption">그림 1. 인증·소유 그룹 — User가 Platform별 Account를 소유</p>
+
+<div class="page-break"></div>
+<h2>그룹 2 — 키워드 사전</h2>
+
+<div class="mermaid">
+erDiagram
+    KEYWORD_CATEGORY {
+        int id PK
+        string name UK
+        string slug UK
+        datetime created_at
+    }
+
+    KEYWORD {
+        int id PK
+        int category_id FK
+        int parent_id FK
+        string value
+        string display_value
+        int tier
+        bool active
+        int sort_order
+        json metadata
+        datetime created_at
+    }
+
+    AFFIX {
+        int id PK
+        string type
+        string value
+        int sort_order
+        datetime created_at
+    }
+
+    KEYWORD_CATEGORY ||--o{ KEYWORD : contains
+    KEYWORD ||--o{ KEYWORD : "parent-child"
+    KEYWORD }o--o{ AFFIX : "keyword_affixes"
+</div>
+<p class="diagram-caption">그림 2. 키워드 사전 그룹 — Category > Keyword 계층 + Affix M2M</p>
+
+<div class="page-break"></div>
+<h2>그룹 3 — 캠페인 구성 (제목 템플릿)</h2>
+
+<div class="mermaid">
+erDiagram
+    CAMPAIGN {
+        int id PK
+        int user_id FK
+        int platform_id FK
+        int layout_id FK
+        int publish_preset_id FK
+        int run_preset_id FK
+        string name
+        string description
+        json config
+        string status
+        datetime created_at
+    }
+
+    TEMPLATE_TOKEN {
+        int id PK
+        int campaign_id FK
+        string slug UK
+        string token_type
+        string value
+        int sort_order
+        datetime created_at
+    }
+
+    CAMPAIGN_SLOT {
+        int token_id PK_FK
+        int category_id FK
+    }
+
+    CAMPAIGN_PALETTE {
+        int token_id PK_FK
+        string strategy
+        datetime created_at
+    }
+
+    PALETTE_ITEM {
+        int id PK
+        int palette_id FK
+        string value
+        int sort_order
+        bool active
+        datetime created_at
+    }
+
+    CAMPAIGN_KEYWORD_PICK {
+        int id PK
+        int campaign_id FK
+        int category_id FK
+        int keyword_id FK
+        datetime created_at
+    }
+
+    CAMPAIGN_AFFIX_OVERRIDE {
+        int id PK
+        int campaign_id FK
+        int keyword_id FK
+        int affix_id FK
+        bool active
+        datetime created_at
+    }
+
+    SPACING_RULE {
+        int id PK
+        int campaign_id FK
+        json pattern
+        string description
+        bool active
+        datetime created_at
+    }
+
+    CAMPAIGN ||--o{ TEMPLATE_TOKEN : defines
+    TEMPLATE_TOKEN ||--o| CAMPAIGN_SLOT : "binds category"
+    TEMPLATE_TOKEN ||--o| CAMPAIGN_PALETTE : "has pool"
+    CAMPAIGN_PALETTE ||--o{ PALETTE_ITEM : contains
+    CAMPAIGN ||--o{ CAMPAIGN_KEYWORD_PICK : picks
+    CAMPAIGN ||--o{ CAMPAIGN_AFFIX_OVERRIDE : overrides
+    CAMPAIGN ||--o{ SPACING_RULE : uses
+</div>
+<p class="diagram-caption">그림 3. 캠페인 제목 템플릿 — Token(keyword|pool|literal) 기반 슬롯 구조</p>
+
+<div class="page-break"></div>
+<h2>그룹 3 — 캠페인 구성 (본문·프리셋)</h2>
+
+<div class="mermaid">
+erDiagram
+    POST_LAYOUT {
+        int id PK
+        int user_id FK
+        string name
+        string description
+        datetime created_at
+    }
+
+    LAYOUT_SLOT {
+        int id PK
+        int layout_id FK
+        int sort_order
+        string block_type
+        json config
+        datetime created_at
+    }
+
+    PUBLISH_PRESET {
+        int id PK
+        int user_id FK
+        string name
+        string description
+        json config
+        datetime created_at
+    }
+
+    RUN_PRESET {
+        int id PK
+        int user_id FK
+        string name
+        string description
+        json config
+        datetime created_at
+    }
+
+    MEDIA {
+        int id PK
+        int user_id FK
+        string original_name
+        string content_type
+        string storage_path UK
+        int size_bytes
+        datetime created_at
+    }
+
+    POST_LAYOUT ||--o{ LAYOUT_SLOT : contains
+    CAMPAIGN ||--o| POST_LAYOUT : "uses layout"
+    CAMPAIGN ||--o| PUBLISH_PRESET : "uses publish"
+    CAMPAIGN ||--o| RUN_PRESET : "uses run"
+</div>
+<p class="diagram-caption">그림 4. 본문 레이아웃 + 프리셋 — PostLayout/LayoutSlot이 블록 순서를 정의</p>
+
+<div class="page-break"></div>
+<h2>그룹 4 — 실행 파이프라인</h2>
+
+<div class="mermaid">
+erDiagram
+    COMBINATION {
+        bigint id PK
+        int campaign_id FK
+        int spacing_rule_id FK
+        json config
+        datetime used_at
+        datetime created_at
+    }
+
+    BATCH {
+        int id PK
+        int campaign_id FK
+        int account_id FK
+        datetime scheduled_at
+        string status
+        int worker_pid
+        datetime created_at
+        datetime started_at
+        datetime completed_at
+    }
+
+    BATCH_ITEM {
+        bigint id PK
+        int batch_id FK
+        bigint combination_id FK
+        string status
+        string result_url
+        string error_message
+        datetime created_at
+        datetime completed_at
+    }
+
+    CAMPAIGN ||--o{ COMBINATION : generates
+    COMBINATION }o--o{ KEYWORD : "combination_keywords"
+    CAMPAIGN ||--o{ BATCH : dispatches
+    ACCOUNT ||--o{ BATCH : executes
+    BATCH ||--o{ BATCH_ITEM : contains
+    COMBINATION ||--o{ BATCH_ITEM : "assigned to"
+</div>
+<p class="diagram-caption">그림 5. 실행 파이프라인 — Combination → Batch → BatchItem 흐름</p>
+
+<div class="page-break"></div>
+<h2>전체 관계 요약</h2>
+
+<p>전체 시스템의 엔티티 간 핵심 관계를 한눈에 정리하면 다음과 같다.</p>
+
+<div class="mermaid">
+erDiagram
+    USER ||--o{ ACCOUNT : owns
+    USER ||--o{ CAMPAIGN : owns
+    USER ||--o{ POST_LAYOUT : owns
+    USER ||--o{ PUBLISH_PRESET : owns
+    USER ||--o{ RUN_PRESET : owns
+    USER ||--o{ MEDIA : uploads
+
+    PLATFORM ||--o{ ACCOUNT : hosts
+    PLATFORM ||--o{ CAMPAIGN : targets
+
+    CAMPAIGN ||--o{ TEMPLATE_TOKEN : defines
+    CAMPAIGN ||--o{ COMBINATION : generates
+    CAMPAIGN ||--o{ BATCH : dispatches
+    CAMPAIGN ||--o| POST_LAYOUT : "uses layout"
+    CAMPAIGN ||--o| PUBLISH_PRESET : "uses publish"
+    CAMPAIGN ||--o| RUN_PRESET : "uses run"
+
+    KEYWORD_CATEGORY ||--o{ KEYWORD : contains
+    KEYWORD }o--o{ COMBINATION : "combination_keywords"
+    KEYWORD }o--o{ AFFIX : "keyword_affixes"
+
+    TEMPLATE_TOKEN ||--o| CAMPAIGN_SLOT : binds
+    TEMPLATE_TOKEN ||--o| CAMPAIGN_PALETTE : pools
+    CAMPAIGN_PALETTE ||--o{ PALETTE_ITEM : contains
+
+    POST_LAYOUT ||--o{ LAYOUT_SLOT : contains
+    ACCOUNT ||--o{ BATCH : executes
+    BATCH ||--o{ BATCH_ITEM : contains
+    COMBINATION ||--o{ BATCH_ITEM : used_in
+</div>
+<p class="diagram-caption">그림 6. 전체 ERD 요약 — User가 소유 루트, PostingSpec이 두 패키지의 접점</p>
+
+</body>
+</html>

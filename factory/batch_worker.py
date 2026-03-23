@@ -4,8 +4,8 @@ factory/batch_worker.py
 BatchWorker — executes a batch of PostingSpecs through BlogEditor.
 
 Sits in the factory layer because it manages batch state transitions
-(pending → running → completed/failed). All automator interaction goes
-through contracts: PostingSpec, JobRunner, BlogEditor ABC.
+(pending → running → completed/failed/stopped). All automator interaction
+goes through contracts: PostingSpec, JobRunner, BlogEditor ABC.
 
 Martin Ch.2 pattern: Worker depends on BlogEditor ABC, not SmartEditorOne.
 The concrete editor is provided via editor_factory injection.
@@ -15,6 +15,16 @@ The concrete editor is provided via editor_factory injection.
         editor_factory=lambda account: SmartEditorOne(page, write_url),
     )
     results = worker.run_batch(batch)
+
+Cancellation:
+    token = CancellationToken()
+    results = worker.run_batch(batch, cancel_token=token)
+    # from another thread or signal handler:
+    token.cancel()
+
+Retry failed items:
+    count = retry_failed_items(batch)   # reset failed/cancelled → pending
+    results = worker.run_batch(batch)   # re-runs only pending items
 
 Testable: inject RecordingEditor + StubTextGenerator + NoopImageProcessor.
 """
@@ -50,6 +60,37 @@ class ItemResult:
 
 
 # ---------------------------------------------------------------------------
+# CancellationToken — cooperative stop signal
+# ---------------------------------------------------------------------------
+
+class CancellationToken:
+    """
+    Cooperative cancellation signal for run_batch.
+
+    Thread-safe: cancel() can be called from any thread or signal handler.
+    The worker checks is_cancelled before processing each item.
+    """
+
+    def __init__(self) -> None:
+        self._cancelled = False
+
+    @property
+    def is_cancelled(self) -> bool:
+        return self._cancelled
+
+    def cancel(self) -> None:
+        """Request cancellation. Idempotent."""
+        self._cancelled = True
+
+
+# ---------------------------------------------------------------------------
+# Retryable statuses
+# ---------------------------------------------------------------------------
+
+_RETRYABLE_STATUSES = {"failed", "cancelled"}
+
+
+# ---------------------------------------------------------------------------
 # BatchWorker
 # ---------------------------------------------------------------------------
 
@@ -80,13 +121,23 @@ class BatchWorker:
         self._editor_factory = editor_factory
         self._media_resolver = media_resolver
 
-    def run_batch(self, batch: Any) -> list[ItemResult]:
+    def run_batch(
+        self,
+        batch: Any,
+        cancel_token: CancellationToken | None = None,
+    ) -> list[ItemResult]:
         """
         Process every pending item in the batch.
 
-        Returns a list of ItemResult — one per item, in order.
-        Failed items do not stop the batch. The batch is marked
-        "completed" if any item succeeded, "failed" if all failed.
+        Args:
+            batch:        Batch ORM instance with .items list.
+            cancel_token: Optional cooperative cancellation signal.
+                          When cancelled, remaining pending items are
+                          marked "cancelled" and the batch is "stopped".
+
+        Returns:
+            List of ItemResult for items actually processed.
+            Cancelled items are NOT included in the result list.
         """
         batch.status = "running"
         batch.started_at = datetime.now(timezone.utc)
@@ -99,10 +150,24 @@ class BatchWorker:
             if item.status != "pending":
                 continue
 
+            # Check cancellation before each item
+            if cancel_token is not None and cancel_token.is_cancelled:
+                self._cancel_pending_items(batch)
+                batch.completed_at = datetime.now(timezone.utc)
+                batch.status = "stopped"
+                return results
+
             result = self._process_item(item, batch)
             results.append(result)
             if result.success:
                 success_count += 1
+
+            # Check cancellation after processing (stop before next item)
+            if cancel_token is not None and cancel_token.is_cancelled:
+                self._cancel_pending_items(batch)
+                batch.completed_at = datetime.now(timezone.utc)
+                batch.status = "stopped"
+                return results
 
         batch.completed_at = datetime.now(timezone.utc)
         batch.status = "completed" if success_count > 0 else "failed"
@@ -144,3 +209,44 @@ class BatchWorker:
             meta=account.extra or {},
             session_path=f"{account.username}_session.json",
         )
+
+    @staticmethod
+    def _cancel_pending_items(batch: Any) -> None:
+        """Mark all remaining pending items as cancelled."""
+        for item in batch.items:
+            if item.status == "pending":
+                item.status = "cancelled"
+
+
+# ---------------------------------------------------------------------------
+# retry_failed_items — standalone function
+# ---------------------------------------------------------------------------
+
+def retry_failed_items(batch: Any) -> int:
+    """
+    Reset failed and cancelled items to pending so run_batch can retry them.
+
+    Clears error_message and completed_at on each reset item.
+    Resets batch status to "pending" if any items were reset.
+
+    Args:
+        batch: Batch ORM instance with .items list.
+
+    Returns:
+        Number of items reset.
+    """
+    reset_count = 0
+
+    for item in batch.items:
+        if item.status in _RETRYABLE_STATUSES:
+            item.status = "pending"
+            item.error_message = None
+            item.completed_at = None
+            reset_count += 1
+
+    if reset_count > 0:
+        batch.status = "pending"
+        batch.started_at = None
+        batch.completed_at = None
+
+    return reset_count
