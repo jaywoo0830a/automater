@@ -3,579 +3,491 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>automater SPA API Guide v1.3</title>
+<title>automater API Guide v2.1</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.6.1/mermaid.min.js"></script>
 <script>
 mermaid.initialize({
   startOnLoad: true, theme: 'neutral',
   themeVariables: { fontFamily: 'Georgia, serif', fontSize: '13px' },
   sequence: { useMaxWidth: true, mirrorActors: false },
-  stateDiagram: { useMaxWidth: true }, class: { useMaxWidth: true }
+  stateDiagram: { useMaxWidth: true }
 });
 </script>
 <style>
-@media print { .page-break { page-break-before: always; } body { font-size: 11pt; } pre { font-size: 9pt; } }
+@media print { .pb { page-break-before: always; } body { font-size: 11pt; } pre { font-size: 9pt; } }
 body { font-family: Georgia, 'Nanum Myeongjo', serif; max-width: 720px; margin: 0 auto; padding: 40px 20px; line-height: 1.8; color: #111; }
 h1 { font-size: 2em; border-bottom: 2px solid #111; padding-bottom: 10px; margin-top: 60px; }
 h2 { font-size: 1.5em; margin-top: 40px; }
 h3 { font-size: 1.2em; margin-top: 30px; }
 pre { background: #f5f5f5; border: 1px solid #ccc; padding: 16px; overflow-x: auto; font-family: 'Courier New', monospace; font-size: 0.85em; line-height: 1.5; }
 code { font-family: 'Courier New', monospace; font-size: 0.9em; }
+p code { background: #f0f0f0; padding: 1px 4px; }
 .mermaid { text-align: center; margin: 30px 0; }
-.cover { text-align: center; padding: 100px 0 60px 0; }
-.cover h1 { font-size: 2.4em; border: none; margin-bottom: 10px; }
-.cover .subtitle { font-size: 1.2em; margin-bottom: 40px; }
+.cover { text-align: center; padding: 80px 0 40px 0; }
+.cover h1 { font-size: 2.4em; border: none; }
+.cover .sub { font-size: 1.2em; margin-bottom: 40px; }
 .cover .meta { font-size: 1em; color: #555; }
-.toc { margin: 40px 0; }
-.toc li { margin-bottom: 6px; line-height: 1.6; }
-.chapter-num { font-size: 0.9em; letter-spacing: 2px; text-transform: uppercase; color: #555; }
-.diagram-caption { text-align: center; font-size: 0.9em; color: #555; margin-top: -10px; margin-bottom: 30px; }
+.cap { text-align: center; font-size: 0.9em; color: #555; margin-top: -10px; margin-bottom: 30px; }
+blockquote { border-left: 3px solid #555; margin-left: 0; padding: 8px 16px; font-style: italic; color: #333; }
 table { border-collapse: collapse; width: 100%; margin: 20px 0; }
-th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: left; font-size: 0.9em; }
+th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; font-size: 0.85em; }
 th { background: #f5f5f5; }
+.ch { font-size: 0.9em; letter-spacing: 2px; text-transform: uppercase; color: #555; }
+.ui { border: 2px solid #333; padding: 14px 16px; margin: 20px 0; font-size: 0.9em; line-height: 1.6; }
+.ui b { display: block; margin-bottom: 6px; font-size: 1em; }
 </style>
 </head>
 <body>
 
 <div class="cover">
-<h1>automater SPA API Guide</h1>
-<p class="subtitle">프론트엔드 개발자를 위한 API 연동 가이드</p>
-<p class="meta"><code>/api/spa/v1</code> &middot; OpenAPI 3.2.0 &middot; v1.3.0</p>
+<h1>automater API Guide</h1>
+<p class="sub">프론트엔드 개발자를 위한 연동 가이드</p>
+<p class="meta"><code>/api/v1</code> · v2.1.0 · 52 operations · 40 schemas</p>
 </div>
 
-<!-- ==================== TOC ==================== -->
-<div class="page-break"></div>
+<!-- TOC -->
+<div class="pb"></div>
 <h1>목차</h1>
-<div class="toc">
 <ol>
-<li>전체 워크플로우</li>
-<li>제목 파이프라인 데이터 맵</li>
-<li>인증</li>
-<li>Step 1 — 계정</li>
-<li>Step 2 — 키워드·풀·띄어쓰기·타이틀
-  <ul>
-    <li>5.1 키워드 + 접사 제어</li>
-    <li>5.2 풀</li>
-    <li>5.3 띄어쓰기 스타일</li>
-    <li>5.4 타이틀 빌더</li>
-    <li>5.5 Confirm</li>
-  </ul>
-</li>
-<li>Step 3 — 템플릿</li>
-<li>Step 4 — 실행</li>
-<li>모니터링</li>
-<li>에러 처리</li>
-<li>부록: 전체 엔드포인트</li>
+<li>설계 원칙과 프론트엔드 규약</li>
+<li>전체 상태 다이어그램</li>
+<li>표현 → 테이블 매핑 (23/23)</li>
+<li>로그인 + 네비게이션</li>
+<li>AccountSetup — 계정 관리 화면</li>
+<li>TitleWorkbench — 제목 구성 화면</li>
+<li>Campaign + Template — 캠페인 확정 + 템플릿</li>
+<li>실행 + 모니터링</li>
+<li>Presets + Media — 보조 화면</li>
+<li>전체 엔드포인트 목록</li>
 </ol>
-</div>
 
-<!-- ==================== CH 1 ==================== -->
-<div class="page-break"></div>
-<p class="chapter-num">Chapter 1</p>
-<h1>전체 워크플로우</h1>
+<!-- CH 1 -->
+<div class="pb"></div>
+<p class="ch">Chapter 1</p>
+<h1>설계 원칙과 프론트엔드 규약</h1>
+
+<table>
+<tr><th>#</th><th>원칙</th><th>프론트엔드에 미치는 영향</th></tr>
+<tr><td>1</td><td>Billboard URL</td><td><code>/api/v1</code> 하나만 하드코딩. 나머지는 <code>_links</code>에서 읽는다.</td></tr>
+<tr><td>2</td><td>하이퍼미디어</td><td>버튼의 href와 method를 응답의 <code>_links</code>에서 가져온다.</td></tr>
+<tr><td>3</td><td>전이 후 전체 교체</td><td>PUT/DELETE 응답을 <code>setState(response)</code>로 교체한다. 로컬 패치 없음.</td></tr>
+<tr><td>4</td><td>내부 ID 비노출</td><td>숫자 PK 없음. slug 또는 값으로 식별한다.</td></tr>
+<tr><td>5</td><td>Collection Trap 방지</td><td>한 화면 = GET 1번. 여러 엔드포인트 JOIN 불필요.</td></tr>
+</table>
+
+<h3>에러 처리</h3>
+<pre>
+// 모든 에러 응답 (RFC 9457 Problem Details)
+{
+    "type": "validation_error",
+    "title": "입력 검증 실패",
+    "detail": "키워드 그룹 'region'이 존재하지 않습니다.",
+    "suggestion": "키워드를 먼저 임포트하세요."
+}
+// → detail을 사용자에게 표시, suggestion은 작은 글씨로
+// → HTTP 코드는 사용자에게 절대 보여주지 않음
+</pre>
+
+<!-- CH 2 -->
+<div class="pb"></div>
+<p class="ch">Chapter 2</p>
+<h1>전체 상태 다이어그램</h1>
 
 <div class="mermaid">
 stateDiagram-v2
-    [*] --> Step1 : Login
-    Step1 --> Step2 : Accounts ready
-    Step2 --> Step3 : Campaign created
-    Step3 --> Step4 : Template chosen
-    Step4 --> Monitor : Run started
-    Monitor --> [*] : Done
+    [*] --> Billboard : GET /api/v1
+    Billboard --> Profile : profile
+    Billboard --> AccountSetup : accounts
+    Billboard --> TitleWorkbench : title-workbench
+    Billboard --> CampaignList : campaigns
+    Billboard --> TemplateGallery : templates
+    Billboard --> PresetLibrary : presets
+    Billboard --> MediaLibrary : media
+    Billboard --> RunList : runs
 
-    state Step2 {
-        direction LR
-        kw : A. Keywords+Affixes
-        pool : B. Pools
-        sp : C. Spacing
-        title : D. Title
-        confirm : Confirm
-        kw --> pool
-        pool --> sp
-        sp --> title
-        title --> confirm
-    }
+    AccountSetup --> AccountSetup : save/edit/delete/select
+    AccountSetup --> AccountPreview : upload
+
+    TitleWorkbench --> TitleWorkbench : keyword/decoration/affix
+    TitleWorkbench --> TitlePreview : preview
+    TitlePreview --> Campaign : create_campaign
+
+    Campaign --> ExecutionPlan : preview_execution
+    ExecutionPlan --> RunProgress : start
+
+    TemplateGallery --> TemplateDetail : item
+    RunList --> RunDetail : item
+    RunDetail --> RunDetail : retry/stop
 </div>
-<p class="diagram-caption">그림 1-1. 전체 워크플로우</p>
+<p class="cap">그림 2-1. 전체 상태 다이어그램 — 박스 = 화면, 화살표 = HTTP 전이</p>
 
-<p>총 29개 엔드포인트. Step 2가 15개로 가장 많다: 키워드+접사 7, 풀 5, 띄어쓰기 1, 타이틀 1, Confirm 1.</p>
-
-<!-- ==================== CH 2 ==================== -->
-<div class="page-break"></div>
-<p class="chapter-num">Chapter 2</p>
-<h1>제목 파이프라인 데이터 맵</h1>
-
-<p>제목은 다섯 가지 데이터의 조합으로 만들어진다. 각각 Step 2의 하위 영역에서 제어한다.</p>
-
-<div class="mermaid">
-classDiagram
-    class Title {
-        +string result
-    }
-    class A_Keywords {
-        KeywordCategory
-        Keyword
-        CampaignKeywordPick
-    }
-    class B_Affixes {
-        Affix (global dict)
-        keyword_affixes (M2M)
-        CampaignAffixOverride
-    }
-    class C_Pools {
-        CampaignPalette
-        PaletteItem
-    }
-    class D_Spacing {
-        SpacingRule
-        pattern: slug→0 or 1
-    }
-    class E_TokenOrder {
-        TemplateToken
-        CampaignSlot
-    }
-
-    A_Keywords --> Title : fills keyword tokens
-    B_Affixes --> A_Keywords : modifies values
-    C_Pools --> Title : fills pool tokens
-    D_Spacing --> Title : joins tokens
-    E_TokenOrder --> Title : arranges all
-</div>
-<p class="diagram-caption">그림 2-1. 제목 데이터 5대 구성 요소와 DB 모델</p>
-
-<div class="page-break"></div>
-
+<!-- CH 3 -->
+<div class="pb"></div>
+<p class="ch">Chapter 3</p>
+<h1>표현 → 테이블 매핑</h1>
 <table>
-<tr><th>구성 요소</th><th>Step 2 영역</th><th>역할</th><th>예시</th><th>조합 영향</th></tr>
-<tr>
-<td><b>A. 키워드</b></td><td>2a</td>
-<td>keyword 토큰에 치환되는 값</td>
-<td>region: 강남동, 수원시</td>
-<td>카르테시안 곱</td>
-</tr>
-<tr>
-<td><b>B. 접사</b></td><td>2a</td>
-<td>키워드 값을 변형 (접미/접두 제거)</td>
-<td>강남<b>동</b> → 강남, 수원<b>시</b> → 수원</td>
-<td>값 변형 (곱 아님)</td>
-</tr>
-<tr>
-<td><b>C. 풀</b></td><td>2b</td>
-<td>pool 토큰에서 랜덤 선택</td>
-<td>salt_suffix: 추천, 즉시 가능</td>
-<td>랜덤 (곱 아님)</td>
-</tr>
-<tr>
-<td><b>D. 띄어쓰기</b></td><td>2c</td>
-<td>토큰 간 공백 on/off</td>
-<td>"Normal": 강남 수학, "Compact": 강남수학</td>
-<td><b>스타일 수 × 곱</b></td>
-</tr>
-<tr>
-<td><b>E. 토큰 순서</b></td><td>2d</td>
-<td>블록의 종류와 배치 순서</td>
-<td>[region] [과외] [subject] [salt_suffix]</td>
-<td>구조 결정</td>
-</tr>
+<tr><th>표현 (화면)</th><th>DB 테이블</th><th>C</th><th>R</th><th>U</th><th>D</th></tr>
+<tr><td><b>Profile</b></td><td>users, platforms</td><td>register</td><td>GET</td><td>PUT</td><td>-</td></tr>
+<tr><td><b>AccountSetup</b></td><td>accounts</td><td>POST</td><td>GET</td><td>PUT</td><td>DELETE</td></tr>
+<tr><td><b>TitleWorkbench</b></td><td>keyword_categories, keywords, affixes, keyword_affixes, campaign_affix_overrides, campaign_palettes, palette_items</td><td>import/upsert</td><td>GET</td><td>upsert/toggle</td><td>DELETE</td></tr>
+<tr><td><b>Campaign</b></td><td>campaigns, template_tokens, campaign_slots, spacing_rules, campaign_keyword_picks</td><td>POST</td><td>GET</td><td>PUT</td><td>DELETE+cascade</td></tr>
+<tr><td><b>TemplateDetail</b></td><td>post_layouts, layout_slots</td><td>POST</td><td>GET</td><td>PUT</td><td>DELETE+cascade</td></tr>
+<tr><td><b>PresetLibrary</b></td><td>publish_presets, run_presets</td><td>POST</td><td>GET</td><td>PUT</td><td>DELETE</td></tr>
+<tr><td><b>MediaLibrary</b></td><td>media</td><td>upload</td><td>GET</td><td>-</td><td>DELETE</td></tr>
+<tr><td><b>RunDetail</b></td><td>batches, batch_items, combinations</td><td>start</td><td>GET</td><td>retry/stop</td><td>-</td></tr>
 </table>
+<p>23개 테이블 전부 커버.</p>
 
-<p><b>조합 공식:</b> 총 포스트 수 = (키워드 카르테시안 곱) × (띄어쓰기 스타일 수)</p>
-
-<!-- ==================== CH 3 ==================== -->
-<div class="page-break"></div>
-<p class="chapter-num">Chapter 3</p>
-<h1>인증</h1>
-
-<h3>POST /auth/login</h3>
-<pre>
-// Request
-{ "email": "user@example.com", "password": "secret" }
-
-// Response 200
-{ "token": "eyJhbG...", "user": { "display_name": "Eric", "email": "user@example.com" } }
-</pre>
-<p>이후 모든 요청: <code>Authorization: Bearer &lt;token&gt;</code></p>
-
-<!-- ==================== CH 4 ==================== -->
-<div class="page-break"></div>
-<p class="chapter-num">Chapter 4</p>
-<h1>Step 1 — 계정</h1>
-
-<table>
-<tr><th>Method</th><th>Path</th><th>설명</th></tr>
-<tr><td>POST</td><td><code>/step1/accounts/upload</code></td><td>엑셀 파싱 (미리보기)</td></tr>
-<tr><td>POST</td><td><code>/step1/accounts/confirm</code></td><td>저장 + 선택</td></tr>
-<tr><td>GET</td><td><code>/step1/accounts</code></td><td>기존 목록</td></tr>
-<tr><td>PUT</td><td><code>/step1/accounts/select</code></td><td>재선택</td></tr>
-</table>
-
-<p>v1.2와 동일. 변경 없음.</p>
-
-<!-- ==================== CH 5 ==================== -->
-<div class="page-break"></div>
-<p class="chapter-num">Chapter 5</p>
-<h1>Step 2 — 키워드·풀·띄어쓰기·타이틀</h1>
-
-<h2>5.1 키워드 + 접사 제어</h2>
-
-<p>키워드를 업로드하면 한국어 접사(동, 구, 시, 읍, 면, 리 등)가 자동 감지된다. 사용자는 접사를 유지할지 제거할지 키워드별로 토글할 수 있다.</p>
+<!-- CH 4 -->
+<div class="pb"></div>
+<p class="ch">Chapter 4</p>
+<h1>로그인 + 네비게이션</h1>
 
 <div class="mermaid">
 sequenceDiagram
     actor User
-    participant FE as Frontend
-    participant API as API
+    participant SPA
+    participant API
 
-    alt Upload new
-        User->>FE: Upload keywords.xlsx
-        FE->>API: POST /step2/keywords/upload
-        API-->>FE: KeywordUploadPreview (with detected affixes)
-        User->>FE: Click Import
-        FE->>API: POST /step2/keywords/import (auto_detect_affixes=true)
-        API-->>FE: "8 keywords, 3 affixes linked"
-    else Browse existing
-        FE->>API: GET /step2/keywords/categories
-        API-->>FE: Keywords with affix info per keyword
+    SPA->>API: GET /api/v1 (Billboard)
+    API-->>SPA: _links: {auth, register, accounts, ...}
+
+    User->>SPA: 이메일/비밀번호 입력
+    SPA->>API: POST _links.auth.href
+    API-->>SPA: {token, _links: {accounts, title-workbench}}
+    SPA->>SPA: token 저장, 사이드바 활성화
+
+    User->>SPA: 사이드바 "계정" 클릭
+    SPA->>API: GET _links.accounts.href
+    API-->>SPA: AccountSetup
+</div>
+<p class="cap">그림 4-1. 로그인 → 네비게이션 시퀀스</p>
+
+<div class="ui">
+<b>기대 UI: 로그인 화면</b>
+이메일 입력 · 비밀번호 입력 · [로그인] 버튼 · "계정이 없으신가요?" 링크(→ register)<br>
+로그인 성공 후 사이드바 표시: 계정 / 제목 구성 / 캠페인 / 템플릿 / 프리셋 / 미디어 / 실행 현황<br>
+각 사이드바 항목의 href는 <code>TokenResponse._links</code>에서 가져옴.
+</div>
+
+<pre>
+// Billboard 응답 — 이 URL 하나만 하드코딩
+GET /api/v1
+{
+    "_type": "Billboard",
+    "_links": {
+        "self":             {"href": "/api/v1"},
+        "auth":             {"href": "/api/v1/auth/token", "method": "POST"},
+        "register":         {"href": "/api/v1/auth/register", "method": "POST"},
+        "accounts":         {"href": "/api/v1/accounts"},
+        "title-workbench":  {"href": "/api/v1/title-workbench"},
+        "campaigns":        {"href": "/api/v1/campaigns"},
+        "templates":        {"href": "/api/v1/templates"},
+        "presets":          {"href": "/api/v1/presets"},
+        "media":            {"href": "/api/v1/media"},
+        "runs":             {"href": "/api/v1/runs"}
+    }
+}
+</pre>
+
+<!-- CH 5 -->
+<div class="pb"></div>
+<p class="ch">Chapter 5</p>
+<h1>AccountSetup — 계정 관리 화면</h1>
+
+<div class="ui">
+<b>기대 UI: 계정 관리</b>
+상단: [엑셀 업로드] 버튼 (href = _links.upload)<br>
+테이블: 이름 | 플랫폼 | 상태 | 선택 체크박스 | [수정] [삭제]<br>
+상태 표시: "Ready" 초록 뱃지, "Cooling (3일)" 노란 뱃지, "Disabled" 회색<br>
+하단: ready_count / selected_count 요약 · [선택 저장] 버튼<br>
+각 행의 [수정] href = AccountEntry._links.edit, [삭제] href = AccountEntry._links.remove
+</div>
+
+<div class="mermaid">
+sequenceDiagram
+    actor User
+    participant SPA
+    participant API
+
+    SPA->>API: GET /accounts
+    API-->>SPA: AccountSetup {accounts[], _links}
+    SPA-->>User: 계정 테이블 렌더링
+
+    rect rgb(240, 245, 250)
+    note right of SPA: 엑셀 업로드 플로우
+    User->>SPA: [엑셀 업로드] 클릭 → 파일 선택
+    SPA->>API: POST _links.upload.href (multipart)
+    API-->>SPA: AccountPreview {rows[], _links.confirm}
+    SPA-->>User: 미리보기 테이블 (유효/오류 표시)
+
+    User->>SPA: 행 선택 → [확인] 클릭
+    SPA->>API: POST _links.confirm.href
+    API-->>SPA: AccountSetup (갱신된 전체 목록)
+    SPA->>SPA: setState(response)
     end
 
-    User->>FE: Toggle affix off on "강남동" → "강남"
-    FE->>API: PUT /step2/keywords/affix-overrides
-    API-->>FE: "2 overrides updated"
+    rect rgb(245, 240, 250)
+    note right of SPA: 개별 수정/삭제
+    User->>SPA: myblog01의 [수정] 클릭
+    SPA-->>User: 인라인 편집 모드 (비밀번호, 쿨다운)
+    User->>SPA: 수정 후 [저장]
+    SPA->>API: PUT _links.edit.href {password, cooldown_days}
+    API-->>SPA: AccountSetup (전체 목록)
+    SPA->>SPA: setState(response)
+    end
+
+    rect rgb(240, 250, 240)
+    note right of SPA: 선택 변경
+    User->>SPA: 체크박스 토글 → [선택 저장]
+    SPA->>API: PUT _links.update_selection.href {selected_slugs}
+    API-->>SPA: AccountSetup
+    SPA->>SPA: setState(response)
+    end
 </div>
-<p class="diagram-caption">그림 5-1. 키워드 + 접사 시퀀스</p>
+<p class="cap">그림 5-1. 계정 관리 시퀀스 — 업로드, 수정, 선택 세 가지 플로우</p>
 
-<div class="page-break"></div>
-<table>
-<tr><th>Method</th><th>Path</th><th>설명</th></tr>
-<tr><td>POST</td><td><code>/step2/keywords/upload</code></td><td>엑셀 파싱 (미리보기)</td></tr>
-<tr><td>POST</td><td><code>/step2/keywords/import</code></td><td>저장 + 접사 자동 연결</td></tr>
-<tr><td>GET</td><td><code>/step2/keywords/categories</code></td><td>카테고리 + 키워드 + 접사 조회</td></tr>
-<tr><td>POST</td><td><code>/step2/keywords/categories/{slug}</code></td><td>키워드 추가</td></tr>
-<tr><td>PUT</td><td><code>/step2/keywords/{keywordId}</code></td><td>키워드 수정</td></tr>
-<tr><td>DELETE</td><td><code>/step2/keywords/{keywordId}</code></td><td>키워드 삭제</td></tr>
-<tr><td>PUT</td><td><code>/step2/keywords/affix-overrides</code></td><td>접사 토글 (일괄)</td></tr>
-</table>
+<!-- CH 6 -->
+<div class="pb"></div>
+<p class="ch">Chapter 6</p>
+<h1>TitleWorkbench — 제목 구성 화면</h1>
 
-<h3>GET /step2/keywords/categories — 접사 포함 응답</h3>
+<p>이 화면은 SPA의 핵심이다. 키워드, 장식 풀, 띄어쓰기 스타일, 타이틀 블록을 한 화면에서 구성하고, 실시간 미리보기로 결과를 확인한 후, 캠페인으로 확정한다.</p>
 
-<pre>
-// Response 200
-[
-    {
-        "slug": "region",
-        "name": "지역",
-        "keywords": [
-            {
-                "id": 1,
-                "value": "강남동",
-                "display_value": "",
-                "active": true,
-                "affixes": [
-                    {
-                        "affix_id": 5,
-                        "type": "suffix",
-                        "value": "동",
-                        "active": true,
-                        "stripped_result": "강남"
-                    }
-                ]
-            },
-            {
-                "id": 2,
-                "value": "수원시",
-                "display_value": "",
-                "active": true,
-                "affixes": [
-                    {
-                        "affix_id": 8,
-                        "type": "suffix",
-                        "value": "시",
-                        "active": true,
-                        "stripped_result": "수원"
-                    }
-                ]
-            },
-            {
-                "id": 3,
-                "value": "판교",
-                "display_value": "",
-                "active": true,
-                "affixes": []
-            }
-        ]
-    }
-]
-</pre>
+<div class="ui">
+<b>기대 UI: 제목 구성 (위→아래 4영역)</b>
+<br>
+<b>① 키워드 영역</b><br>
+[엑셀 업로드] 버튼 · 키워드 그룹별 접이식 패널<br>
+각 그룹 헤더: "지역 (3)" [이름변경] [삭제]<br>
+그룹 안: 키워드 칩 목록, 각 칩에 × 삭제, 접사 토글 스위치<br>
+칩 예: [강남동 ✕] 접사: 동 [ON→OFF] → 미리보기 "강남"<br>
+그룹 하단: 키워드 추가 인라인 입력<br>
+<br>
+<b>② 장식 풀 영역</b><br>
+[엑셀 업로드] 버튼 · 풀별 접이식 패널 (salt_prefix, salt_suffix 등)<br>
+각 풀: 항목 칩 목록, ON/OFF 토글, × 삭제, 추가 입력<br>
+<br>
+<b>③ 띄어쓰기 영역</b><br>
+스타일 행 목록. 각 행: 이름 입력 + 슬러그별 토글(공백/붙임)<br>
+[+ 스타일 추가] 버튼<br>
+시각 예: <code>region[공백] subject[붙임] salt_suffix[공백]</code> → "강남 수학추천"<br>
+<br>
+<b>④ 타이틀 블록 + 미리보기 영역</b><br>
+드래그 가능한 블록 배치: [keyword:region] [text:과외] [keyword:subject] [decoration:salt_suffix]<br>
+[+ 블록 추가] 버튼 (keyword/text/decoration 선택)<br>
+하단: [미리보기] 버튼 → 스타일별 샘플 제목 표시<br>
+맨 아래: [캠페인 생성] 버튼 → Campaign으로 전이
+</div>
 
-<p>프론트엔드는 <code>affixes</code> 배열이 있는 키워드 옆에 토글을 표시한다. <code>active: true</code>면 접사 유지("강남동"), <code>active: false</code>면 접사 제거("강남"). <code>stripped_result</code>는 제거 후 미리보기용 값이다.</p>
-
-<div class="page-break"></div>
-<h3>PUT /step2/keywords/affix-overrides — 접사 토글</h3>
-
-<pre>
-// Request
-{
-    "overrides": [
-        { "keyword_id": 1, "affix_id": 5, "active": false },
-        { "keyword_id": 2, "affix_id": 8, "active": false }
-    ]
-}
-
-// Response 200
-{ "success": true, "message": "2 overrides updated.", "updated_count": 2 }
-</pre>
-
-<p><code>active: false</code>는 "접사를 제거하겠다"는 뜻이다. 이 설정은 제목 생성 시 <code>_apply_affixes()</code>에서 적용되어 "강남동"이 "강남"으로 바뀐다.</p>
-
-<!-- ==================== 5.2 Pools ==================== -->
-<div class="page-break"></div>
-<h2>5.2 풀</h2>
-
-<table>
-<tr><th>Method</th><th>Path</th><th>설명</th></tr>
-<tr><td>POST</td><td><code>/step2/pools/upload</code></td><td>엑셀 업로드 (즉시 저장)</td></tr>
-<tr><td>GET</td><td><code>/step2/pools</code></td><td>기존 풀 조회</td></tr>
-<tr><td>POST</td><td><code>/step2/pools/{slug}/items</code></td><td>항목 추가</td></tr>
-<tr><td>PUT</td><td><code>/step2/pools/{slug}/items/{itemId}</code></td><td>항목 수정</td></tr>
-<tr><td>DELETE</td><td><code>/step2/pools/{slug}/items/{itemId}</code></td><td>항목 삭제</td></tr>
-</table>
-
-<p>v1.2와 동일. 변경 없음.</p>
-
-<!-- ==================== 5.3 Spacing ==================== -->
-<div class="page-break"></div>
-<h2>5.3 띄어쓰기 스타일</h2>
-
-<p>각 토큰 뒤에 공백을 넣을지 말지를 슬러그별로 토글한다. 여러 스타일을 만들면 같은 키워드 조합으로 다른 제목이 생긴다.</p>
-
-<h3>띄어쓰기 모델</h3>
-
-<pre>
-// SpacingStyle — 하나의 이름 붙인 띄어쓰기 규칙
-{
-    "name": "Normal",
-    "pattern": {
-        "region": 1,       // region 뒤에 공백
-        "subject": 1,      // subject 뒤에 공백
-        "salt_suffix": 1   // salt_suffix 뒤에 공백 (마지막은 무의미)
-    }
-}
-
-// pattern 값:
-//   1 = 이 토큰 뒤에 공백 (기본값)
-//   0 = 이 토큰 뒤에 공백 없음 (다음 토큰에 붙임)
-</pre>
-
-<h3>UI 표현</h3>
-
-<pre>
-// 스타일 "Normal": 모든 슬러그 뒤에 공백
-//   region[1] subject[1] salt_suffix[1]
-//   → "강남 수학 추천"
-
-// 스타일 "Compact": region, subject 뒤에 공백 없음
-//   region[0] subject[0] salt_suffix[1]
-//   → "강남수학추천"
-
-// 스타일 "Mixed": region 뒤에만 공백 없음
-//   region[0] subject[1] salt_suffix[1]
-//   → "강남수학 추천"
-</pre>
-
-<p>프론트엔드는 각 슬러그 이름 옆에 토글 스위치를 배치한다. 사용자가 토글을 클릭할 때마다 <code>/step2/spacing/preview</code>를 호출해 실시간 미리보기를 갱신한다.</p>
-
-<div class="page-break"></div>
-<h3>POST /step2/spacing/preview</h3>
-
-<pre>
-// Request
-{
-    "styles": [
-        {
-            "name": "Normal",
-            "pattern": { "region": 1, "subject": 1, "salt_suffix": 1 }
-        },
-        {
-            "name": "Compact",
-            "pattern": { "region": 0, "subject": 0, "salt_suffix": 1 }
-        }
-    ],
-    "token_slugs": ["region", "subject", "salt_suffix"],
-    "keyword_selections": [
-        { "slug": "region", "keyword_ids": [1, 2] },
-        { "slug": "subject", "keyword_ids": [10, 11] }
-    ],
-    "count": 3
-}
-</pre>
-
-<pre>
-// Response 200
-{
-    "styles": [
-        {
-            "name": "Normal",
-            "template": "{region} {subject} {salt_suffix}",
-            "samples": ["강남 수학 전문 추천", "수원 영어 즉시 가능", "강남 영어 강력 추천"]
-        },
-        {
-            "name": "Compact",
-            "template": "{region}{subject} {salt_suffix}",
-            "samples": ["강남수학 전문 추천", "수원영어 즉시 가능", "강남영어 강력 추천"]
-        }
-    ],
-    "combination_multiplier": 2,
-    "warnings": []
-}
-</pre>
-
-<p><code>combination_multiplier</code>는 띄어쓰기 스타일 수이다. 키워드 조합이 4개이고 스타일이 2개면 총 8개 포스트가 생성된다.</p>
-
-<!-- ==================== 5.4 Title ==================== -->
-<div class="page-break"></div>
-<h2>5.4 타이틀 빌더</h2>
-
-<p>모든 데이터를 조합한 최종 라이브 미리보기이다. 키워드 값, 접사 제거, 풀 랜덤 선택, 띄어쓰기 패턴이 전부 반영된 샘플 제목을 보여준다.</p>
+<div class="pb"></div>
+<h2>6.1 초기 로드</h2>
 
 <div class="mermaid">
 sequenceDiagram
     actor User
-    participant FE as Frontend
-    participant API as API
+    participant SPA
+    participant API
 
-    User->>FE: Arrange token blocks
-    note over FE: Collects all current state
-    FE->>API: POST /step2/title/preview
-    note right of API: title_tokens + keyword_selections + spacing_styles + affix_overrides
-    API-->>FE: Samples per spacing style
-    FE-->>User: Live preview
+    User->>SPA: 사이드바 "제목 구성" 클릭
+    SPA->>API: GET /title-workbench
+    API-->>SPA: TitleWorkbench {keyword_groups, decoration_pools, spacing_styles, title_blocks, _links}
+    SPA->>SPA: 4영역 렌더링 (GET 1번으로 전부)
+    SPA-->>User: 키워드 + 장식 + 띄어쓰기 + 블록 표시
 </div>
-<p class="diagram-caption">그림 5-2. 타이틀 빌더 — 전체 데이터를 한 번에 미리보기</p>
+<p class="cap">그림 6-1. TitleWorkbench 초기 로드 — 1번의 GET으로 화면 전체</p>
 
-<h3>POST /step2/title/preview</h3>
+<h2>6.2 키워드 조작</h2>
 
-<pre>
-// Request
-{
-    "title_tokens": [
-        { "type": "keyword", "slug": "region", "sort_order": 0 },
-        { "type": "literal", "slug": "lit_1", "value": "과외", "sort_order": 1 },
-        { "type": "keyword", "slug": "subject", "sort_order": 2 },
-        { "type": "pool", "slug": "salt_suffix", "sort_order": 3 }
-    ],
-    "keyword_selections": [
-        { "slug": "region", "keyword_ids": [1, 2] },
-        { "slug": "subject", "keyword_ids": [10, 11] }
-    ],
-    "spacing_styles": [
-        { "name": "Normal", "pattern": { "region": 1, "lit_1": 1, "subject": 1, "salt_suffix": 1 } },
-        { "name": "Compact", "pattern": { "region": 0, "lit_1": 0, "subject": 1, "salt_suffix": 1 } }
-    ],
-    "affix_overrides": [
-        { "keyword_id": 1, "affix_id": 5, "active": false }
-    ],
-    "count": 3
-}
-</pre>
+<div class="mermaid">
+sequenceDiagram
+    actor User
+    participant SPA
+    participant API
 
-<pre>
-// Response 200
-{
-    "styles": [
-        {
-            "name": "Normal",
-            "template": "{region} 과외 {subject} {salt_suffix}",
-            "samples": ["강남 과외 수학 전문 추천", "수원 과외 영어 즉시 가능", "강남 과외 영어 강력 추천"]
-        },
-        {
-            "name": "Compact",
-            "template": "{region}과외{subject} {salt_suffix}",
-            "samples": ["강남과외수학 전문 추천", "수원과외영어 즉시 가능", "강남과외영어 강력 추천"]
-        }
-    ],
-    "total_combinations": 8,
-    "warnings": []
-}
-</pre>
+    rect rgb(240, 245, 250)
+    note right of SPA: 엑셀 업로드 → 임포트
+    User->>SPA: [엑셀 업로드] → 파일 선택
+    SPA->>API: POST _links.upload_keywords.href (multipart)
+    API-->>SPA: KeywordUploadPreview {groups[], _links.import}
+    SPA-->>User: 미리보기 모달 (그룹별 샘플, 감지된 접사)
+    User->>SPA: [임포트] 클릭
+    SPA->>API: POST _links.import.href {groups, auto_detect_affixes: true}
+    API-->>SPA: TitleWorkbench (전체 갱신)
+    SPA->>SPA: setState(response)
+    end
 
-<p><code>affix_overrides</code>의 keyword_id=1이 "강남동"이고 active=false이므로 "강남"으로 표시된다.</p>
+    rect rgb(245, 240, 250)
+    note right of SPA: 개별 키워드 추가
+    User->>SPA: region 그룹 입력란에 "판교" 타이핑 → Enter
+    SPA->>API: PUT /title-workbench/keywords/region/판교
+    API-->>SPA: TitleWorkbench
+    SPA->>SPA: setState(response)
+    end
 
-<p><code>total_combinations</code> = (region 2 × subject 2) × 2 spacing styles = 8.</p>
+    rect rgb(250, 245, 240)
+    note right of SPA: 접사 토글
+    User->>SPA: "강남동" 칩의 "동" 토글을 OFF로
+    SPA->>API: PUT _links.toggle_affixes.href
+    Note right of API: {toggles: [{group:"region", keyword:"강남동", affix_chars:"동", keep:false}]}
+    API-->>SPA: TitleWorkbench (강남동의 stripped:"강남" 반영)
+    SPA->>SPA: setState(response)
+    end
+</div>
+<p class="cap">그림 6-2. 키워드 조작 — 업로드, 추가, 접사 토글</p>
 
-<!-- ==================== 5.5 Confirm ==================== -->
-<div class="page-break"></div>
-<h2>5.5 Confirm — 캠페인 생성</h2>
+<div class="pb"></div>
+<h2>6.3 장식 풀 조작</h2>
 
-<h3>POST /step2/confirm</h3>
+<div class="mermaid">
+sequenceDiagram
+    actor User
+    participant SPA
+    participant API
 
-<pre>
-// Request
-{
-    "campaign_name": "강남 과외 캠페인",
-    "platform_id": 1,
-    "keyword_selections": [
-        { "slug": "region", "keyword_ids": [1, 2] },
-        { "slug": "subject", "keyword_ids": [10, 11] }
-    ],
-    "title_tokens": [
-        { "type": "keyword", "slug": "region", "sort_order": 0 },
-        { "type": "literal", "slug": "lit_1", "value": "과외", "sort_order": 1 },
-        { "type": "keyword", "slug": "subject", "sort_order": 2 },
-        { "type": "pool", "slug": "salt_suffix", "sort_order": 3 }
-    ],
-    "spacing_styles": [
-        { "name": "Normal", "pattern": { "region": 1, "lit_1": 1, "subject": 1, "salt_suffix": 1 } },
-        { "name": "Compact", "pattern": { "region": 0, "lit_1": 0, "subject": 1, "salt_suffix": 1 } }
-    ],
-    "affix_overrides": [
-        { "keyword_id": 1, "affix_id": 5, "active": false }
-    ]
-}
-</pre>
+    User->>SPA: [엑셀 업로드] → 장식 엑셀 선택
+    SPA->>API: POST _links.upload_decorations.href (multipart)
+    API-->>SPA: TitleWorkbench (풀 즉시 저장됨)
+    SPA->>SPA: setState(response)
 
-<pre>
-// Response 201
-{
-    "success": true,
-    "message": "Campaign created. 8 combinations (4 keywords x 2 spacing).",
-    "campaign_id": 42,
-    "title_template": "{region} 과외 {subject} {salt_suffix}",
-    "spacing_style_count": 2,
-    "combination_count": 8
-}
-</pre>
+    User->>SPA: salt_suffix 풀에 "무료 상담" 입력 → Enter
+    SPA->>API: PUT /title-workbench/decorations/salt_suffix/무료 상담
+    API-->>SPA: TitleWorkbench
+    SPA->>SPA: setState(response)
 
-<!-- ==================== CH 6 ==================== -->
-<div class="page-break"></div>
-<p class="chapter-num">Chapter 6</p>
-<h1>Step 3 — 템플릿</h1>
+    User->>SPA: "추천" 항목의 × 클릭
+    SPA->>API: DELETE /title-workbench/decorations/salt_suffix/추천
+    API-->>SPA: TitleWorkbench
+    SPA->>SPA: setState(response)
+</div>
+<p class="cap">그림 6-3. 장식 풀 — 업로드, 추가, 삭제</p>
 
-<table>
-<tr><th>Method</th><th>Path</th><th>설명</th></tr>
-<tr><td>GET</td><td><code>/step3/templates</code></td><td>목록</td></tr>
-<tr><td>GET</td><td><code>/step3/templates/{id}</code></td><td>상세</td></tr>
-<tr><td>GET</td><td><code>/step3/templates/{id}/preview</code></td><td>포스트 미리보기</td></tr>
-</table>
+<h2>6.4 미리보기 → 캠페인 생성</h2>
 
-<p>v1.2와 동일. 변경 없음.</p>
+<div class="mermaid">
+sequenceDiagram
+    actor User
+    participant SPA
+    participant API
 
-<!-- ==================== CH 7 ==================== -->
-<div class="page-break"></div>
-<p class="chapter-num">Chapter 7</p>
-<h1>Step 4 — 실행</h1>
+    User->>SPA: [미리보기] 클릭
+    SPA->>API: POST _links.preview.href
+    Note right of API: {title_blocks, selected_keywords, spacing_styles, affix_toggles, sample_count: 5}
+    API-->>SPA: TitlePreview {styles: [{name, template, samples}], combination_count, _links.create_campaign}
+    SPA-->>User: 스타일별 샘플 제목 + "총 12개 조합" 표시
 
-<table>
-<tr><th>Method</th><th>Path</th><th>설명</th></tr>
-<tr><td>POST</td><td><code>/step4/run/preview</code></td><td>실행 계획 미리보기</td></tr>
-<tr><td>POST</td><td><code>/step4/run/execute</code></td><td>실행 시작</td></tr>
-</table>
+    User->>SPA: [캠페인 생성] 클릭 → 이름 입력 모달
+    User->>SPA: "강남 과외 캠페인" 입력 → [확인]
+    SPA->>API: POST _links.create_campaign.href
+    Note right of API: {name, platform, selected_keywords, title_blocks, spacing_styles, affix_toggles}
+    API-->>SPA: Campaign {slug, combination_count, _links: {templates, start_execution}}
+    SPA->>SPA: 캠페인 상세 화면으로 전환
+</div>
+<p class="cap">그림 6-4. 미리보기 → 캠페인 생성</p>
 
-<p>v1.2와 동일. 변경 없음.</p>
+<!-- CH 7 -->
+<div class="pb"></div>
+<p class="ch">Chapter 7</p>
+<h1>Campaign + Template</h1>
 
-<!-- ==================== CH 8 ==================== -->
-<div class="page-break"></div>
-<p class="chapter-num">Chapter 8</p>
-<h1>모니터링</h1>
+<div class="ui">
+<b>기대 UI: 캠페인 상세</b>
+제목 템플릿: "{region} 과외 {subject} {salt_suffix}" · 상태 뱃지(active/paused/archived)<br>
+조합 수: 12 · 띄어쓰기 스타일: 2<br>
+액션: [이름 수정] [상태 변경] [삭제] [템플릿 선택 →] [실행 미리보기 →]<br>
+각 버튼의 href = Campaign._links에서 가져옴
+</div>
+
+<div class="mermaid">
+sequenceDiagram
+    actor User
+    participant SPA
+    participant API
+
+    SPA->>API: GET /campaigns
+    API-->>SPA: CampaignList {items: [Campaign, ...], _links.create}
+    SPA-->>User: 캠페인 카드 목록
+
+    User->>SPA: "강남 과외" 카드 클릭
+    SPA->>API: GET campaign._links.self.href
+    API-->>SPA: Campaign {_links: {templates, preview_execution, edit, remove}}
+
+    User->>SPA: [템플릿 선택] 클릭
+    SPA->>API: GET _links.templates.href
+    API-->>SPA: TemplateGallery {items: [{slug, name, _links: {preview}}]}
+    SPA-->>User: 템플릿 카드 목록
+
+    User->>SPA: "Standard SEO" 선택 → [미리보기]
+    SPA->>API: GET template._links.preview.href + ?campaign=gangnam-tutoring
+    API-->>SPA: PostPreview {sample_title, blocks: [{kind, placeholder}]}
+    SPA-->>User: 포스트 미리보기 (제목 + 블록 플레이스홀더)
+</div>
+<p class="cap">그림 7-1. 캠페인 → 템플릿 선택 → 포스트 미리보기</p>
+
+<div class="pb"></div>
+<div class="ui">
+<b>기대 UI: 템플릿 관리</b>
+갤러리: 카드 목록, 각 카드에 이름 · 블록 요약(H2 → P → P → FEATURED) · [수정] [삭제] [미리보기]<br>
+[+ 새 템플릿] 버튼<br>
+수정 화면: 이름/설명 입력 + 블록 목록(드래그로 순서 변경, 추가/삭제)<br>
+블록 종류: heading, paragraph, image, featured, list, quote, divider<br>
+PUT 시 블록 배열 전체를 보냄 (개별 패치가 아닌 전체 교체)
+</div>
+
+<!-- CH 8 -->
+<div class="pb"></div>
+<p class="ch">Chapter 8</p>
+<h1>실행 + 모니터링</h1>
+
+<div class="ui">
+<b>기대 UI: 실행 미리보기</b>
+캠페인명 · 템플릿명 · 총 포스트 수 · 계정별 할당량 테이블<br>
+모드 선택: 즉시실행 / 예약 (날짜·시간·간격 입력)<br>
+프리셋 드롭다운: 발행 프리셋 / 실행 프리셋 (선택적)<br>
+샘플 제목 5개 미리보기 · 경고 있으면 노란 박스<br>
+[실행 시작] 버튼<br>
+<br>
+<b>기대 UI: 실행 현황</b>
+배치 카드 목록: 캠페인명 · 계정 · 프로그레스 바(%) · 상태 뱃지<br>
+카드 클릭 → 상세: 포스팅 테이블 (제목 | 상태 | 블로그 URL | 에러 | 완료 시각)<br>
+[재시도] 버튼 (failed/cancelled 항목) · [중지] 버튼 (running 배치)
+</div>
+
+<div class="mermaid">
+sequenceDiagram
+    actor User
+    participant SPA
+    participant API
+
+    User->>SPA: 캠페인에서 [실행 미리보기] 클릭
+    SPA->>API: GET campaign._links.preview_execution.href + ?template=standard-seo&mode=scheduled
+    API-->>SPA: ExecutionPlan {total_posts, account_assignments, sample_titles, _links.start}
+    SPA-->>User: 실행 계획 표시
+
+    User->>SPA: [실행 시작] 클릭
+    SPA->>API: POST _links.start.href {template, mode, schedule_start, interval_minutes}
+    API-->>SPA: RunProgress {ref, status:"pending", _links: {self, retry, stop}}
+    SPA->>SPA: 모니터링 화면으로 전환
+
+    loop 5초 간격 폴링
+        SPA->>API: GET run._links.self.href
+        API-->>SPA: RunDetail {status, completed, failed, total, postings[]}
+        SPA->>SPA: 프로그레스 바 + 포스팅 테이블 갱신
+    end
+
+    alt 실패 항목 발생
+        User->>SPA: [재시도] 클릭
+        SPA->>API: POST run._links.retry.href
+        API-->>SPA: RunDetail (failed→pending 전환됨)
+    end
+
+    alt 중지 원함
+        User->>SPA: [중지] 클릭
+        SPA->>API: POST run._links.stop.href
+        API-->>SPA: RunDetail (status:"stopped", 남은 항목 cancelled)
+    end
+</div>
+<p class="cap">그림 8-1. 실행 미리보기 → 시작 → 모니터링 → 재시도/중지</p>
 
 <div class="mermaid">
 stateDiagram-v2
@@ -587,83 +499,154 @@ stateDiagram-v2
     stopped --> pending : retry
     failed --> pending : retry
 </div>
-<p class="diagram-caption">그림 8-1. 배치 상태 전이</p>
+<p class="cap">그림 8-2. Run 상태 전이</p>
+
+<!-- CH 9 -->
+<div class="pb"></div>
+<p class="ch">Chapter 9</p>
+<h1>Presets + Media</h1>
+
+<div class="ui">
+<b>기대 UI: 프리셋 라이브러리</b>
+두 섹션: 발행 프리셋 / 실행 프리셋<br>
+각 프리셋 카드: 이름 · 설정 요약 · [수정] [삭제]<br>
+[+ 새 프리셋] 버튼 → 이름 + JSON config 입력<br>
+실행 화면에서 드롭다운으로 참조됨
+</div>
+
+<div class="mermaid">
+sequenceDiagram
+    actor User
+    participant SPA
+    participant API
+
+    SPA->>API: GET /presets
+    API-->>SPA: PresetLibrary {publish_presets[], run_presets[], _links}
+    SPA-->>User: 두 섹션 렌더링
+
+    User->>SPA: [+ 발행 프리셋] → 이름/설정 입력 → [저장]
+    SPA->>API: POST _links.create_publish.href {name, config}
+    API-->>SPA: PresetLibrary (갱신된 전체)
+    SPA->>SPA: setState(response)
+
+    User->>SPA: "매일 오후 2시" 프리셋 [수정]
+    SPA->>API: PUT preset._links.edit.href {name, config}
+    API-->>SPA: PresetLibrary
+    SPA->>SPA: setState(response)
+</div>
+<p class="cap">그림 9-1. 프리셋 CRUD</p>
+
+<div class="ui">
+<b>기대 UI: 미디어 라이브러리</b>
+그리드 레이아웃: 썸네일 · 파일명 · 크기 · 업로드 날짜 · [삭제]<br>
+[업로드] 버튼 → 파일 선택 (드래그 앤 드롭 지원)<br>
+하단: 전체 용량 요약
+</div>
+
+<div class="mermaid">
+sequenceDiagram
+    actor User
+    participant SPA
+    participant API
+
+    SPA->>API: GET /media
+    API-->>SPA: MediaLibrary {items[], total_size_display, _links.upload}
+    SPA-->>User: 미디어 그리드
+
+    User->>SPA: 이미지 드래그 앤 드롭
+    SPA->>API: POST _links.upload.href (multipart)
+    API-->>SPA: MediaLibrary (새 항목 포함)
+    SPA->>SPA: setState(response)
+
+    User->>SPA: 이미지의 [삭제] 클릭
+    SPA->>API: DELETE item._links.remove.href
+    API-->>SPA: MediaLibrary (항목 제거됨)
+    SPA->>SPA: setState(response)
+</div>
+<p class="cap">그림 9-2. 미디어 업로드/삭제</p>
+
+<!-- CH 10 -->
+<div class="pb"></div>
+<p class="ch">Chapter 10</p>
+<h1>전체 엔드포인트 목록</h1>
 
 <table>
-<tr><th>Method</th><th>Path</th><th>설명</th></tr>
-<tr><td>GET</td><td><code>/monitor/runs</code></td><td>전체 배치 진행 (폴링 5초)</td></tr>
-<tr><td>GET</td><td><code>/monitor/runs/{batchId}</code></td><td>배치 상세</td></tr>
-<tr><td>POST</td><td><code>/monitor/runs/{batchId}/retry</code></td><td>실패/취소 재시도</td></tr>
-<tr><td>POST</td><td><code>/monitor/runs/{batchId}/stop</code></td><td>배치 중지</td></tr>
+<tr><th>Method</th><th>Path</th><th>전이</th></tr>
+
+<tr><td colspan="3"><b>Billboard (1)</b></td></tr>
+<tr><td>GET</td><td><code>/</code></td><td>Billboard → 모든 섹션 발견</td></tr>
+
+<tr><td colspan="3"><b>Auth (2)</b></td></tr>
+<tr><td>POST</td><td><code>/auth/token</code></td><td>로그인</td></tr>
+<tr><td>POST</td><td><code>/auth/register</code></td><td>회원가입</td></tr>
+
+<tr><td colspan="3"><b>Profile (2)</b></td></tr>
+<tr><td>GET</td><td><code>/profile</code></td><td>프로필 조회</td></tr>
+<tr><td>PUT</td><td><code>/profile</code></td><td>프로필 수정</td></tr>
+
+<tr><td colspan="3"><b>Accounts (7)</b></td></tr>
+<tr><td>GET</td><td><code>/platforms</code></td><td>플랫폼 목록</td></tr>
+<tr><td>GET</td><td><code>/accounts</code></td><td>AccountSetup</td></tr>
+<tr><td>POST</td><td><code>/accounts/upload</code></td><td>엑셀 → Preview</td></tr>
+<tr><td>POST</td><td><code>/accounts</code></td><td>저장</td></tr>
+<tr><td>PUT</td><td><code>/accounts/selection</code></td><td>선택 변경</td></tr>
+<tr><td>PUT</td><td><code>/accounts/{slug}</code></td><td>계정 수정</td></tr>
+<tr><td>DELETE</td><td><code>/accounts/{slug}</code></td><td>계정 삭제</td></tr>
+
+<tr><td colspan="3"><b>Title Workbench (13)</b></td></tr>
+<tr><td>GET</td><td><code>/title-workbench</code></td><td>통합 표현</td></tr>
+<tr><td>POST</td><td><code>/title-workbench/keywords/upload</code></td><td>키워드 엑셀 → Preview</td></tr>
+<tr><td>POST</td><td><code>/title-workbench/keywords</code></td><td>키워드 임포트</td></tr>
+<tr><td>PUT</td><td><code>/title-workbench/keywords/{group}</code></td><td>그룹 이름 변경</td></tr>
+<tr><td>DELETE</td><td><code>/title-workbench/keywords/{group}</code></td><td>그룹 삭제</td></tr>
+<tr><td>PUT</td><td><code>/title-workbench/keywords/{group}/{value}</code></td><td>키워드 추가/수정</td></tr>
+<tr><td>DELETE</td><td><code>/title-workbench/keywords/{group}/{value}</code></td><td>키워드 삭제</td></tr>
+<tr><td>PUT</td><td><code>/title-workbench/affixes</code></td><td>접사 토글</td></tr>
+<tr><td>POST</td><td><code>/title-workbench/decorations/upload</code></td><td>장식 엑셀 업로드</td></tr>
+<tr><td>DELETE</td><td><code>/title-workbench/decorations/{pool}</code></td><td>풀 삭제</td></tr>
+<tr><td>PUT</td><td><code>/title-workbench/decorations/{pool}/{value}</code></td><td>항목 추가/수정</td></tr>
+<tr><td>DELETE</td><td><code>/title-workbench/decorations/{pool}/{value}</code></td><td>항목 삭제</td></tr>
+<tr><td>POST</td><td><code>/title-workbench/preview</code></td><td>제목 미리보기</td></tr>
+
+<tr><td colspan="3"><b>Campaigns (5)</b></td></tr>
+<tr><td>GET</td><td><code>/campaigns</code></td><td>CampaignList</td></tr>
+<tr><td>POST</td><td><code>/campaigns</code></td><td>생성</td></tr>
+<tr><td>GET</td><td><code>/campaigns/{slug}</code></td><td>상세</td></tr>
+<tr><td>PUT</td><td><code>/campaigns/{slug}</code></td><td>수정</td></tr>
+<tr><td>DELETE</td><td><code>/campaigns/{slug}</code></td><td>삭제</td></tr>
+
+<tr><td colspan="3"><b>Templates (6)</b></td></tr>
+<tr><td>GET</td><td><code>/templates</code></td><td>TemplateGallery</td></tr>
+<tr><td>POST</td><td><code>/templates</code></td><td>생성</td></tr>
+<tr><td>GET</td><td><code>/templates/{slug}</code></td><td>상세</td></tr>
+<tr><td>PUT</td><td><code>/templates/{slug}</code></td><td>수정</td></tr>
+<tr><td>DELETE</td><td><code>/templates/{slug}</code></td><td>삭제</td></tr>
+<tr><td>GET</td><td><code>/templates/{slug}/preview</code></td><td>포스트 미리보기</td></tr>
+
+<tr><td colspan="3"><b>Presets (7)</b></td></tr>
+<tr><td>GET</td><td><code>/presets</code></td><td>PresetLibrary</td></tr>
+<tr><td>POST</td><td><code>/presets/publish</code></td><td>발행 프리셋 생성</td></tr>
+<tr><td>PUT</td><td><code>/presets/publish/{slug}</code></td><td>수정</td></tr>
+<tr><td>DELETE</td><td><code>/presets/publish/{slug}</code></td><td>삭제</td></tr>
+<tr><td>POST</td><td><code>/presets/run</code></td><td>실행 프리셋 생성</td></tr>
+<tr><td>PUT</td><td><code>/presets/run/{slug}</code></td><td>수정</td></tr>
+<tr><td>DELETE</td><td><code>/presets/run/{slug}</code></td><td>삭제</td></tr>
+
+<tr><td colspan="3"><b>Media (3)</b></td></tr>
+<tr><td>GET</td><td><code>/media</code></td><td>MediaLibrary</td></tr>
+<tr><td>POST</td><td><code>/media/upload</code></td><td>업로드</td></tr>
+<tr><td>DELETE</td><td><code>/media/{ref}</code></td><td>삭제</td></tr>
+
+<tr><td colspan="3"><b>Runs (6)</b></td></tr>
+<tr><td>GET</td><td><code>/campaigns/{slug}/runs</code></td><td>ExecutionPlan</td></tr>
+<tr><td>POST</td><td><code>/campaigns/{slug}/runs</code></td><td>실행 시작</td></tr>
+<tr><td>GET</td><td><code>/runs</code></td><td>RunList</td></tr>
+<tr><td>GET</td><td><code>/runs/{ref}</code></td><td>RunDetail</td></tr>
+<tr><td>POST</td><td><code>/runs/{ref}/retry</code></td><td>재시도</td></tr>
+<tr><td>POST</td><td><code>/runs/{ref}/stop</code></td><td>중지</td></tr>
 </table>
 
-<p>v1.2와 동일. 변경 없음.</p>
-
-<!-- ==================== CH 9 ==================== -->
-<div class="page-break"></div>
-<p class="chapter-num">Chapter 9</p>
-<h1>에러 처리</h1>
-
-<pre>{ "success": false, "message": "...", "suggestion": "..." }</pre>
-
-<table>
-<tr><th>HTTP</th><th>의미</th><th>프론트엔드</th></tr>
-<tr><td>200/201</td><td>성공</td><td>정상 처리</td></tr>
-<tr><td>204</td><td>삭제 성공</td><td>UI에서 제거</td></tr>
-<tr><td>401</td><td>인증 실패</td><td>로그인으로 이동</td></tr>
-<tr><td>422</td><td>입력 검증 실패</td><td>message + suggestion 표시</td></tr>
-<tr><td>500</td><td>서버 오류</td><td>"일시적 오류" + 재시도 버튼</td></tr>
-</table>
-
-<!-- ==================== CH 10 ==================== -->
-<div class="page-break"></div>
-<p class="chapter-num">Chapter 10</p>
-<h1>부록: 전체 엔드포인트</h1>
-
-<table>
-<tr><th>Method</th><th>Path</th><th>설명</th></tr>
-<tr><td colspan="3"><b>Auth (1)</b></td></tr>
-<tr><td>POST</td><td><code>/auth/login</code></td><td>로그인</td></tr>
-<tr><td colspan="3"><b>Step 1 — 계정 (4)</b></td></tr>
-<tr><td>POST</td><td><code>/step1/accounts/upload</code></td><td>엑셀 파싱</td></tr>
-<tr><td>POST</td><td><code>/step1/accounts/confirm</code></td><td>저장 + 선택</td></tr>
-<tr><td>GET</td><td><code>/step1/accounts</code></td><td>기존 목록</td></tr>
-<tr><td>PUT</td><td><code>/step1/accounts/select</code></td><td>재선택</td></tr>
-<tr><td colspan="3"><b>Step 2a — 키워드 + 접사 (7)</b></td></tr>
-<tr><td>POST</td><td><code>/step2/keywords/upload</code></td><td>엑셀 파싱</td></tr>
-<tr><td>POST</td><td><code>/step2/keywords/import</code></td><td>저장 + 접사 자동 연결</td></tr>
-<tr><td>GET</td><td><code>/step2/keywords/categories</code></td><td>카테고리 + 키워드 + 접사 조회</td></tr>
-<tr><td>POST</td><td><code>/step2/keywords/categories/{slug}</code></td><td>키워드 추가</td></tr>
-<tr><td>PUT</td><td><code>/step2/keywords/{keywordId}</code></td><td>키워드 수정</td></tr>
-<tr><td>DELETE</td><td><code>/step2/keywords/{keywordId}</code></td><td>키워드 삭제</td></tr>
-<tr><td>PUT</td><td><code>/step2/keywords/affix-overrides</code></td><td>접사 토글 (일괄)</td></tr>
-<tr><td colspan="3"><b>Step 2b — 풀 (5)</b></td></tr>
-<tr><td>POST</td><td><code>/step2/pools/upload</code></td><td>엑셀 업로드</td></tr>
-<tr><td>GET</td><td><code>/step2/pools</code></td><td>기존 풀 조회</td></tr>
-<tr><td>POST</td><td><code>/step2/pools/{slug}/items</code></td><td>항목 추가</td></tr>
-<tr><td>PUT</td><td><code>/step2/pools/{slug}/items/{itemId}</code></td><td>항목 수정</td></tr>
-<tr><td>DELETE</td><td><code>/step2/pools/{slug}/items/{itemId}</code></td><td>항목 삭제</td></tr>
-<tr><td colspan="3"><b>Step 2c — 띄어쓰기 (1)</b></td></tr>
-<tr><td>POST</td><td><code>/step2/spacing/preview</code></td><td>스타일별 미리보기</td></tr>
-<tr><td colspan="3"><b>Step 2d — 타이틀 (1)</b></td></tr>
-<tr><td>POST</td><td><code>/step2/title/preview</code></td><td>전체 파이프라인 미리보기</td></tr>
-<tr><td colspan="3"><b>Step 2 Confirm (1)</b></td></tr>
-<tr><td>POST</td><td><code>/step2/confirm</code></td><td>캠페인 생성</td></tr>
-<tr><td colspan="3"><b>Step 3 — 템플릿 (3)</b></td></tr>
-<tr><td>GET</td><td><code>/step3/templates</code></td><td>목록</td></tr>
-<tr><td>GET</td><td><code>/step3/templates/{id}</code></td><td>상세</td></tr>
-<tr><td>GET</td><td><code>/step3/templates/{id}/preview</code></td><td>포스트 미리보기</td></tr>
-<tr><td colspan="3"><b>Step 4 — 실행 (2)</b></td></tr>
-<tr><td>POST</td><td><code>/step4/run/preview</code></td><td>실행 계획</td></tr>
-<tr><td>POST</td><td><code>/step4/run/execute</code></td><td>실행</td></tr>
-<tr><td colspan="3"><b>모니터 (4)</b></td></tr>
-<tr><td>GET</td><td><code>/monitor/runs</code></td><td>배치 진행</td></tr>
-<tr><td>GET</td><td><code>/monitor/runs/{batchId}</code></td><td>배치 상세</td></tr>
-<tr><td>POST</td><td><code>/monitor/runs/{batchId}/retry</code></td><td>재시도</td></tr>
-<tr><td>POST</td><td><code>/monitor/runs/{batchId}/stop</code></td><td>중지</td></tr>
-</table>
-
-<p>총 29개 엔드포인트, 37개 스키마.</p>
+<p>총 52 operations, 40 schemas, 10개 표현, 23개 DB 테이블 커버.</p>
 
 </body>
 </html>

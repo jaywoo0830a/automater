@@ -108,8 +108,8 @@ PYEOF
     API_PORT="${API_PORT:-8000}"
     echo "  ── API 서버 시작 ──────────────────────"
     echo "  Port    : ${API_PORT}"
-    echo "  Docs    : http://localhost:${API_PORT}/api/spa/v1/docs"
-    echo "  OpenAPI : http://localhost:${API_PORT}/api/spa/v1/openapi.json"
+    echo "  Docs    : http://localhost:${API_PORT}/api/v1/docs"
+    echo "  OpenAPI : http://localhost:${API_PORT}/api/v1/openapi.json"
     echo ""
     uvicorn api.app:app \
         --host 0.0.0.0 \
