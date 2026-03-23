@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>automater SPA API Guide — 프론트엔드 개발자용</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.6.1/mermaid.min.js"></script>
+<script>
+mermaid.initialize({
+  startOnLoad: true,
+  theme: 'neutral',
+  themeVariables: {
+    fontFamily: 'Georgia, serif',
+    fontSize: '13px'
+  },
+  sequence: { useMaxWidth: true, mirrorActors: false },
+  stateDiagram: { useMaxWidth: true },
+  class: { useMaxWidth: true }
+});
+</script>
+<style>
+@media print {
+  .page-break { page-break-before: always; }
+  body { font-size: 11pt; }
+  pre { font-size: 9pt; }
+}
+body {
+  font-family: Georgia, 'Nanum Myeongjo', serif;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 40px 20px;
+  line-height: 1.8;
+  color: #111;
+}
+h1 { font-size: 2em; border-bottom: 2px solid #111; padding-bottom: 10px; margin-top: 60px; }
+h2 { font-size: 1.5em; margin-top: 40px; }
+h3 { font-size: 1.2em; margin-top: 30px; }
+pre {
+  background: #f5f5f5; border: 1px solid #ccc; padding: 16px;
+  overflow-x: auto; font-family: 'Courier New', monospace;
+  font-size: 0.85em; line-height: 1.5;
+}
+code { font-family: 'Courier New', monospace; font-size: 0.9em; }
+.mermaid { text-align: center; margin: 30px 0; }
+.cover { text-align: center; padding: 120px 0 80px 0; }
+.cover h1 { font-size: 2.4em; border: none; margin-bottom: 10px; }
+.cover .subtitle { font-size: 1.2em; margin-bottom: 60px; }
+.cover .meta { font-size: 1em; color: #555; }
+.toc { margin: 40px 0; }
+.toc li { margin-bottom: 8px; line-height: 1.6; }
+.chapter-num { font-size: 0.9em; letter-spacing: 2px; text-transform: uppercase; color: #555; }
+.diagram-caption { text-align: center; font-size: 0.9em; color: #555; margin-top: -10px; margin-bottom: 30px; }
+blockquote { border-left: 3px solid #555; margin: 20px 0; padding: 10px 20px; font-style: italic; }
+table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: left; font-size: 0.9em; }
+th { background: #f5f5f5; }
+</style>
+</head>
+<body>
+
+<!-- ==================== COVER ==================== -->
+<div class="cover">
+<h1>automater SPA API Guide</h1>
+<p class="subtitle">프론트엔드 개발자를 위한 API 연동 가이드</p>
+<p class="meta">Base URL: <code>/api/spa/v1</code></p>
+<p class="meta">OpenAPI 3.2.0</p>
+<p class="meta">v1.0.0</p>
+</div>
+
+<!-- ==================== TOC ==================== -->
+<div class="page-break"></div>
+<h1>목차</h1>
+<div class="toc">
+<ol>
+<li>전체 워크플로우 개요</li>
+<li>인증</li>
+<li>Step 1 — 계정 엑셀 업로드 &amp; 선택</li>
+<li>Step 2 — 키워드 엑셀 업로드 &amp; 선택</li>
+<li>Step 3 — 템플릿 선택</li>
+<li>Step 4 — 실행 옵션 &amp; 실행</li>
+<li>모니터링</li>
+<li>에러 처리 규칙</li>
+<li>부록: 전체 엔드포인트 요약</li>
+</ol>
+</div>
+
+<!-- ==================== CHAPTER 1 ==================== -->
+<div class="page-break"></div>
+<p class="chapter-num">Chapter 1</p>
+<h1>전체 워크플로우 개요</h1>
+
+<p>사용자는 4단계 순서를 따른다. 각 단계는 이전 단계의 결과에 의존한다.</p>
+
+<div class="mermaid">
+stateDiagram-v2
+    [*] --> Step1 : Login
+    Step1 --> Step2 : Accounts selected
+    Step2 --> Step3 : Keywords confirmed
+    Step3 --> Step4 : Template chosen
+    Step4 --> Monitor : Run started
+    Monitor --> [*] : All done
+
+    state Step1 {
+        direction LR
+        upload_acct : Upload Excel
+        preview_acct : Review rows
+        confirm_acct : Save and select
+        upload_acct --> preview_acct
+        preview_acct --> confirm_acct
+    }
+
+    state Step2 {
+        direction LR
+        upload_kw : Upload Excel
+        preview_kw : Review categories
+        confirm_kw : Save and select
+        upload_kw --> preview_kw
+        preview_kw --> confirm_kw
+    }
+
+    state Step3 {
+        direction LR
+        list_tmpl : List templates
+        preview_tmpl : Preview post
+        list_tmpl --> preview_tmpl
+    }
+
+    state Step4 {
+        direction LR
+        preview_run : Preview plan
+        execute_run : Execute
+        preview_run --> execute_run
+    }
+
+    state Monitor {
+        direction LR
+        list_runs : List runs
+        detail_run : View detail
+        retry_or_stop : Retry or Stop
+        list_runs --> detail_run
+        detail_run --> retry_or_stop
+    }
+</div>
+<p class="diagram-caption">그림 1-1. 전체 워크플로우 상태 다이어그램</p>
+
+<p>모든 단계에서 공통 패턴은 동일하다: <b>업로드(파싱만) → 미리보기 → 확인(저장)</b>. 프론트엔드는 확인(confirm) 버튼을 누르기 전까지 서버에 아무것도 저장하지 않는다는 점을 사용자에게 알려주어야 한다.</p>
+
+<!-- ==================== CHAPTER 2 ==================== -->
+<div class="page-break"></div>
+<p class="chapter-num">Chapter 2</p>
+<h1>인증</h1>
+
+<p>모든 API 호출에는 JWT Bearer 토큰이 필요하다. 로그인 후 받은 토큰을 <code>Authorization: Bearer &lt;token&gt;</code> 헤더에 포함한다.</p>
+
+<h3>POST /auth/login</h3>
+
+<pre>
+// Request
+{
+    "email": "user@example.com",
+    "password": "secret"
+}
+
+// Response 200
+{
+    "token": "eyJhbGciOiJIUzI1NiIs...",
+    "user": {
+        "display_name": "Eric",
+        "email": "user@example.com"
+    }
+}
+
+// Response 401
+{
+    "success": false,
+    "message": "Email or password is incorrect.",
+    "suggestion": "Check your email spelling."
+}
+</pre>
+
+<!-- ==================== CHAPTER 3 ==================== -->
+<div class="page-break"></div>
+<p class="chapter-num">Chapter 3</p>
+<h1>Step 1 — 계정 엑셀 업로드 &amp; 선택</h1>
+
+<p>사용자는 블로그 플랫폼 계정이 담긴 엑셀 파일을 업로드한다. 시스템이 파싱 결과를 미리보기로 보여주고, 사용자가 확인하면 저장된다.</p>
+
+<h2>시퀀스 다이어그램</h2>
+
+<div class="mermaid">
+sequenceDiagram
+    actor User
+    participant FE as Frontend
+    participant API as /api/spa/v1
+
+    User->>FE: Select accounts.xlsx
+    FE->>API: POST /step1/accounts/upload (multipart)
+    API-->>FE: AccountUploadPreview
+    FE-->>User: Show table with valid/invalid rows
+
+    User->>FE: Check rows, click "Confirm"
+    FE->>API: POST /step1/accounts/confirm
+    API-->>FE: AccountConfirmResult
+    FE-->>User: "3 accounts saved. 2 selected."
+</div>
+<p class="diagram-caption">그림 3-1. Step 1 계정 업로드 시퀀스</p>
+
+<div class="page-break"></div>
+<h2>엔드포인트 상세</h2>
+
+<h3>POST /step1/accounts/upload</h3>
+
+<p>엑셀 파일을 파싱만 한다. DB에 저장하지 않는다.</p>
+
+<p>엑셀 필수 열: <code>username</code>, <code>password</code>, <code>platform</code>. 선택 열: <code>blog_id</code>, <code>cooldown_days</code>.</p>
+
+<pre>
+// Request: multipart/form-data
+// field "file": accounts.xlsx
+
+// Response 200 — AccountUploadPreview
+{
+    "success": true,
+    "rows": [
+        {
+            "row_number": 1,
+            "username": "myblog01",
+            "platform": "naver",
+            "blog_id": "myblog",
+            "valid": true,
+            "error": null
+        },
+        {
+            "row_number": 2,
+            "username": "",
+            "platform": "naver",
+            "blog_id": "",
+            "valid": false,
+            "error": "Missing password"
+        }
+    ],
+    "valid_count": 1,
+    "invalid_count": 1
+}
+</pre>
+
+<p>프론트엔드는 <code>valid: false</code>인 행을 빨간색으로 표시하고, <code>error</code> 메시지를 해당 행 옆에 보여준다. 유효하지 않은 행은 confirm에서 제외해야 한다.</p>
+
+<div class="page-break"></div>
+<h3>POST /step1/accounts/confirm</h3>
+
+<p>미리보기에서 확인된 계정을 DB에 저장하고, 이번 실행에 사용할 계정을 선택한다.</p>
+
+<pre>
+// Request — AccountConfirmInput
+{
+    "accounts": [
+        {
+            "username": "myblog01",
+            "password": "pw1234",
+            "platform": "naver",
+            "blog_id": "myblog",
+            "cooldown_days": 14
+        }
+    ],
+    "selected": [0]
+}
+
+// Response 200 — AccountConfirmResult
+{
+    "success": true,
+    "message": "1 account saved. 1 selected for posting.",
+    "saved_count": 1,
+    "selected_count": 1
+}
+</pre>
+
+<p><code>selected</code> 배열은 <code>accounts</code> 배열의 0-based 인덱스이다. 사용자가 체크박스로 선택한 행의 인덱스를 보낸다.</p>
+
+<div class="page-break"></div>
+<h3>GET /step1/accounts</h3>
+
+<p>이미 저장된 계정 목록을 조회한다. 재업로드 없이 선택만 바꿀 때 사용한다.</p>
+
+<pre>
+// Response 200 — AccountView[]
+[
+    {
+        "id": 1,
+        "username": "myblog01",
+        "platform": "naver",
+        "status": "Ready",
+        "selected": true,
+        "last_used": "15 days ago"
+    },
+    {
+        "id": 2,
+        "username": "myblog02",
+        "platform": "naver",
+        "status": "Cooling (3 days left)",
+        "selected": false,
+        "last_used": "11 days ago"
+    }
+]
+</pre>
+
+<p><code>status</code> 필드는 사람이 읽을 수 있는 문자열이다. 프론트엔드는 이 값을 그대로 표시하면 된다. "Cooling" 상태인 계정은 선택 불가로 표시한다.</p>
+
+<h3>PUT /step1/accounts/select</h3>
+
+<p>기존 계정 중 이번 실행에 사용할 계정을 변경한다.</p>
+
+<pre>
+// Request
+{
+    "account_ids": [1, 3]
+}
+
+// Response 200 — AccountConfirmResult
+{
+    "success": true,
+    "message": "2 accounts selected for posting.",
+    "saved_count": 0,
+    "selected_count": 2
+}
+</pre>
+
+<!-- ==================== CHAPTER 4 ==================== -->
+<div class="page-break"></div>
+<p class="chapter-num">Chapter 4</p>
+<h1>Step 2 — 키워드 엑셀 업로드 &amp; 선택</h1>
+
+<p>사용자는 키워드가 담긴 엑셀 파일을 업로드한다. 각 열이 하나의 키워드 카테고리(예: 지역, 과목)가 되고, 각 행의 값이 개별 키워드가 된다.</p>
+
+<h2>시퀀스 다이어그램</h2>
+
+<div class="mermaid">
+sequenceDiagram
+    actor User
+    participant FE as Frontend
+    participant API as /api/spa/v1
+
+    User->>FE: Select keywords.xlsx
+    FE->>API: POST /step2/keywords/upload (multipart)
+    API-->>FE: KeywordUploadPreview
+    FE-->>User: Show categories, keyword counts, samples
+
+    User->>FE: Enter campaign name, click "Confirm"
+    FE->>API: POST /step2/keywords/confirm
+    API-->>FE: KeywordConfirmResult
+    FE-->>User: "2 categories, 45 keywords. Title: {region} {subject}"
+
+    opt Upload pool Excel
+        User->>FE: Select pools.xlsx
+        FE->>API: POST /step2/pools/upload (multipart)
+        API-->>FE: PoolUploadResult
+        FE-->>User: "2 pools imported: salt_prefix(5), salt_suffix(8)"
+    end
+</div>
+<p class="diagram-caption">그림 4-1. Step 2 키워드 업로드 시퀀스</p>
+
+<div class="page-break"></div>
+<h2>엔드포인트 상세</h2>
+
+<h3>POST /step2/keywords/upload</h3>
+
+<p>키워드 엑셀을 파싱만 한다. DB에 저장하지 않는다.</p>
+
+<pre>
+// Request: multipart/form-data
+// field "file": keywords.xlsx
+
+// Response 200 — KeywordUploadPreview
+{
+    "success": true,
+    "categories": [
+        {
+            "column_name": "지역",
+            "slug": "region",
+            "keyword_count": 25,
+            "sample_values": ["강남", "수원", "분당", "일산", "판교"],
+            "detected_affixes": ["suffix: 동, 구, 시"]
+        },
+        {
+            "column_name": "과목",
+            "slug": "subject",
+            "keyword_count": 8,
+            "sample_values": ["수학", "영어", "국어", "과학", "사회"],
+            "detected_affixes": []
+        }
+    ],
+    "total_keywords": 33,
+    "estimated_combinations": 200
+}
+</pre>
+
+<p><code>estimated_combinations</code>는 카테고리별 키워드 수의 곱(카르테시안 곱)이다. 사용자에게 "약 200개의 포스트가 생성됩니다"라고 안내한다.</p>
+
+<div class="page-break"></div>
+<h3>POST /step2/keywords/confirm</h3>
+
+<p>키워드를 DB에 저장하고 캠페인을 생성한다. 제목 템플릿은 엑셀 열 순서(왼쪽→오른쪽)대로 자동 생성된다.</p>
+
+<pre>
+// Request — KeywordConfirmInput
+{
+    "campaign_name": "강남 과외 캠페인",
+    "platform_id": 1,
+    "categories": [
+        {
+            "slug": "region",
+            "values": ["강남", "수원", "분당"]
+        },
+        {
+            "slug": "subject",
+            "values": ["수학", "영어"]
+        }
+    ]
+}
+
+// Response 200 — KeywordConfirmResult
+{
+    "success": true,
+    "message": "2 categories, 5 keywords saved. Title: {region} {subject}",
+    "campaign_id": 42,
+    "title_template": "{region} {subject}",
+    "combination_count": 6
+}
+</pre>
+
+<p><code>categories[].values</code>는 사용자가 미리보기에서 선택한 키워드만 포함한다. 전체 키워드 중 일부를 체크 해제하면 이 배열에서 빠진다.</p>
+
+<p>응답의 <code>campaign_id</code>는 이후 Step 3, Step 4에서 필요하다. 프론트엔드가 상태로 보관해야 한다.</p>
+
+<div class="page-break"></div>
+<h3>GET /step2/keywords</h3>
+
+<p>저장된 키워드를 카테고리별로 조회한다. 재선택 시 사용한다.</p>
+
+<pre>
+// GET /step2/keywords?campaign_id=42
+// Response 200 — KeywordCategoryView[]
+[
+    {
+        "slug": "region",
+        "name": "지역",
+        "keywords": [
+            { "id": 1, "value": "강남", "selected": true },
+            { "id": 2, "value": "수원", "selected": true },
+            { "id": 3, "value": "분당", "selected": false }
+        ]
+    }
+]
+</pre>
+
+<h3>PUT /step2/keywords/select</h3>
+
+<p>기존 키워드의 선택 상태를 변경한다.</p>
+
+<pre>
+// Request — KeywordSelectInput
+{
+    "campaign_id": 42,
+    "categories": [
+        { "slug": "region", "keyword_ids": [1, 2] },
+        { "slug": "subject", "keyword_ids": [5, 6] }
+    ]
+}
+</pre>
+
+<div class="page-break"></div>
+<h3>POST /step2/pools/upload (선택)</h3>
+
+<p>제목 장식용 풀(salt_prefix, salt_suffix 등)을 업로드한다. 제목에 랜덤 변형을 추가할 때 사용한다.</p>
+
+<pre>
+// Request: multipart/form-data
+// field "file": pools.xlsx
+
+// Response 200 — PoolUploadResult
+{
+    "success": true,
+    "message": "2 pools imported.",
+    "pools": [
+        {
+            "slug": "salt_prefix",
+            "count": 5,
+            "samples": ["검증된", "전문", "인기"]
+        },
+        {
+            "slug": "salt_suffix",
+            "count": 8,
+            "samples": ["강력 추천", "즉시 가능", "무료 상담"]
+        }
+    ]
+}
+</pre>
+
+<!-- ==================== CHAPTER 5 ==================== -->
+<div class="page-break"></div>
+<p class="chapter-num">Chapter 5</p>
+<h1>Step 3 — 템플릿 선택</h1>
+
+<p>미리 정해진 포스트 레이아웃 템플릿 중 하나를 선택한다. 템플릿은 블록의 순서를 정의한다(제목 → 단락 → 이미지 → 단락 → ...).</p>
+
+<h2>시퀀스 다이어그램</h2>
+
+<div class="mermaid">
+sequenceDiagram
+    actor User
+    participant FE as Frontend
+    participant API as /api/spa/v1
+
+    FE->>API: GET /step3/templates
+    API-->>FE: TemplateView[]
+    FE-->>User: Show template cards
+
+    User->>FE: Click a template
+    FE->>API: GET /step3/templates/5
+    API-->>FE: TemplateDetailView
+    FE-->>User: Show block sequence
+
+    User->>FE: Click "Preview"
+    FE->>API: GET /step3/templates/5/preview?campaign_id=42
+    API-->>FE: PostPreview
+    FE-->>User: Show sample title and block placeholders
+</div>
+<p class="diagram-caption">그림 5-1. Step 3 템플릿 선택 시퀀스</p>
+
+<div class="page-break"></div>
+<h2>엔드포인트 상세</h2>
+
+<h3>GET /step3/templates</h3>
+
+<pre>
+// Response 200 — TemplateView[]
+[
+    {
+        "id": 5,
+        "name": "Standard SEO Post",
+        "description": "Heading + 3 paragraphs + featured image",
+        "block_summary": "H2 → P → P → P → IMG → FEATURED"
+    },
+    {
+        "id": 8,
+        "name": "Image-Heavy Review",
+        "description": "Alternating images and paragraphs",
+        "block_summary": "H2 → P → IMG → P → IMG → P → FEATURED"
+    }
+]
+</pre>
+
+<p>프론트엔드는 <code>block_summary</code>를 시각적으로 표현한다. 예를 들어 각 블록 타입을 아이콘이나 컬러 블록으로 보여주면 사용자가 구조를 직관적으로 파악할 수 있다.</p>
+
+<div class="page-break"></div>
+<h3>GET /step3/templates/{templateId}</h3>
+
+<pre>
+// GET /step3/templates/5
+// Response 200 — TemplateDetailView
+{
+    "id": 5,
+    "name": "Standard SEO Post",
+    "description": "Heading + 3 paragraphs + featured image",
+    "blocks": [
+        { "order": 0, "type": "heading", "label": "SEO heading", "config_summary": "level 2" },
+        { "order": 1, "type": "paragraph", "label": "Intro paragraph", "config_summary": "min 200 chars, informational" },
+        { "order": 2, "type": "paragraph", "label": "Body paragraph", "config_summary": null },
+        { "order": 3, "type": "paragraph", "label": "Closing paragraph", "config_summary": null },
+        { "order": 4, "type": "image", "label": "Body image", "config_summary": null },
+        { "order": 5, "type": "featured", "label": "Thumbnail image", "config_summary": "overlay text enabled" }
+    ]
+}
+</pre>
+
+<h3>GET /step3/templates/{templateId}/preview?campaign_id={id}</h3>
+
+<pre>
+// Response 200 — PostPreview
+{
+    "sample_title": "강남 수학 과외 전문 추천",
+    "blocks": [
+        { "type": "heading", "placeholder": "강남 수학 과외" },
+        { "type": "paragraph", "placeholder": "[AI paragraph about 강남 수학 과외]" },
+        { "type": "paragraph", "placeholder": "[AI paragraph about 강남 수학 과외]" },
+        { "type": "paragraph", "placeholder": "[AI paragraph about 강남 수학 과외]" },
+        { "type": "image", "placeholder": "[Body image]" },
+        { "type": "featured", "placeholder": "[Thumbnail with overlay text]" }
+    ]
+}
+</pre>
+
+<!-- ==================== CHAPTER 6 ==================== -->
+<div class="page-break"></div>
+<p class="chapter-num">Chapter 6</p>
+<h1>Step 4 — 실행 옵션 &amp; 실행</h1>
+
+<p>캠페인, 템플릿, 계정이 모두 준비되면 발행 모드를 선택하고 실행한다.</p>
+
+<h2>시퀀스 다이어그램</h2>
+
+<div class="mermaid">
+sequenceDiagram
+    actor User
+    participant FE as Frontend
+    participant API as /api/spa/v1
+
+    User->>FE: Choose "immediate" or "scheduled"
+    FE->>API: POST /step4/run/preview
+    API-->>FE: RunPreviewView
+    FE-->>User: "180 posts, 3 accounts, ~2 hours"
+
+    User->>FE: Click "Go"
+    FE->>API: POST /step4/run/execute
+    API-->>FE: RunStartResult
+    FE-->>User: "180 posts scheduled. First at 2:00 PM."
+    FE->>FE: Navigate to Monitor
+</div>
+<p class="diagram-caption">그림 6-1. Step 4 실행 시퀀스</p>
+
+<div class="page-break"></div>
+<h2>엔드포인트 상세</h2>
+
+<h3>POST /step4/run/preview</h3>
+
+<p>실행 계획을 미리보기한다. 아직 실행하지 않는다.</p>
+
+<pre>
+// Request — RunConfig
+{
+    "campaign_id": 42,
+    "template_id": 5,
+    "publish_mode": "scheduled",
+    "schedule_start": "2026-03-23T14:00:00+09:00",
+    "schedule_interval_minutes": 60,
+    "headless": true
+}
+
+// Response 200 — RunPreviewView
+{
+    "campaign_name": "강남 과외 캠페인",
+    "template_name": "Standard SEO Post",
+    "total_combinations": 180,
+    "accounts": [
+        { "username": "myblog01", "posts_assigned": 40 },
+        { "username": "myblog02", "posts_assigned": 40 },
+        { "username": "myblog03", "posts_assigned": 40 }
+    ],
+    "publish_mode": "scheduled",
+    "schedule_summary": "Starting 3/23 2:00 PM, one post every 60 min",
+    "estimated_finish": "3/24 8:00 AM",
+    "sample_titles": [
+        "강남 수학 과외 전문 추천",
+        "수원 영어 과외 검증된 강력 추천",
+        "분당 수학 과외 즉시 가능"
+    ],
+    "warnings": []
+}
+</pre>
+
+<p><code>warnings</code> 배열이 비어있지 않으면 사용자에게 경고를 표시한다. 예: <code>"Pool salt_prefix has no values — title slots will be empty."</code></p>
+
+<div class="page-break"></div>
+<h3>POST /step4/run/execute</h3>
+
+<p>실행을 시작한다. 요청 본문은 preview와 동일한 <code>RunConfig</code>이다.</p>
+
+<pre>
+// Request — RunConfig (same as preview)
+
+// Response 201 — RunStartResult
+{
+    "success": true,
+    "message": "180 posts scheduled across 3 accounts.",
+    "batch_ids": [101, 102, 103],
+    "total_posts": 180
+}
+</pre>
+
+<p><code>batch_ids</code>는 모니터링에 사용된다. 프론트엔드는 이 값을 저장하고 모니터 화면으로 이동한다.</p>
+
+<h2>RunConfig 필드 규칙</h2>
+
+<table>
+<tr><th>필드</th><th>필수</th><th>규칙</th></tr>
+<tr><td><code>campaign_id</code></td><td>Y</td><td>Step 2에서 받은 값</td></tr>
+<tr><td><code>template_id</code></td><td>Y</td><td>Step 3에서 선택한 값</td></tr>
+<tr><td><code>publish_mode</code></td><td>Y</td><td><code>"immediate"</code> 또는 <code>"scheduled"</code></td></tr>
+<tr><td><code>schedule_start</code></td><td>조건부</td><td><code>scheduled</code>일 때 필수. ISO 8601 + timezone.</td></tr>
+<tr><td><code>schedule_interval_minutes</code></td><td>N</td><td>기본 60. <code>scheduled</code>일 때만 의미.</td></tr>
+<tr><td><code>headless</code></td><td>N</td><td>기본 true. 디버그 시 false.</td></tr>
+</table>
+
+<!-- ==================== CHAPTER 7 ==================== -->
+<div class="page-break"></div>
+<p class="chapter-num">Chapter 7</p>
+<h1>모니터링</h1>
+
+<p>실행이 시작된 후 진행 상황을 확인하고, 실패한 항목을 재시도하거나 실행을 중지할 수 있다.</p>
+
+<h2>배치 상태 다이어그램</h2>
+
+<div class="mermaid">
+stateDiagram-v2
+    [*] --> pending : dispatch
+    pending --> running : worker picks up
+    running --> completed : all items done
+    running --> failed : all items failed
+    running --> stopped : cancel requested
+
+    stopped --> pending : retry
+    failed --> pending : retry
+    pending --> running : worker picks up
+</div>
+<p class="diagram-caption">그림 7-1. 배치 상태 전이 — stopped과 retry 추가</p>
+
+<div class="page-break"></div>
+<h2>개별 항목 상태 다이어그램</h2>
+
+<div class="mermaid">
+stateDiagram-v2
+    [*] --> pending
+    pending --> running : processing
+    running --> completed : success
+    running --> failed : error
+    pending --> cancelled : batch stopped
+
+    failed --> pending : retry
+    cancelled --> pending : retry
+</div>
+<p class="diagram-caption">그림 7-2. 배치 항목(BatchItem) 상태 전이</p>
+
+<div class="page-break"></div>
+<h2>모니터링 시퀀스 다이어그램</h2>
+
+<div class="mermaid">
+sequenceDiagram
+    actor User
+    participant FE as Frontend
+    participant API as /api/spa/v1
+
+    FE->>API: GET /monitor/runs
+    API-->>FE: RunProgressView[]
+    FE-->>User: Show batch list with progress bars
+
+    User->>FE: Click a batch
+    FE->>API: GET /monitor/runs/101
+    API-->>FE: RunDetailView
+    FE-->>User: Show item-level details
+
+    alt Some items failed
+        User->>FE: Click "Retry Failed"
+        FE->>API: POST /monitor/runs/101/retry
+        API-->>FE: { success: true, message: "3 items will be retried." }
+    end
+
+    alt Want to stop
+        User->>FE: Click "Stop"
+        FE->>API: POST /monitor/runs/101/stop
+        API-->>FE: { success: true, message: "Batch stopped. 25 items cancelled." }
+    end
+</div>
+<p class="diagram-caption">그림 7-3. 모니터링 시퀀스 — 조회, 재시도, 중지</p>
+
+<div class="page-break"></div>
+<h2>엔드포인트 상세</h2>
+
+<h3>GET /monitor/runs</h3>
+
+<pre>
+// Response 200 — RunProgressView[]
+[
+    {
+        "batch_id": 101,
+        "campaign_name": "강남 과외 캠페인",
+        "account": "myblog01",
+        "status": "Running",
+        "completed": 15,
+        "failed": 2,
+        "total": 40,
+        "percentage": 42,
+        "started_at": "3/23 2:00 PM",
+        "last_activity": "2 minutes ago"
+    }
+]
+</pre>
+
+<p>프론트엔드는 이 엔드포인트를 주기적으로 폴링한다. 권장 간격: 5초.</p>
+
+<div class="page-break"></div>
+<h3>GET /monitor/runs/{batchId}</h3>
+
+<pre>
+// GET /monitor/runs/101
+// Response 200 — RunDetailView
+{
+    "batch_id": 101,
+    "campaign_name": "강남 과외 캠페인",
+    "account": "myblog01",
+    "status": "Running",
+    "completed": 15,
+    "failed": 2,
+    "total": 40,
+    "items": [
+        {
+            "title": "강남 수학 과외 전문 추천",
+            "keywords": "강남 수학",
+            "status": "Published",
+            "url": "https://blog.naver.com/myblog/12345",
+            "error": null,
+            "completed_at": "3/23 2:05 PM"
+        },
+        {
+            "title": "강남 영어 과외 검증된 추천",
+            "keywords": "강남 영어",
+            "status": "Failed",
+            "url": null,
+            "error": "Browser timed out while uploading image.",
+            "completed_at": "3/23 2:08 PM"
+        },
+        {
+            "title": "수원 수학 과외 즉시 가능",
+            "keywords": "수원 수학",
+            "status": "Waiting",
+            "url": null,
+            "error": null,
+            "completed_at": null
+        }
+    ]
+}
+</pre>
+
+<div class="page-break"></div>
+<h3>POST /monitor/runs/{batchId}/retry</h3>
+
+<p>실패한 항목과 취소된 항목을 재시도 대기 상태로 되돌린다.</p>
+
+<pre>
+// Response 200
+{
+    "success": true,
+    "message": "3 items will be retried."
+}
+</pre>
+
+<p>재시도 후 배치 상태가 <code>pending</code>으로 돌아간다. 워커가 다시 해당 배치를 처리한다.</p>
+
+<h3>POST /monitor/runs/{batchId}/stop</h3>
+
+<p>실행 중인 배치를 중지한다. 현재 처리 중인 항목은 완료되고, 아직 시작하지 않은 항목은 <code>cancelled</code>로 표시된다.</p>
+
+<pre>
+// Response 200
+{
+    "success": true,
+    "message": "Batch stopped. 25 items cancelled."
+}
+</pre>
+
+<p>중지 후에도 <code>retry</code>를 호출하면 취소된 항목을 재시도할 수 있다.</p>
+
+<!-- ==================== CHAPTER 8 ==================== -->
+<div class="page-break"></div>
+<p class="chapter-num">Chapter 8</p>
+<h1>에러 처리 규칙</h1>
+
+<p>모든 에러 응답은 동일한 <code>FriendlyError</code> 형태를 따른다.</p>
+
+<pre>
+// FriendlyError schema
+{
+    "success": false,
+    "message": "What went wrong, in the user's language.",
+    "suggestion": "What the user can do about it."
+}
+</pre>
+
+<h2>HTTP 상태 코드 규칙</h2>
+
+<table>
+<tr><th>코드</th><th>의미</th><th>프론트엔드 동작</th></tr>
+<tr><td>200</td><td>성공</td><td>정상 처리</td></tr>
+<tr><td>201</td><td>생성 성공</td><td>다음 단계로 이동</td></tr>
+<tr><td>401</td><td>인증 실패</td><td>로그인 화면으로 이동</td></tr>
+<tr><td>422</td><td>입력 검증 실패</td><td><code>message</code>와 <code>suggestion</code> 표시</td></tr>
+<tr><td>500</td><td>서버 오류</td><td>"일시적인 오류" 메시지 + 재시도 버튼</td></tr>
+</table>
+
+<h2>프론트엔드 에러 표시 규칙</h2>
+
+<p>첫째, <code>message</code>는 반드시 사용자에게 표시한다. 기술 용어가 포함되지 않은 사람의 언어이다.</p>
+
+<p>둘째, <code>suggestion</code>이 있으면 <code>message</code> 아래에 작은 글씨로 표시한다. 사용자가 다음에 취할 행동을 안내한다.</p>
+
+<p>셋째, HTTP 상태 코드나 내부 에러 코드는 절대 사용자에게 보여주지 않는다.</p>
+
+<!-- ==================== CHAPTER 9 ==================== -->
+<div class="page-break"></div>
+<p class="chapter-num">Chapter 9</p>
+<h1>부록: 전체 엔드포인트 요약</h1>
+
+<h2>클래스 다이어그램 — 요청/응답 스키마 관계</h2>
+
+<div class="mermaid">
+classDiagram
+    class FriendlyError {
+        +bool success
+        +string message
+        +string suggestion
+    }
+
+    class AccountUploadPreview {
+        +bool success
+        +AccountRowPreview[] rows
+        +int valid_count
+        +int invalid_count
+    }
+
+    class AccountConfirmInput {
+        +AccountData[] accounts
+        +int[] selected
+    }
+
+    class KeywordUploadPreview {
+        +bool success
+        +CategoryPreview[] categories
+        +int total_keywords
+        +int estimated_combinations
+    }
+
+    class KeywordConfirmInput {
+        +string campaign_name
+        +int platform_id
+        +CategorySelection[] categories
+    }
+
+    class KeywordConfirmResult {
+        +bool success
+        +string message
+        +int campaign_id
+        +string title_template
+        +int combination_count
+    }
+
+    class RunConfig {
+        +int campaign_id
+        +int template_id
+        +string publish_mode
+        +datetime schedule_start
+        +int schedule_interval_minutes
+        +bool headless
+    }
+
+    class RunPreviewView {
+        +string campaign_name
+        +string template_name
+        +int total_combinations
+        +AccountAssignment[] accounts
+        +string[] sample_titles
+        +string[] warnings
+    }
+
+    class RunDetailView {
+        +int batch_id
+        +string status
+        +int completed
+        +int failed
+        +int total
+        +PostingItem[] items
+    }
+
+    AccountConfirmInput ..> AccountUploadPreview : built from
+    KeywordConfirmInput ..> KeywordUploadPreview : built from
+    RunConfig ..> KeywordConfirmResult : uses campaign_id
+    RunPreviewView ..> RunConfig : generated from
+    RunDetailView ..> RunPreviewView : monitors
+</div>
+<p class="diagram-caption">그림 9-1. 주요 스키마 간 의존 관계</p>
+
+<div class="page-break"></div>
+<h2>엔드포인트 목록</h2>
+
+<table>
+<tr><th>Method</th><th>Path</th><th>설명</th></tr>
+<tr><td>POST</td><td><code>/auth/login</code></td><td>로그인</td></tr>
+<tr><td colspan="3"><b>Step 1 — 계정</b></td></tr>
+<tr><td>POST</td><td><code>/step1/accounts/upload</code></td><td>계정 엑셀 업로드 (미리보기)</td></tr>
+<tr><td>POST</td><td><code>/step1/accounts/confirm</code></td><td>계정 저장 + 선택</td></tr>
+<tr><td>GET</td><td><code>/step1/accounts</code></td><td>저장된 계정 목록</td></tr>
+<tr><td>PUT</td><td><code>/step1/accounts/select</code></td><td>계정 재선택</td></tr>
+<tr><td colspan="3"><b>Step 2 — 키워드</b></td></tr>
+<tr><td>POST</td><td><code>/step2/keywords/upload</code></td><td>키워드 엑셀 업로드 (미리보기)</td></tr>
+<tr><td>POST</td><td><code>/step2/keywords/confirm</code></td><td>키워드 저장 + 캠페인 생성</td></tr>
+<tr><td>GET</td><td><code>/step2/keywords</code></td><td>저장된 키워드 목록</td></tr>
+<tr><td>PUT</td><td><code>/step2/keywords/select</code></td><td>키워드 재선택</td></tr>
+<tr><td>POST</td><td><code>/step2/pools/upload</code></td><td>풀 엑셀 업로드 (선택)</td></tr>
+<tr><td colspan="3"><b>Step 3 — 템플릿</b></td></tr>
+<tr><td>GET</td><td><code>/step3/templates</code></td><td>템플릿 목록</td></tr>
+<tr><td>GET</td><td><code>/step3/templates/{id}</code></td><td>템플릿 상세</td></tr>
+<tr><td>GET</td><td><code>/step3/templates/{id}/preview</code></td><td>포스트 미리보기</td></tr>
+<tr><td colspan="3"><b>Step 4 — 실행</b></td></tr>
+<tr><td>POST</td><td><code>/step4/run/preview</code></td><td>실행 계획 미리보기</td></tr>
+<tr><td>POST</td><td><code>/step4/run/execute</code></td><td>실행 시작</td></tr>
+<tr><td colspan="3"><b>모니터링</b></td></tr>
+<tr><td>GET</td><td><code>/monitor/runs</code></td><td>전체 배치 진행 상황</td></tr>
+<tr><td>GET</td><td><code>/monitor/runs/{batchId}</code></td><td>배치 상세</td></tr>
+<tr><td>POST</td><td><code>/monitor/runs/{batchId}/retry</code></td><td>실패 항목 재시도</td></tr>
+<tr><td>POST</td><td><code>/monitor/runs/{batchId}/stop</code></td><td>배치 중지</td></tr>
+</table>
+
+<p>총 19개 엔드포인트, 19개 스키마.</p>
+
+</body>
+</html>
