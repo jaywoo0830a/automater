@@ -1,29 +1,32 @@
 # =============================================================================
-# automater-dev — api/spa/v1
+# automater-dev — api/spa/v1 v1.3
 # =============================================================================
-# 사용자의 4단계 워크플로우:
+# Step 1. 계정 엑셀 업로드 & 선택
+# Step 2. 키워드·풀·띄어쓰기·타이틀 (한 화면, 위→아래 순서)
+#   2a. 키워드 — 업로드/기존 선택/CRUD + 접사 관리
+#   2b. 풀 — 업로드/기존 조회/CRUD
+#   2c. 띄어쓰기 — 이름 붙인 스타일별 슬러그 토글
+#   2d. 타이틀 — 토큰 블록 배치 + 전체 라이브 미리보기
+#   → Confirm
+# Step 3. 템플릿 선택
+# Step 4. 런타임 옵션 → 실행
 #
-#   Step 1. 계정 엑셀 업로드 & 선택
-#   Step 2. 키워드 엑셀 업로드 & 선택
-#   Step 3. 미리 정해진 템플릿 선택
-#   Step 4. 런타임 옵션(즉시/예약) 설정 → 실행
-#
-# 보조:
-#   - 로그인
-#   - 진행 상황 모니터링
+# 제목 파이프라인 전체 데이터:
+#   A. 키워드 값 (KeywordCategory, Keyword, CampaignKeywordPick)
+#   B. 접사 제어 (Affix, keyword_affixes, CampaignAffixOverride)
+#   C. 풀 값 (CampaignPalette, PaletteItem)
+#   D. 띄어쓰기 패턴 (SpacingRule.pattern — 슬러그별 공백 on/off)
+#   E. 토큰 순서 (TemplateToken — keyword/pool/literal 배치)
 # =============================================================================
 openapi: 3.2.0
 
 info:
   title: automater SPA API
-  version: 1.0.0
+  version: 1.3.0
   description: |
     4단계 블로그 포스팅 자동화 워크플로우.
-
-    1. 계정 엑셀 업로드 & 선택
-    2. 키워드 엑셀 업로드 & 선택
-    3. 템플릿 선택
-    4. 실행 옵션 설정 & 실행
+    Step 2에서 제목의 모든 데이터를 한 화면에서 제어.
+    하위 순서: 키워드 → 풀 → 띄어쓰기 → 타이틀.
 
 servers:
   - url: /api/spa/v1
@@ -33,26 +36,29 @@ security:
 
 tags:
   - name: auth
-    description: Login
   - name: step-1-accounts
-    description: "Step 1 — Upload account Excel, review, select"
+    description: "Step 1 — Account upload & select"
   - name: step-2-keywords
-    description: "Step 2 — Upload keyword Excel, review, select"
+    description: "Step 2a — Keyword upload, browse, CRUD, affix control"
+  - name: step-2-pools
+    description: "Step 2b — Pool upload, browse, CRUD"
+  - name: step-2-spacing
+    description: "Step 2c — Named spacing styles"
+  - name: step-2-title
+    description: "Step 2d — Token arrangement + full preview"
+  - name: step-2-confirm
+    description: "Step 2 — Confirm all, create campaign"
   - name: step-3-templates
-    description: "Step 3 — Choose a pre-defined post template"
+    description: "Step 3 — Post template"
   - name: step-4-run
-    description: "Step 4 — Set publish options and execute"
+    description: "Step 4 — Execute"
   - name: monitor
-    description: Watch execution progress
 
-# =============================================================================
-# Paths
-# =============================================================================
 paths:
 
-  # ---------------------------------------------------------------------------
+  # ===========================================================================
   # Auth
-  # ---------------------------------------------------------------------------
+  # ===========================================================================
   /auth/login:
     post:
       tags: [auth]
@@ -66,47 +72,34 @@ paths:
               type: object
               required: [email, password]
               properties:
-                email:
-                  type: string
-                  format: email
-                password:
-                  type: string
-                  format: password
+                email: { type: string, format: email }
+                password: { type: string, format: password }
       responses:
         "200":
-          description: Login success
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  token:
-                    type: string
+                  token: { type: string }
                   user:
                     type: object
                     properties:
-                      display_name:
-                        type: string
-                      email:
-                        type: string
+                      display_name: { type: string }
+                      email: { type: string }
         "401":
-          description: Authentication failed
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/FriendlyError"
+              schema: { $ref: "#/components/schemas/FriendlyError" }
 
-  # ---------------------------------------------------------------------------
-  # Step 1: 계정 엑셀 업로드 & 선택
-  # ---------------------------------------------------------------------------
+  # ===========================================================================
+  # Step 1: 계정
+  # ===========================================================================
   /step1/accounts/upload:
     post:
       tags: [step-1-accounts]
       operationId: uploadAccountExcel
-      summary: Upload account Excel file
-      description: |
-        Excel columns: username, password, platform, blog_id (optional).
-        Parses the file and returns a preview. Nothing is saved yet.
+      summary: Upload account Excel (preview, no save)
       requestBody:
         required: true
         content:
@@ -115,75 +108,51 @@ paths:
               type: object
               required: [file]
               properties:
-                file:
-                  type: string
-                  format: binary
+                file: { type: string, format: binary }
       responses:
         "200":
-          description: Parsed account preview
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/AccountUploadPreview"
+              schema: { $ref: "#/components/schemas/AccountUploadPreview" }
         "422":
-          description: File parsing failed
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/FriendlyError"
-              example:
-                success: false
-                message: "Excel file could not be read."
-                suggestion: "Check that the file is .xlsx and has columns: username, password, platform."
+              schema: { $ref: "#/components/schemas/FriendlyError" }
 
   /step1/accounts/confirm:
     post:
       tags: [step-1-accounts]
       operationId: confirmAccounts
-      summary: Save uploaded accounts and select which to use
-      description: |
-        Saves the parsed accounts to DB.
-        The `selected` array indicates which rows to use for this run.
-        Accounts not selected are saved but not activated.
+      summary: Save accounts and select
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              $ref: "#/components/schemas/AccountConfirmInput"
+            schema: { $ref: "#/components/schemas/AccountConfirmInput" }
       responses:
         "200":
-          description: Accounts saved
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/AccountConfirmResult"
+              schema: { $ref: "#/components/schemas/AccountConfirmResult" }
 
   /step1/accounts:
     get:
       tags: [step-1-accounts]
       operationId: listAccounts
-      summary: List all saved accounts with status
-      description: |
-        Returns previously uploaded accounts with availability status.
-        The user can re-select accounts without re-uploading.
+      summary: List saved accounts
       responses:
         "200":
-          description: Account list
           content:
             application/json:
               schema:
                 type: array
-                items:
-                  $ref: "#/components/schemas/AccountView"
+                items: { $ref: "#/components/schemas/AccountView" }
 
   /step1/accounts/select:
     put:
       tags: [step-1-accounts]
       operationId: selectAccounts
-      summary: Change which accounts are selected for this run
-      description: |
-        Re-select from existing accounts without uploading again.
+      summary: Change account selection
       requestBody:
         required: true
         content:
@@ -194,28 +163,24 @@ paths:
               properties:
                 account_ids:
                   type: array
-                  items:
-                    type: integer
+                  items: { type: integer }
       responses:
         "200":
-          description: Selection updated
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/AccountConfirmResult"
+              schema: { $ref: "#/components/schemas/AccountConfirmResult" }
 
-  # ---------------------------------------------------------------------------
-  # Step 2: 키워드 엑셀 업로드 & 선택
-  # ---------------------------------------------------------------------------
+  # ===========================================================================
+  # Step 2a: 키워드 + 접사
+  # ===========================================================================
   /step2/keywords/upload:
     post:
       tags: [step-2-keywords]
       operationId: uploadKeywordExcel
-      summary: Upload keyword Excel file
+      summary: Upload keyword Excel (preview, no save)
       description: |
-        Each column header becomes a keyword category (e.g., region, subject).
-        Each row value becomes a keyword.
-        Parses and returns a preview. Nothing is saved yet.
+        Parses Excel. Auto-detects Korean affixes (동, 구, 시, etc.).
+        Returns preview with detected affixes per keyword.
       requestBody:
         required: true
         content:
@@ -224,100 +189,134 @@ paths:
               type: object
               required: [file]
               properties:
-                file:
-                  type: string
-                  format: binary
+                file: { type: string, format: binary }
       responses:
         "200":
-          description: Parsed keyword preview
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/KeywordUploadPreview"
+              schema: { $ref: "#/components/schemas/KeywordUploadPreview" }
         "422":
-          description: File parsing failed
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/FriendlyError"
+              schema: { $ref: "#/components/schemas/FriendlyError" }
 
-  /step2/keywords/confirm:
+  /step2/keywords/import:
     post:
       tags: [step-2-keywords]
-      operationId: confirmKeywords
-      summary: Save keywords and select which to use
+      operationId: importKeywords
+      summary: Save keywords + auto-link detected affixes
       description: |
-        Saves parsed keywords to DB (categories + keywords + affixes).
-        The `selections` map indicates which keywords per category to include.
-        Omitted categories or keywords are saved but excluded from combinations.
-
-        Also generates the title template token sequence automatically
-        from the category order in the Excel (left to right = token order).
+        Saves keywords to global pool. Creates Affix records and
+        keyword_affixes links for detected suffixes/prefixes.
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              $ref: "#/components/schemas/KeywordConfirmInput"
+            schema: { $ref: "#/components/schemas/KeywordImportInput" }
       responses:
         "200":
-          description: Keywords saved
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/KeywordConfirmResult"
+              schema: { $ref: "#/components/schemas/KeywordImportResult" }
 
-  /step2/keywords:
+  /step2/keywords/categories:
     get:
       tags: [step-2-keywords]
-      operationId: listKeywords
-      summary: List saved keywords grouped by category
-      description: |
-        Returns previously uploaded keywords with selection state.
-        The user can re-select without re-uploading.
-      parameters:
-        - name: campaign_id
-          in: query
-          schema:
-            type: integer
+      operationId: listCategories
+      summary: List all categories with keywords and their affixes
       responses:
         "200":
-          description: Keywords grouped by category
           content:
             application/json:
               schema:
                 type: array
-                items:
-                  $ref: "#/components/schemas/KeywordCategoryView"
+                items: { $ref: "#/components/schemas/KeywordCategoryView" }
 
-  /step2/keywords/select:
-    put:
+  /step2/keywords/categories/{slug}:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema: { type: string }
+    post:
       tags: [step-2-keywords]
-      operationId: selectKeywords
-      summary: Change which keywords are selected
+      operationId: addKeyword
+      summary: Add a keyword to a category
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/KeywordSelectInput"
+              type: object
+              required: [value]
+              properties:
+                value: { type: string }
       responses:
-        "200":
-          description: Selection updated
+        "201":
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/KeywordConfirmResult"
+              schema: { $ref: "#/components/schemas/KeywordItem" }
 
+  /step2/keywords/{keywordId}:
+    parameters:
+      - name: keywordId
+        in: path
+        required: true
+        schema: { type: integer }
+    put:
+      tags: [step-2-keywords]
+      operationId: editKeyword
+      summary: Edit a keyword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                value: { type: string }
+                active: { type: boolean }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KeywordItem" }
+    delete:
+      tags: [step-2-keywords]
+      operationId: deleteKeyword
+      summary: Delete a keyword
+      responses:
+        "204":
+          description: Deleted
+
+  /step2/keywords/affix-overrides:
+    put:
+      tags: [step-2-keywords]
+      operationId: setAffixOverrides
+      summary: Toggle affix stripping per keyword
+      description: |
+        Sets which affixes to strip from which keywords for this campaign.
+        active=true  → keep affix (e.g., "강남동" stays "강남동")
+        active=false → strip affix (e.g., "강남동" becomes "강남")
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AffixOverrideInput" }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AffixOverrideResult" }
+
+  # ===========================================================================
+  # Step 2b: 풀
+  # ===========================================================================
   /step2/pools/upload:
     post:
-      tags: [step-2-keywords]
+      tags: [step-2-pools]
       operationId: uploadPoolExcel
-      summary: Upload title decoration pool Excel (optional)
-      description: |
-        Each column = a pool slug (e.g., salt_prefix, salt_suffix).
-        Each row value = a pool item.
-        These are used for title randomization.
+      summary: Upload pool Excel (immediate save)
       requestBody:
         required: true
         content:
@@ -326,225 +325,306 @@ paths:
               type: object
               required: [file]
               properties:
-                file:
-                  type: string
-                  format: binary
+                file: { type: string, format: binary }
       responses:
         "200":
-          description: Pool import result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PoolUploadResult" }
+
+  /step2/pools:
+    get:
+      tags: [step-2-pools]
+      operationId: listPools
+      summary: List all pools with items
+      responses:
+        "200":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PoolUploadResult"
+                type: array
+                items: { $ref: "#/components/schemas/PoolView" }
 
-  # ---------------------------------------------------------------------------
-  # Step 3: 템플릿 선택
-  # ---------------------------------------------------------------------------
+  /step2/pools/{slug}/items:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [step-2-pools]
+      operationId: addPoolItem
+      summary: Add item to pool (auto-creates pool)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value: { type: string }
+      responses:
+        "201":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PoolItemView" }
+
+  /step2/pools/{slug}/items/{itemId}:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema: { type: string }
+      - name: itemId
+        in: path
+        required: true
+        schema: { type: integer }
+    put:
+      tags: [step-2-pools]
+      operationId: editPoolItem
+      summary: Edit pool item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                value: { type: string }
+                active: { type: boolean }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PoolItemView" }
+    delete:
+      tags: [step-2-pools]
+      operationId: deletePoolItem
+      summary: Delete pool item
+      responses:
+        "204":
+          description: Deleted
+
+  # ===========================================================================
+  # Step 2c: 띄어쓰기
+  # ===========================================================================
+  /step2/spacing/preview:
+    post:
+      tags: [step-2-spacing]
+      operationId: previewSpacing
+      summary: Preview spacing styles with sample titles
+      description: |
+        Each style has a name and a pattern: {slug: 0 or 1}.
+        1 = space after this token (default).
+        0 = no space (glue to next token).
+        Frontend shows a toggle per slug per style.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SpacingPreviewInput" }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpacingPreviewResult" }
+
+  # ===========================================================================
+  # Step 2d: 타이틀
+  # ===========================================================================
+  /step2/title/preview:
+    post:
+      tags: [step-2-title]
+      operationId: previewTitle
+      summary: Full title preview — all data combined
+      description: |
+        Combines tokens + keywords + affixes + pools + spacing
+        into final sample titles. Called on every title builder change.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TitlePreviewInput" }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TitlePreviewResult" }
+
+  # ===========================================================================
+  # Step 2 Confirm
+  # ===========================================================================
+  /step2/confirm:
+    post:
+      tags: [step-2-confirm]
+      operationId: confirmStep2
+      summary: Create campaign with all title data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Step2ConfirmInput" }
+      responses:
+        "201":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Step2ConfirmResult" }
+        "422":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FriendlyError" }
+
+  # ===========================================================================
+  # Step 3
+  # ===========================================================================
   /step3/templates:
     get:
       tags: [step-3-templates]
       operationId: listTemplates
-      summary: List available post templates
-      description: |
-        Returns pre-defined PostLayouts.
-        Each template describes a block sequence
-        (e.g., "heading + 3 paragraphs + image + 2 paragraphs").
-        The user picks one.
+      summary: List post templates
       responses:
         "200":
-          description: Template list
           content:
             application/json:
               schema:
                 type: array
-                items:
-                  $ref: "#/components/schemas/TemplateView"
+                items: { $ref: "#/components/schemas/TemplateView" }
 
   /step3/templates/{templateId}:
     parameters:
       - name: templateId
         in: path
         required: true
-        schema:
-          type: integer
+        schema: { type: integer }
     get:
       tags: [step-3-templates]
       operationId: getTemplate
-      summary: Get template detail with block list
+      summary: Get template detail
       responses:
         "200":
-          description: Template detail
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/TemplateDetailView"
+              schema: { $ref: "#/components/schemas/TemplateDetailView" }
 
   /step3/templates/{templateId}/preview:
     parameters:
       - name: templateId
         in: path
         required: true
-        schema:
-          type: integer
+        schema: { type: integer }
     get:
       tags: [step-3-templates]
       operationId: previewTemplate
-      summary: Preview how a post will look with selected keywords
-      description: |
-        Combines the selected template with selected keywords
-        to generate a sample post preview (title + body outline).
-        Nothing is saved — this is a dry run.
+      summary: Preview post with campaign data
       parameters:
         - name: campaign_id
           in: query
-          schema:
-            type: integer
+          schema: { type: integer }
       responses:
         "200":
-          description: Post preview
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/PostPreview"
+              schema: { $ref: "#/components/schemas/PostPreview" }
 
-  # ---------------------------------------------------------------------------
-  # Step 4: 런타임 옵션 & 실행
-  # ---------------------------------------------------------------------------
+  # ===========================================================================
+  # Step 4
+  # ===========================================================================
   /step4/run/preview:
     post:
       tags: [step-4-run]
       operationId: previewRun
-      summary: Preview the execution plan before committing
-      description: |
-        Shows what will happen: how many combinations, how many posts
-        per account, estimated schedule. The user reviews before clicking "Go".
+      summary: Preview execution plan
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              $ref: "#/components/schemas/RunConfig"
+            schema: { $ref: "#/components/schemas/RunConfig" }
       responses:
         "200":
-          description: Execution plan preview
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/RunPreviewView"
+              schema: { $ref: "#/components/schemas/RunPreviewView" }
 
   /step4/run/execute:
     post:
       tags: [step-4-run]
       operationId: executeRun
       summary: Execute the posting run
-      description: |
-        The final "Go" button.
-        Generates combinations, dispatches batches, and starts execution.
-        Returns a run ID for monitoring.
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              $ref: "#/components/schemas/RunConfig"
+            schema: { $ref: "#/components/schemas/RunConfig" }
       responses:
         "201":
-          description: Run started
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/RunStartResult"
+              schema: { $ref: "#/components/schemas/RunStartResult" }
         "422":
-          description: Configuration invalid
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/FriendlyError"
+              schema: { $ref: "#/components/schemas/FriendlyError" }
 
-  # ---------------------------------------------------------------------------
+  # ===========================================================================
   # Monitor
-  # ---------------------------------------------------------------------------
+  # ===========================================================================
   /monitor/runs:
     get:
       tags: [monitor]
       operationId: listRuns
-      summary: List all runs with progress
       responses:
         "200":
-          description: Run list
           content:
             application/json:
               schema:
                 type: array
-                items:
-                  $ref: "#/components/schemas/RunProgressView"
+                items: { $ref: "#/components/schemas/RunProgressView" }
 
   /monitor/runs/{batchId}:
     parameters:
       - name: batchId
         in: path
         required: true
-        schema:
-          type: integer
+        schema: { type: integer }
     get:
       tags: [monitor]
       operationId: getRunDetail
-      summary: Get detailed progress for a run
       responses:
         "200":
-          description: Run detail
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/RunDetailView"
+              schema: { $ref: "#/components/schemas/RunDetailView" }
 
   /monitor/runs/{batchId}/retry:
     parameters:
       - name: batchId
         in: path
         required: true
-        schema:
-          type: integer
+        schema: { type: integer }
     post:
       tags: [monitor]
       operationId: retryFailed
-      summary: Retry failed items in a run
       responses:
         "200":
-          description: Retry result
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                  message:
-                    type: string
+              schema: { $ref: "#/components/schemas/ActionResult" }
 
   /monitor/runs/{batchId}/stop:
     parameters:
       - name: batchId
         in: path
         required: true
-        schema:
-          type: integer
+        schema: { type: integer }
     post:
       tags: [monitor]
       operationId: stopRun
-      summary: Stop a running batch
       responses:
         "200":
-          description: Stop result
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                  message:
-                    type: string
+              schema: { $ref: "#/components/schemas/ActionResult" }
 
 # =============================================================================
 # Components
@@ -559,48 +639,38 @@ components:
 
   schemas:
 
-    # -- Common ---------------------------------------------------------------
     FriendlyError:
       type: object
       required: [success, message]
       properties:
-        success:
-          type: boolean
-          const: false
-        message:
-          type: string
-        suggestion:
-          type: string
+        success: { type: boolean, const: false }
+        message: { type: string }
+        suggestion: { type: string }
 
-    # -- Step 1: Accounts -----------------------------------------------------
+    ActionResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        message: { type: string }
+
+    # -- Step 1 ---------------------------------------------------------------
     AccountUploadPreview:
       type: object
       properties:
-        success:
-          type: boolean
+        success: { type: boolean }
         rows:
           type: array
           items:
             type: object
             properties:
-              row_number:
-                type: integer
-              username:
-                type: string
-              platform:
-                type: string
-              blog_id:
-                type: string
-              valid:
-                type: boolean
-              error:
-                type: string
-                nullable: true
-                description: "e.g., 'Missing password'"
-        valid_count:
-          type: integer
-        invalid_count:
-          type: integer
+              row_number: { type: integer }
+              username: { type: string }
+              platform: { type: string }
+              blog_id: { type: string }
+              valid: { type: boolean }
+              error: { type: string, nullable: true }
+        valid_count: { type: integer }
+        invalid_count: { type: integer }
 
     AccountConfirmInput:
       type: object
@@ -608,396 +678,461 @@ components:
       properties:
         accounts:
           type: array
-          description: All parsed rows to save
           items:
             type: object
             required: [username, password, platform]
             properties:
-              username:
-                type: string
-              password:
-                type: string
-              platform:
-                type: string
-                description: "Platform slug, e.g., 'naver'"
-              blog_id:
-                type: string
-              cooldown_days:
-                type: integer
-                default: 14
+              username: { type: string }
+              password: { type: string }
+              platform: { type: string }
+              blog_id: { type: string }
+              cooldown_days: { type: integer, default: 14 }
         selected:
           type: array
-          description: Indices (0-based) of rows to activate for this run
-          items:
-            type: integer
+          items: { type: integer }
 
     AccountConfirmResult:
       type: object
       properties:
-        success:
-          type: boolean
-        message:
-          type: string
-          description: "e.g., '3 accounts saved. 2 selected for posting.'"
-        saved_count:
-          type: integer
-        selected_count:
-          type: integer
+        success: { type: boolean }
+        message: { type: string }
+        saved_count: { type: integer }
+        selected_count: { type: integer }
 
     AccountView:
       type: object
       properties:
-        id:
-          type: integer
-        username:
-          type: string
-        platform:
-          type: string
-        status:
-          type: string
-          description: "e.g., 'Ready', 'Cooling (3 days left)', 'Disabled'"
-        selected:
-          type: boolean
-        last_used:
-          type: string
-          nullable: true
-          description: "e.g., '15 days ago'"
+        id: { type: integer }
+        username: { type: string }
+        platform: { type: string }
+        status: { type: string }
+        selected: { type: boolean }
+        last_used: { type: string, nullable: true }
 
-    # -- Step 2: Keywords -----------------------------------------------------
+    # -- Step 2a: Keywords + Affixes ------------------------------------------
+    AffixInfo:
+      type: object
+      description: One detected affix on a keyword
+      properties:
+        affix_id: { type: integer }
+        type: { type: string, enum: [prefix, suffix] }
+        value:
+          type: string
+          description: "e.g., '동', '구', '시'"
+        active:
+          type: boolean
+          description: "true=keep affix, false=strip it"
+        stripped_result:
+          type: string
+          description: "What the keyword becomes if stripped. e.g., '강남'"
+
+    KeywordItem:
+      type: object
+      properties:
+        id: { type: integer }
+        value: { type: string }
+        display_value: { type: string }
+        active: { type: boolean }
+        affixes:
+          type: array
+          items: { $ref: "#/components/schemas/AffixInfo" }
+
+    CategoryPreview:
+      type: object
+      properties:
+        column_name: { type: string }
+        slug: { type: string }
+        keyword_count: { type: integer }
+        sample_values:
+          type: array
+          items: { type: string }
+        detected_affixes:
+          type: array
+          description: "Unique affix values found in this category"
+          items: { type: string }
+
     KeywordUploadPreview:
       type: object
       properties:
-        success:
-          type: boolean
+        success: { type: boolean }
         categories:
           type: array
-          items:
-            type: object
-            properties:
-              column_name:
-                type: string
-                description: Excel column header
-              slug:
-                type: string
-                description: Auto-generated slug
-              keyword_count:
-                type: integer
-              sample_values:
-                type: array
-                items:
-                  type: string
-              detected_affixes:
-                type: array
-                items:
-                  type: string
-                  description: "e.g., 'suffix: 동, 구'"
-        total_keywords:
-          type: integer
-        estimated_combinations:
-          type: integer
-          description: Cartesian product of all categories
+          items: { $ref: "#/components/schemas/CategoryPreview" }
+        total_keywords: { type: integer }
 
-    KeywordConfirmInput:
+    KeywordImportInput:
       type: object
-      required: [campaign_name, platform_id, categories]
+      required: [categories]
       properties:
-        campaign_name:
-          type: string
-        platform_id:
-          type: integer
         categories:
           type: array
-          description: |
-            One entry per Excel column. Order = title template token order.
           items:
             type: object
             required: [slug, values]
             properties:
-              slug:
-                type: string
+              slug: { type: string }
+              name: { type: string }
               values:
                 type: array
-                description: Selected keyword values from this category
-                items:
-                  type: string
+                items: { type: string }
+        auto_detect_affixes:
+          type: boolean
+          default: true
+          description: Auto-detect and link Korean suffixes/prefixes
 
-    KeywordConfirmResult:
+    KeywordImportResult:
       type: object
       properties:
-        success:
-          type: boolean
-        message:
-          type: string
-          description: "e.g., '2 categories, 45 keywords saved. Title: {region} {subject}'"
-        campaign_id:
-          type: integer
-        title_template:
-          type: string
-          description: "Auto-generated, e.g., '{region} {subject}'"
-        combination_count:
-          type: integer
-          description: How many posts will be generated
+        success: { type: boolean }
+        message: { type: string }
+        categories_created: { type: integer }
+        keywords_created: { type: integer }
+        keywords_existing: { type: integer }
+        affixes_linked: { type: integer }
 
     KeywordCategoryView:
       type: object
       properties:
-        slug:
-          type: string
-        name:
-          type: string
+        slug: { type: string }
+        name: { type: string }
         keywords:
           type: array
-          items:
-            type: object
-            properties:
-              id:
-                type: integer
-              value:
-                type: string
-              selected:
-                type: boolean
+          items: { $ref: "#/components/schemas/KeywordItem" }
 
-    KeywordSelectInput:
+    AffixOverrideEntry:
       type: object
-      required: [campaign_id, categories]
+      required: [keyword_id, affix_id, active]
       properties:
-        campaign_id:
-          type: integer
-        categories:
+        keyword_id: { type: integer }
+        affix_id: { type: integer }
+        active:
+          type: boolean
+          description: "true=keep affix, false=strip"
+
+    AffixOverrideInput:
+      type: object
+      required: [overrides]
+      properties:
+        overrides:
           type: array
-          items:
-            type: object
-            required: [slug, keyword_ids]
-            properties:
-              slug:
-                type: string
-              keyword_ids:
-                type: array
-                items:
-                  type: integer
+          items: { $ref: "#/components/schemas/AffixOverrideEntry" }
+
+    AffixOverrideResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        message: { type: string }
+        updated_count: { type: integer }
+
+    # -- Step 2b: Pools -------------------------------------------------------
+    PoolItemView:
+      type: object
+      properties:
+        id: { type: integer }
+        value: { type: string }
+        active: { type: boolean }
+        sort_order: { type: integer }
+
+    PoolView:
+      type: object
+      properties:
+        slug: { type: string }
+        strategy: { type: string, enum: [random, sequential] }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/PoolItemView" }
 
     PoolUploadResult:
       type: object
       properties:
-        success:
-          type: boolean
-        message:
-          type: string
+        success: { type: boolean }
+        message: { type: string }
         pools:
           type: array
           items:
             type: object
             properties:
-              slug:
-                type: string
-              count:
-                type: integer
+              slug: { type: string }
+              created_count: { type: integer }
               samples:
                 type: array
-                items:
-                  type: string
+                items: { type: string }
 
-    # -- Step 3: Templates ----------------------------------------------------
+    # -- Step 2c: Spacing -----------------------------------------------------
+    SpacingStyle:
+      type: object
+      required: [name, pattern]
+      properties:
+        name:
+          type: string
+          description: "User-given label, e.g., 'Normal', 'Compact'"
+        pattern:
+          type: object
+          additionalProperties:
+            type: integer
+            enum: [0, 1]
+          description: |
+            {slug: 0 or 1} per token slug.
+            1 = space after this token (default if slug missing).
+            0 = no space (glue to next token).
+          example:
+            region: 1
+            subject: 0
+            salt_suffix: 1
+
+    SpacingPreviewInput:
+      type: object
+      required: [styles, token_slugs]
+      properties:
+        styles:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/SpacingStyle" }
+        token_slugs:
+          type: array
+          description: Ordered slug list (from title builder or default category order)
+          items: { type: string }
+        keyword_selections:
+          type: array
+          items:
+            type: object
+            properties:
+              slug: { type: string }
+              keyword_ids:
+                type: array
+                items: { type: integer }
+        count:
+          type: integer
+          default: 3
+
+    SpacingStylePreview:
+      type: object
+      properties:
+        name: { type: string }
+        template: { type: string }
+        samples:
+          type: array
+          items: { type: string }
+
+    SpacingPreviewResult:
+      type: object
+      properties:
+        styles:
+          type: array
+          items: { $ref: "#/components/schemas/SpacingStylePreview" }
+        combination_multiplier:
+          type: integer
+          description: Number of spacing styles (multiplies keyword combinations)
+        warnings:
+          type: array
+          items: { type: string }
+
+    # -- Step 2d: Title -------------------------------------------------------
+    TitleTokenInput:
+      type: object
+      required: [type, slug]
+      properties:
+        type:
+          type: string
+          enum: [keyword, pool, literal]
+        slug: { type: string }
+        value:
+          type: string
+          description: Text for literal tokens
+        sort_order: { type: integer }
+
+    KeywordSelection:
+      type: object
+      required: [slug, keyword_ids]
+      properties:
+        slug: { type: string }
+        keyword_ids:
+          type: array
+          items: { type: integer }
+
+    TitlePreviewInput:
+      type: object
+      required: [title_tokens]
+      properties:
+        title_tokens:
+          type: array
+          items: { $ref: "#/components/schemas/TitleTokenInput" }
+        keyword_selections:
+          type: array
+          items: { $ref: "#/components/schemas/KeywordSelection" }
+        spacing_styles:
+          type: array
+          items: { $ref: "#/components/schemas/SpacingStyle" }
+        affix_overrides:
+          type: array
+          description: Current affix toggle state (from Step 2a)
+          items: { $ref: "#/components/schemas/AffixOverrideEntry" }
+        count:
+          type: integer
+          default: 3
+
+    TitlePreviewResult:
+      type: object
+      properties:
+        styles:
+          type: array
+          items: { $ref: "#/components/schemas/SpacingStylePreview" }
+        total_combinations: { type: integer }
+        warnings:
+          type: array
+          items: { type: string }
+
+    # -- Step 2 Confirm -------------------------------------------------------
+    Step2ConfirmInput:
+      type: object
+      required:
+        - campaign_name
+        - platform_id
+        - keyword_selections
+        - title_tokens
+        - spacing_styles
+      properties:
+        campaign_name: { type: string }
+        platform_id: { type: integer }
+        keyword_selections:
+          type: array
+          items: { $ref: "#/components/schemas/KeywordSelection" }
+        title_tokens:
+          type: array
+          items: { $ref: "#/components/schemas/TitleTokenInput" }
+        spacing_styles:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/SpacingStyle" }
+        affix_overrides:
+          type: array
+          items: { $ref: "#/components/schemas/AffixOverrideEntry" }
+
+    Step2ConfirmResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        message: { type: string }
+        campaign_id: { type: integer }
+        title_template: { type: string }
+        spacing_style_count: { type: integer }
+        combination_count: { type: integer }
+
+    # -- Step 3 ---------------------------------------------------------------
     TemplateView:
       type: object
       properties:
-        id:
-          type: integer
-        name:
-          type: string
-        description:
-          type: string
-          description: "e.g., 'Heading + 3 paragraphs + featured image'"
-        block_summary:
-          type: string
-          description: "e.g., 'H2 → P → P → IMG → P → P → FEATURED'"
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string }
+        block_summary: { type: string }
 
     TemplateDetailView:
       type: object
       properties:
-        id:
-          type: integer
-        name:
-          type: string
-        description:
-          type: string
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string }
         blocks:
           type: array
           items:
             type: object
             properties:
-              order:
-                type: integer
-              type:
-                type: string
-                enum: [heading, paragraph, image, featured, list, quote, divider]
-              label:
-                type: string
-                description: "e.g., 'SEO intro paragraph', 'Body image'"
-              config_summary:
-                type: string
-                nullable: true
-                description: "e.g., 'min 200 chars, informational tone'"
+              order: { type: integer }
+              type: { type: string }
+              label: { type: string }
+              config_summary: { type: string, nullable: true }
 
     PostPreview:
       type: object
       properties:
-        sample_title:
-          type: string
-          description: "e.g., '강남 수학 과외 전문 추천'"
+        sample_title: { type: string }
         blocks:
           type: array
           items:
             type: object
             properties:
-              type:
-                type: string
-              placeholder:
-                type: string
-                description: "e.g., '[AI paragraph about 강남 수학 과외]'"
+              type: { type: string }
+              placeholder: { type: string }
 
-    # -- Step 4: Run ----------------------------------------------------------
+    # -- Step 4 ---------------------------------------------------------------
     RunConfig:
       type: object
       required: [campaign_id, template_id, publish_mode]
       properties:
-        campaign_id:
-          type: integer
-        template_id:
-          type: integer
-        publish_mode:
-          type: string
-          enum: [immediate, scheduled]
-        schedule_start:
-          type: string
-          format: date-time
-          description: Required when publish_mode is 'scheduled'
-        schedule_interval_minutes:
-          type: integer
-          default: 60
-          description: Minutes between posts for scheduled mode
-        headless:
-          type: boolean
-          default: true
+        campaign_id: { type: integer }
+        template_id: { type: integer }
+        publish_mode: { type: string, enum: [immediate, scheduled] }
+        schedule_start: { type: string, format: date-time }
+        schedule_interval_minutes: { type: integer, default: 60 }
+        headless: { type: boolean, default: true }
 
     RunPreviewView:
       type: object
       properties:
-        campaign_name:
-          type: string
-        template_name:
-          type: string
-        total_combinations:
-          type: integer
+        campaign_name: { type: string }
+        template_name: { type: string }
+        total_combinations: { type: integer }
         accounts:
           type: array
           items:
             type: object
             properties:
-              username:
-                type: string
-              posts_assigned:
-                type: integer
-        publish_mode:
-          type: string
-        schedule_summary:
-          type: string
-          nullable: true
-          description: "e.g., 'Starting 3/23 2:00 PM, one post every 60 min'"
-        estimated_finish:
-          type: string
-          nullable: true
-          description: "e.g., '3/23 5:00 PM'"
+              username: { type: string }
+              posts_assigned: { type: integer }
+        publish_mode: { type: string }
+        schedule_summary: { type: string, nullable: true }
+        estimated_finish: { type: string, nullable: true }
         sample_titles:
           type: array
-          description: First 5 generated titles
-          items:
-            type: string
+          items: { type: string }
         warnings:
           type: array
-          items:
-            type: string
+          items: { type: string }
 
     RunStartResult:
       type: object
       properties:
-        success:
-          type: boolean
-        message:
-          type: string
-          description: "e.g., '180 posts scheduled across 3 accounts.'"
+        success: { type: boolean }
+        message: { type: string }
         batch_ids:
           type: array
-          items:
-            type: integer
-        total_posts:
-          type: integer
+          items: { type: integer }
+        total_posts: { type: integer }
 
     # -- Monitor --------------------------------------------------------------
     RunProgressView:
       type: object
       properties:
-        batch_id:
-          type: integer
-        campaign_name:
-          type: string
-        account:
-          type: string
-        status:
-          type: string
-          description: "e.g., 'Running', 'Completed', '3 failed'"
-        completed:
-          type: integer
-        failed:
-          type: integer
-        total:
-          type: integer
-        percentage:
-          type: integer
-        started_at:
-          type: string
-          nullable: true
-          description: "e.g., '3/23 2:00 PM'"
-        last_activity:
-          type: string
-          description: "e.g., '2 minutes ago'"
+        batch_id: { type: integer }
+        campaign_name: { type: string }
+        account: { type: string }
+        status: { type: string }
+        completed: { type: integer }
+        failed: { type: integer }
+        total: { type: integer }
+        percentage: { type: integer }
+        started_at: { type: string, nullable: true }
+        last_activity: { type: string }
 
     RunDetailView:
       type: object
       properties:
-        batch_id:
-          type: integer
-        campaign_name:
-          type: string
-        account:
-          type: string
-        status:
-          type: string
-        completed:
-          type: integer
-        failed:
-          type: integer
-        total:
-          type: integer
+        batch_id: { type: integer }
+        campaign_name: { type: string }
+        account: { type: string }
+        status: { type: string }
+        completed: { type: integer }
+        failed: { type: integer }
+        total: { type: integer }
         items:
           type: array
           items:
             type: object
             properties:
-              title:
-                type: string
-              keywords:
-                type: string
-                description: "e.g., '강남 수학'"
-              status:
-                type: string
-                description: "e.g., 'Published', 'Failed', 'Waiting'"
-              url:
-                type: string
-                nullable: true
-              error:
-                type: string
-                nullable: true
-              completed_at:
-                type: string
-                nullable: true
+              title: { type: string }
+              keywords: { type: string }
+              status: { type: string }
+              url: { type: string, nullable: true }
+              error: { type: string, nullable: true }
+              completed_at: { type: string, nullable: true }

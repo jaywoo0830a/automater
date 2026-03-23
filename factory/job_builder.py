@@ -145,32 +145,61 @@ def _apply_affixes(
     return value
 
 
-def _build_template(campaign: Any) -> str:
+def _build_template(
+    campaign: Any,
+    spacing_pattern: dict[str, int] | None = None,
+) -> str:
     """
     Derive title template string from campaign's token sequence.
 
     keyword/pool tokens → {slug} placeholder.
     literal tokens      → raw value text.
-    Joined with spaces in sort_order.
+
+    Args:
+        campaign:        Campaign with .tokens list.
+        spacing_pattern: Optional {slug: 0_or_1} dict from SpacingRule.pattern.
+                         1 (or missing) = space after token.
+                         0              = no space (glue to next token).
+                         None           = all spaces (backward compatible).
     """
     tokens = sorted(
         getattr(campaign, "tokens", []),
         key=lambda t: t.sort_order,
     )
+    if not tokens:
+        return ""
+
     parts: list[str] = []
     for token in tokens:
         if token.token_type == "literal":
             parts.append(token.value or "")
         else:
             parts.append(f"{{{token.slug}}}")
-    return " ".join(parts)
+
+    if spacing_pattern is None:
+        return " ".join(parts)
+
+    # Apply spacing pattern: join each pair with the appropriate separator
+    result = parts[0]
+    for i in range(1, len(parts)):
+        prev_slug = tokens[i - 1].slug
+        has_space = spacing_pattern.get(prev_slug, 1)
+        separator = " " if has_space else ""
+        result += separator + parts[i]
+    return result
 
 
 def _build_title(combo: Any) -> TitleOption:
     """Build a TitleOption from campaign tokens + combination keywords."""
     campaign = combo.campaign
+    spacing_rule = getattr(combo, "spacing_rule", None)
+    spacing_pattern = (
+        spacing_rule.pattern
+        if spacing_rule is not None and getattr(spacing_rule, "pattern", None)
+        else None
+    )
     return TitleOption(
-        template=_build_template(campaign),
+        template=_build_template(campaign, spacing_pattern),
         values=_build_values(combo),
         pools=_build_pools(campaign),
     )
