@@ -27,7 +27,7 @@ class TestPreviewPost:
 
     def test_generates_sample_title(self):
         title = TitleOption(
-            template="{region} {subject}",
+            template="{keyword:region} {keyword:subject}",
             values={"region": "강남", "subject": "수학"},
         )
         sections = (Section(blocks=(ParagraphBlock(keyword="강남 수학"),)),)

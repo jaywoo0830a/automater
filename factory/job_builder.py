@@ -152,8 +152,9 @@ def _build_template(
     """
     Derive title template string from campaign's token sequence.
 
-    keyword/pool tokens → {slug} placeholder.
-    literal tokens      → raw value text.
+    keyword tokens → {keyword:slug} placeholder.
+    pool tokens    → {pool:slug} placeholder.
+    literal tokens → raw value text.
 
     Args:
         campaign:        Campaign with .tokens list.
@@ -174,7 +175,7 @@ def _build_template(
         if token.token_type == "literal":
             parts.append(token.value or "")
         else:
-            parts.append(f"{{{token.slug}}}")
+            parts.append(f"{{{token.token_type}:{token.slug}}}")
 
     if spacing_pattern is None:
         return " ".join(parts)

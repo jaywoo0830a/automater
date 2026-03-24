@@ -1,12 +1,26 @@
 """
 automator/title_generator.py
 -----------------------------
-Title generation functions.
+Title generation with a simple DSL.
 
+DSL format
+----------
+    {keyword:slug}  — substituted from TitleOption.values[slug]
+    {pool:slug}     — random choice from TitleOption.pools[slug]
+    plain text      — kept as-is (spacing is what you type)
+
+Examples::
+
+    "{pool:salt_prefix} {keyword:region} {keyword:subject} 과외 {pool:salt_suffix}"
+    → "검증된 강남 수학 과외 강력 추천"
+
+    "{pool:salt_prefix} {keyword:region}{keyword:subject}과외 {pool:salt_suffix}"
+    → "전문 강남수학과외 즉시 가능"
+
+Public API
+----------
     generate_title(option)         -> str
     validate_template(template)    -> None (raises ValueError)
-
-No class — option in, title out.
 """
 
 from __future__ import annotations
@@ -16,7 +30,8 @@ import re
 
 from automator.options import TitleOption
 
-_TOKEN_RE = re.compile(r"\{(\w*)\}")
+_TOKEN_RE = re.compile(r"\{([^}]*)\}")
+_VALID_TYPES = {"keyword", "pool"}
 
 
 # ---------------------------------------------------------------------------
@@ -25,14 +40,13 @@ _TOKEN_RE = re.compile(r"\{(\w*)\}")
 
 def validate_template(template: str) -> None:
     """
-    Raise ValueError if template is invalid.
+    Raise ValueError if template syntax is invalid.
 
     Rules:
       - Not empty / whitespace-only.
-      - At least one {slug} token.
-      - All tokens are valid Python identifiers.
-      - No empty braces {}.
-      - No duplicate tokens.
+      - At least one {type:slug} token.
+      - Every token has format {keyword:slug} or {pool:slug}.
+      - No duplicate type:slug pairs.
     """
     if not template or not template.strip():
         raise ValueError("template must not be empty")
@@ -41,25 +55,54 @@ def validate_template(template: str) -> None:
 
     if not raw_tokens:
         raise ValueError(
-            "template contains no {slug} tokens — "
-            "use e.g. \"{region} {subject} {salt_suffix}\""
+            "template contains no {type:slug} tokens — "
+            "use e.g. \"{keyword:region} {pool:salt_suffix}\""
         )
 
-    for tok in raw_tokens:
-        if not tok:
-            raise ValueError(
-                "template contains empty braces {} — "
-                "every token must have a slug name"
-            )
-        if not tok.isidentifier():
-            raise ValueError(
-                f"token {{{tok!r}}} is not a valid identifier — "
-                "use lowercase letters, digits, and underscores only"
-            )
+    parsed: list[tuple[str, str]] = []
+    for raw in raw_tokens:
+        pair = _parse_token(raw)
+        parsed.append(pair)
 
-    duplicates = {t for t in raw_tokens if raw_tokens.count(t) > 1}
-    if duplicates:
-        raise ValueError(f"template contains duplicate token(s): {duplicates}")
+    seen: set[tuple[str, str]] = set()
+    for pair in parsed:
+        if pair in seen:
+            raise ValueError(
+                f"template contains duplicate token: "
+                f"{{{pair[0]}:{pair[1]}}}"
+            )
+        seen.add(pair)
+
+
+def _parse_token(raw: str) -> tuple[str, str]:
+    """
+    Parse a raw token string into (type, slug).
+
+    Raises ValueError if the format is invalid.
+    """
+    if ":" not in raw or not raw.strip():
+        raise ValueError(
+            f"invalid token {{{raw}}} — "
+            f"use {{keyword:slug}} or {{pool:slug}}"
+        )
+
+    parts = raw.split(":", 1)
+    token_type = parts[0].strip()
+    slug = parts[1].strip()
+
+    if not token_type or not slug:
+        raise ValueError(
+            f"invalid token {{{raw}}} — "
+            f"both type and slug are required"
+        )
+
+    if token_type not in _VALID_TYPES:
+        raise ValueError(
+            f"invalid token type '{token_type}' in {{{raw}}} — "
+            f"must be one of: {sorted(_VALID_TYPES)}"
+        )
+
+    return (token_type, slug)
 
 
 # ---------------------------------------------------------------------------
@@ -73,12 +116,8 @@ def generate_title(
     """
     Generate a post title from a TitleOption.
 
-    fixed_title -> return as-is.
-    Otherwise substitute {slug} tokens:
-      - tokens in values  -> deterministic substitution
-      - tokens in pools   -> random choice from pool
-
-    Raises ValueError if values and pools share any key (namespace collision).
+    fixed_title → return as-is.
+    Otherwise substitute {keyword:slug} and {pool:slug} tokens.
 
     Args:
         option: TitleOption with template, values, and optional pools.
@@ -86,6 +125,10 @@ def generate_title(
 
     Returns:
         The generated title string.
+
+    Raises:
+        ValueError: Template syntax invalid.
+        KeyError:   Referenced slug not found in values or pools.
     """
     if option.fixed_title:
         return option.fixed_title
@@ -100,19 +143,27 @@ def generate_title(
 
     validate_template(option.template)
 
-    collisions = set(option.values.keys()) & set(option.pools.keys())
-    if collisions:
-        raise ValueError(
-            f"namespace collision: {collisions} found in both values and pools"
-        )
-
     rng = rng or random.Random(option.seed)
-    tokens = _TOKEN_RE.findall(option.template)
-    sub = dict(option.values)
 
-    for token in tokens:
-        if token in option.pools:
-            pool = option.pools[token]
-            sub[token] = rng.choice(pool) if pool else ""
+    def _replace(match: re.Match) -> str:
+        raw = match.group(1)
+        token_type, slug = _parse_token(raw)
 
-    return option.template.format(**sub)
+        if token_type == "keyword":
+            if slug not in option.values:
+                raise KeyError(
+                    f"keyword slug '{slug}' not found in values. "
+                    f"Available: {sorted(option.values.keys())}"
+                )
+            return option.values[slug]
+
+        # pool
+        if slug not in option.pools:
+            raise KeyError(
+                f"pool slug '{slug}' not found in pools. "
+                f"Available: {sorted(option.pools.keys())}"
+            )
+        pool = option.pools[slug]
+        return rng.choice(pool) if pool else ""
+
+    return _TOKEN_RE.sub(_replace, option.template)

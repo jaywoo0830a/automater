@@ -279,14 +279,14 @@ class TestBuildTemplate:
             _token("region", "keyword", sort_order=0),
             _token("subject", "keyword", sort_order=1),
         ])
-        assert _build_template(campaign) == "{region} {subject}"
+        assert _build_template(campaign) == "{keyword:region} {keyword:subject}"
 
     def test_pool_tokens_produce_slug_placeholders(self):
         campaign = SimpleNamespace(tokens=[
             _token("region", "keyword", sort_order=0),
             _token("salt_suffix", "pool", sort_order=1),
         ])
-        assert _build_template(campaign) == "{region} {salt_suffix}"
+        assert _build_template(campaign) == "{keyword:region} {pool:salt_suffix}"
 
     def test_literal_token_produces_raw_value(self):
         campaign = SimpleNamespace(tokens=[
@@ -294,7 +294,7 @@ class TestBuildTemplate:
             _token("_lit_expert", "literal", value="전문", sort_order=1),
             _token("subject", "keyword", sort_order=2),
         ])
-        assert _build_template(campaign) == "{region} 전문 {subject}"
+        assert _build_template(campaign) == "{keyword:region} 전문 {keyword:subject}"
 
     def test_sort_order_respected(self):
         campaign = SimpleNamespace(tokens=[
@@ -302,7 +302,7 @@ class TestBuildTemplate:
             _token("salt_prefix", "pool", sort_order=0),
             _token("region", "keyword", sort_order=1),
         ])
-        assert _build_template(campaign) == "{salt_prefix} {region} {subject}"
+        assert _build_template(campaign) == "{pool:salt_prefix} {keyword:region} {keyword:subject}"
 
     def test_empty_tokens(self):
         campaign = SimpleNamespace(tokens=[])
@@ -320,7 +320,7 @@ class TestBuildTemplate:
             _token("subject", "keyword", sort_order=3),
             _token("cta", "pool", sort_order=4),
         ])
-        assert _build_template(campaign) == "{salt_prefix} {region} 최고의 {subject} {cta}"
+        assert _build_template(campaign) == "{pool:salt_prefix} {keyword:region} 최고의 {keyword:subject} {pool:cta}"
 
 
 # ---------------------------------------------------------------------------
@@ -340,7 +340,7 @@ class TestBuildTitle:
         )
         opt = _build_title(combo)
         assert isinstance(opt, TitleOption)
-        assert opt.template == "{region} {subject} {salt_suffix}"
+        assert opt.template == "{keyword:region} {keyword:subject} {pool:salt_suffix}"
         assert opt.values == {"region": "강남", "subject": "수학"}
 
     def test_pools_loaded_from_tokens(self):
@@ -371,7 +371,7 @@ class TestBuildTitle:
             ],
         )
         opt = _build_title(combo)
-        assert opt.template == "{salt_prefix} {region} {cta}"
+        assert opt.template == "{pool:salt_prefix} {keyword:region} {pool:cta}"
         assert opt.pools["salt_prefix"] == ("검증된", "전문")
         assert opt.pools["cta"] == ("지금 신청",)
 
@@ -399,7 +399,7 @@ class TestBuildTitle:
             ],
         )
         opt = _build_title(combo)
-        assert opt.template == "{region} 전문 {subject}"
+        assert opt.template == "{keyword:region} 전문 {keyword:subject}"
 
     def test_no_tokens_empty_template(self):
         combo = _combo(

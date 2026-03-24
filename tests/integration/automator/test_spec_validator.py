@@ -58,7 +58,7 @@ def test_bad_template_rejected(v):
 
 
 def test_valid_template_passes(v):
-    v.validate(_spec(title=TitleOption(template="{region} {subject}")))
+    v.validate(_spec(title=TitleOption(template="{keyword:region} {keyword:subject}")))
 
 
 # ---------------------------------------------------------------------------

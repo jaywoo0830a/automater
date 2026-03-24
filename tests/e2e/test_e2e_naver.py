@@ -149,7 +149,7 @@ def test_pipeline_all_options(editor: SmartEditorOne, account: AccountOption):
     spec = PostingSpec(
         account=account,
         title=TitleOption(
-            template="{region} {subject} {learning_type} {salt_suffix}",
+            template="{keyword:region} {keyword:subject} {keyword:learning_type} {pool:salt_suffix}",
             values={"region": "강남", "subject": "수학", "learning_type": "과외"},
             pools={"salt_suffix": ("강력 추천", "즉시 가능")},
         ),
@@ -199,7 +199,7 @@ def test_pipeline_real_publish(page: Page, account: AccountOption, real_run: boo
     spec = PostingSpec(
         account=account,
         title=TitleOption(
-            template="{region} {subject} {learning_type} {salt_suffix}",
+            template="{keyword:region} {keyword:subject} {keyword:learning_type} {pool:salt_suffix}",
             values={"region": "강남", "subject": "수학", "learning_type": "과외"},
             pools={"salt_suffix": ("강력 추천", "즉시 가능")},
         ),

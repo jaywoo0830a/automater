@@ -82,21 +82,19 @@ class TitleOption:
     """
     Rules for generating a post title.
 
-    Template format
-    ---------------
-    Python str.format()-style {slug} tokens.
-    Keyword category slugs are resolved from `values` (deterministic).
-    Palette slugs are resolved from `pools` (random choice).
-
-    Namespace safety: values keys and pools keys must not overlap.
-    generate_title() raises ValueError on collision.
+    Template DSL
+    ------------
+    {keyword:slug}  — substituted from ``values[slug]`` (deterministic).
+    {pool:slug}     — random choice from ``pools[slug]``.
+    plain text      — kept as-is.  Spacing is what you type.
 
     Pools data is supplied directly — no file I/O.
     Loaded from CampaignPalette rows before constructing this option.
 
-    Examples:
+    Examples::
+
         TitleOption(
-            template="{salt_prefix} {region} {subject} {salt_suffix}",
+            template="{pool:salt_prefix} {keyword:region} {keyword:subject} 과외 {pool:salt_suffix}",
             values={"region": "강남", "subject": "수학"},
             pools={
                 "salt_prefix": ("검증된", "전문"),
@@ -109,7 +107,6 @@ class TitleOption:
     values:           dict             = field(default_factory=dict)
     pools:            dict[str, tuple[str, ...]] = field(default_factory=dict)
     fixed_title:      str              = ""
-    has_space:        bool             = True
     add_affix:        bool             = False
     randomize_chars:  bool             = False
     ai_preset_prompt: str              = ""

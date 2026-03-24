@@ -79,7 +79,7 @@ class TestBuildTemplateSpacing:
             _token("region", sort_order=0),
             _token("subject", sort_order=1),
         )
-        assert _build_template(campaign) == "{region} {subject}"
+        assert _build_template(campaign) == "{keyword:region} {keyword:subject}"
 
     def test_all_ones_same_as_default(self):
         """Pattern with all 1s = all spaces, same as no pattern."""
@@ -88,7 +88,7 @@ class TestBuildTemplateSpacing:
             _token("subject", sort_order=1),
         )
         pattern = {"region": 1, "subject": 1}
-        assert _build_template(campaign, pattern) == "{region} {subject}"
+        assert _build_template(campaign, pattern) == "{keyword:region} {keyword:subject}"
 
     def test_zero_glues_tokens(self):
         """Pattern 0 = no space between tokens."""
@@ -97,7 +97,7 @@ class TestBuildTemplateSpacing:
             _token("subject", sort_order=1),
         )
         pattern = {"region": 0, "subject": 1}
-        assert _build_template(campaign, pattern) == "{region}{subject}"
+        assert _build_template(campaign, pattern) == "{keyword:region}{keyword:subject}"
 
     def test_all_zeros_no_spaces(self):
         campaign = _campaign(
@@ -106,7 +106,7 @@ class TestBuildTemplateSpacing:
             _token("salt_suffix", "pool", sort_order=2),
         )
         pattern = {"region": 0, "subject": 0, "salt_suffix": 0}
-        assert _build_template(campaign, pattern) == "{region}{subject}{salt_suffix}"
+        assert _build_template(campaign, pattern) == "{keyword:region}{keyword:subject}{pool:salt_suffix}"
 
     def test_mixed_pattern(self):
         """Realistic: region과 subject 사이는 붙이고, subject 뒤에는 띄움."""
@@ -116,7 +116,7 @@ class TestBuildTemplateSpacing:
             _token("salt_suffix", "pool", sort_order=2),
         )
         pattern = {"region": 0, "subject": 1, "salt_suffix": 1}
-        assert _build_template(campaign, pattern) == "{region}{subject} {salt_suffix}"
+        assert _build_template(campaign, pattern) == "{keyword:region}{keyword:subject} {pool:salt_suffix}"
 
     def test_literal_token_respects_spacing(self):
         campaign = _campaign(
@@ -125,7 +125,7 @@ class TestBuildTemplateSpacing:
             _token("subject", sort_order=2),
         )
         pattern = {"region": 1, "_lit": 0, "subject": 1}
-        assert _build_template(campaign, pattern) == "{region} 과외{subject}"
+        assert _build_template(campaign, pattern) == "{keyword:region} 과외{keyword:subject}"
 
     def test_missing_slug_in_pattern_defaults_to_space(self):
         """Slugs not in the pattern default to space (1)."""
@@ -135,7 +135,7 @@ class TestBuildTemplateSpacing:
             _token("salt_suffix", "pool", sort_order=2),
         )
         pattern = {"region": 0}
-        assert _build_template(campaign, pattern) == "{region}{subject} {salt_suffix}"
+        assert _build_template(campaign, pattern) == "{keyword:region}{keyword:subject} {pool:salt_suffix}"
 
     def test_last_token_spacing_value_is_ignored(self):
         """The last token's spacing value doesn't matter — nothing follows."""
@@ -145,13 +145,13 @@ class TestBuildTemplateSpacing:
         )
         pattern_with_last_zero = {"region": 1, "subject": 0}
         pattern_with_last_one = {"region": 1, "subject": 1}
-        assert _build_template(campaign, pattern_with_last_zero) == "{region} {subject}"
-        assert _build_template(campaign, pattern_with_last_one) == "{region} {subject}"
+        assert _build_template(campaign, pattern_with_last_zero) == "{keyword:region} {keyword:subject}"
+        assert _build_template(campaign, pattern_with_last_one) == "{keyword:region} {keyword:subject}"
 
     def test_single_token_no_separator_needed(self):
         campaign = _campaign(_token("region", sort_order=0))
         pattern = {"region": 0}
-        assert _build_template(campaign, pattern) == "{region}"
+        assert _build_template(campaign, pattern) == "{keyword:region}"
 
     def test_empty_tokens_returns_empty(self):
         campaign = _campaign()
@@ -163,7 +163,7 @@ class TestBuildTemplateSpacing:
             _token("region", sort_order=0),
             _token("subject", sort_order=1),
         )
-        assert _build_template(campaign, None) == "{region} {subject}"
+        assert _build_template(campaign, None) == "{keyword:region} {keyword:subject}"
 
 
 # ===========================================================================
@@ -183,7 +183,7 @@ class TestBuildTitleSpacing:
             spacing_rule=None,
         )
         opt = _build_title(combo)
-        assert opt.template == "{region} {subject}"
+        assert opt.template == "{keyword:region} {keyword:subject}"
 
     def test_combo_with_spacing_rule_applies_pattern(self):
         combo = _combo(
@@ -195,7 +195,7 @@ class TestBuildTitleSpacing:
             spacing_rule=_spacing_rule({"region": 0, "subject": 1}),
         )
         opt = _build_title(combo)
-        assert opt.template == "{region}{subject}"
+        assert opt.template == "{keyword:region}{keyword:subject}"
 
     def test_combo_with_spacing_rule_three_tokens(self):
         combo = _combo(
@@ -208,7 +208,7 @@ class TestBuildTitleSpacing:
             spacing_rule=_spacing_rule({"region": 1, "_lit": 0, "subject": 1}),
         )
         opt = _build_title(combo)
-        assert opt.template == "{region} 과외{subject}"
+        assert opt.template == "{keyword:region} 과외{keyword:subject}"
 
     def test_combo_with_empty_pattern_uses_spaces(self):
         """Empty dict pattern = all defaults = all spaces."""
@@ -221,7 +221,7 @@ class TestBuildTitleSpacing:
             spacing_rule=_spacing_rule({}),
         )
         opt = _build_title(combo)
-        assert opt.template == "{region} {subject}"
+        assert opt.template == "{keyword:region} {keyword:subject}"
 
     def test_combo_missing_spacing_rule_attribute(self):
         """Combo without spacing_rule attr (old data) = all spaces."""
@@ -237,4 +237,4 @@ class TestBuildTitleSpacing:
             campaign=campaign,
         )
         opt = _build_title(combo)
-        assert opt.template == "{region} {subject}"
+        assert opt.template == "{keyword:region} {keyword:subject}"
