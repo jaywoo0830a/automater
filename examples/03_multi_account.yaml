@@ -1,5 +1,4 @@
 # ── 계정별 오버라이드 ────────────────────────────────────
-# 계정 레벨 설정이 글로벌 run을 덮어쓴다.
 
 accounts:
   - username: main_account
@@ -26,10 +25,10 @@ pools:
 
 post:
   - h2: "{keywords} 과외 소개"
-  - paragraph: "{keywords}"
+  - paragraph: "{keywords} 과외를 소개하는 글을 써줘"
   - image: body.jpg
-  - paragraph: {keyword: "{keywords}", tone: story}
-  - paragraph: {keyword: "{keywords}", tone: promotional}
+  - paragraph: "{keywords} 과외를 받은 학생의 이야기를 감성적으로 써줘"
+  - paragraph: "{keywords} 과외를 홍보하는 마무리 문단을 써줘. 행동 유도 포함"
   - thumbnail: {src: thumb.jpg, overlay: "{keywords} 과외"}
 
 images: ./images

@@ -1,6 +1,5 @@
 # ── 개별 키워드 활용 ─────────────────────────────────────
-# {keywords}가 아니라 개별 차원이 필요한 경우.
-# 제목과 본문에서 지역·과목을 따로 쓰고 싶을 때.
+# 프롬프트 안에서 지역·과목을 따로 참조하는 경우.
 
 accounts:
   - username: edu_blog
@@ -19,15 +18,15 @@ pools:
 
 post:
   - h2: "{keyword:region} {keyword:subject} 과외"
-  - paragraph: "{keyword:subject} 과외를 {keyword:region}에서 찾고 계신가요?"
-  - paragraph: "{keywords}"
+  - paragraph: "{keyword:subject} 과외를 {keyword:region}에서 찾고 계신가요? 자연스러운 도입부를 써줘"
+  - paragraph: "{keywords} 과외에 대해 소개해줘"
   - image: body.jpg
   - h3: "{keyword:region} 학원가 특징"
-  - paragraph: {keyword: "{keyword:region}", tone: informational}
+  - paragraph: "{keyword:region} 지역의 학원가 특징과 교육 환경을 설명해줘"
   - h3: "{keyword:subject} 학습 전략"
-  - paragraph: {keyword: "{keyword:subject}", tone: review}
+  - paragraph: "{keyword:subject} 학습 전략과 효과적인 공부법을 리뷰 형식으로 써줘"
   - divider
-  - paragraph: {keyword: "{keywords}", tone: promotional}
+  - paragraph: "{keywords} 과외를 추천하며 마무리해줘. 상담 신청을 유도하는 톤으로"
   - thumbnail: {src: thumb.jpg, overlay: "{keywords} 과외"}
 
 images: ./images

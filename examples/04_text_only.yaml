@@ -1,5 +1,4 @@
 # ── 텍스트 전용 캠페인 ───────────────────────────────────
-# 이미지 없음. 풀 없음. 제목이 완전히 결정적.
 
 accounts:
   - username: writer1
@@ -15,12 +14,12 @@ keywords:
 
 post:
   - h2: "{keywords} 소개"
-  - paragraph: "{keywords}"
-  - paragraph: {keyword: "{keywords}", tone: informational}
+  - paragraph: "{keywords}에 대해 정보 전달 위주로 소개해줘"
+  - paragraph: "{keywords}을 직접 방문한 경험담을 1인칭으로 써줘"
   - quote: "여행은 살아있는 교육이다"
-  - paragraph: {keyword: "{keywords}", tone: story}
+  - paragraph: "{keywords} 여행의 감성을 이야기 형식으로 써줘"
   - divider
-  - paragraph: {keyword: "{keywords}", tone: promotional}
+  - paragraph: "{keywords}을 추천하며 마무리해줘. 행동 유도 포함"
 
 publish:
   schedule: immediate

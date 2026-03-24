@@ -203,22 +203,9 @@ def _parse_paragraph(
     values: dict[str, str],
     pools: dict[str, list[str]],
 ) -> ParagraphBlock:
-    """Parse paragraph block — string or dict."""
-    if isinstance(value, str):
-        keyword = interpolate(value, values, pools)
-        return ParagraphBlock(keyword=keyword)
-
-    if isinstance(value, dict):
-        cfg = interpolate_deep(dict(value), values, pools)
-        return ParagraphBlock(
-            keyword=str(cfg.get("keyword", "")),
-            prompt=str(cfg.get("prompt", "")),
-            tone=cfg.get("tone", "informational"),
-            min_chars=int(cfg.get("min_chars", 0)),
-            max_chars=int(cfg.get("max_chars", 0)),
-        )
-
-    return ParagraphBlock()
+    """Parse paragraph block — value is the prompt string, DSL tokens interpolated."""
+    prompt = interpolate(str(value), values, pools)
+    return ParagraphBlock(prompt=prompt)
 
 
 def _parse_image(

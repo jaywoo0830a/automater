@@ -1,6 +1,4 @@
 # ── 미래 확장 예시 ───────────────────────────────────────
-# 새 플랫폼, 새 블록 타입, 새 옵션.
-# 지금 구현 안 해도 DSL이 깨지지 않는다.
 
 accounts:
   - username: naver_user
@@ -26,7 +24,7 @@ pools:
 
 post:
   - h2: "{keywords} 소개"
-  - paragraph: "{keywords}"
+  - paragraph: "{keywords} 과외에 대해 소개해줘"
   - video: intro.mp4
   - map: {lat: 37.5172, lng: 127.0473, zoom: 15}
   - cta_button: {text: "무료 상담 신청", url: "https://example.com"}

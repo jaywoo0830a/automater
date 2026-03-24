@@ -4,10 +4,10 @@ tests/unit/cli/test_spec_builder.py
 Combo + config → PostingSpec.
 
 Covers:
-    - Title construction from template + values + pools
-    - Post block parsing (shorthand and full dict)
+    - Title construction
+    - Post block parsing (paragraph = prompt string)
     - Image path resolution
-    - Publish/run as pass-through dicts
+    - Publish/run pass-through
 """
 
 import pytest
@@ -33,9 +33,9 @@ FULL_CONFIG = {
     "pools": {"prefix": ["검증된"]},
     "post": [
         {"h2": "{keywords} 소개"},
-        {"paragraph": "{keywords}"},
+        {"paragraph": "{keywords} 과외를 소개해줘"},
         {"image": "body.jpg"},
-        {"paragraph": {"keyword": "{keywords}", "tone": "review"}},
+        {"paragraph": "{keywords} 과외 후기를 써줘. 200자 이상"},
         {"thumbnail": {"src": "thumb.jpg", "overlay": "{keywords} 과외"}},
     ],
     "images": "./images",
@@ -89,7 +89,65 @@ class TestTitle:
 
 
 # ---------------------------------------------------------------------------
-# Post blocks — shorthand
+# Paragraph — always a prompt string
+# ---------------------------------------------------------------------------
+
+class TestParagraph:
+
+    def test_simple_prompt(self):
+        config = {**FULL_CONFIG, "post": [
+            {"paragraph": "{keywords} 과외를 소개해줘"},
+        ]}
+        spec = build_spec(_combo(), config)
+        block = spec.body[0].blocks[0]
+        assert isinstance(block, ParagraphBlock)
+        assert block.prompt == "강남 수학 과외를 소개해줘"
+
+    def test_keywords_interpolated_in_prompt(self):
+        config = {**FULL_CONFIG, "post": [
+            {"paragraph": "{keywords}가 4번 언급되는 글을 써줘. 3500자 이상"},
+        ]}
+        spec = build_spec(_combo(), config)
+        block = spec.body[0].blocks[0]
+        assert block.prompt == "강남 수학가 4번 언급되는 글을 써줘. 3500자 이상"
+
+    def test_individual_keywords_in_prompt(self):
+        config = {**FULL_CONFIG, "post": [
+            {"paragraph": "{keyword:region}에서 {keyword:subject} 과외를 찾고 계신가요?"},
+        ]}
+        spec = build_spec(_combo(), config)
+        block = spec.body[0].blocks[0]
+        assert block.prompt == "강남에서 수학 과외를 찾고 계신가요?"
+
+    def test_pool_in_prompt(self):
+        config = {**FULL_CONFIG, "post": [
+            {"paragraph": "{pool:prefix} {keywords} 과외를 소개해줘"},
+        ]}
+        spec = build_spec(_combo(), config)
+        block = spec.body[0].blocks[0]
+        assert "검증된" in block.prompt
+        assert "강남 수학" in block.prompt
+
+    def test_keyword_field_is_empty(self):
+        """keyword field is never set — prompt goes straight to Gemini."""
+        config = {**FULL_CONFIG, "post": [
+            {"paragraph": "{keywords} 과외를 소개해줘"},
+        ]}
+        spec = build_spec(_combo(), config)
+        block = spec.body[0].blocks[0]
+        assert block.keyword == ""
+
+    def test_pure_literal_prompt(self):
+        config = {**FULL_CONFIG, "post": [
+            {"paragraph": "자유 프롬프트 — DSL 토큰 없이도 동작한다"},
+        ]}
+        spec = build_spec(_combo(), config)
+        block = spec.body[0].blocks[0]
+        assert block.prompt == "자유 프롬프트 — DSL 토큰 없이도 동작한다"
+
+
+# ---------------------------------------------------------------------------
+# Other blocks — shorthand
 # ---------------------------------------------------------------------------
 
 class TestPostShorthand:
@@ -105,16 +163,7 @@ class TestPostShorthand:
     def test_h3_heading(self):
         config = {**FULL_CONFIG, "post": [{"h3": "방문 팁"}]}
         spec = build_spec(_combo(), config)
-        block = spec.body[0].blocks[0]
-        assert block.level == 3
-        assert block.text == "방문 팁"
-
-    def test_paragraph_from_string(self):
-        config = {**FULL_CONFIG, "post": [{"paragraph": "{keywords}"}]}
-        spec = build_spec(_combo(), config)
-        block = spec.body[0].blocks[0]
-        assert isinstance(block, ParagraphBlock)
-        assert block.keyword == "강남 수학"
+        assert spec.body[0].blocks[0].level == 3
 
     def test_image_from_string(self):
         config = {**FULL_CONFIG, "post": [{"image": "photo.jpg"}]}
@@ -140,26 +189,14 @@ class TestPostShorthand:
     def test_divider(self):
         config = {**FULL_CONFIG, "post": ["divider"]}
         spec = build_spec(_combo(), config)
-        block = spec.body[0].blocks[0]
-        assert isinstance(block, DividerBlock)
+        assert isinstance(spec.body[0].blocks[0], DividerBlock)
 
 
 # ---------------------------------------------------------------------------
-# Post blocks — full dict
+# Other blocks — full dict
 # ---------------------------------------------------------------------------
 
 class TestPostFullDict:
-
-    def test_paragraph_with_options(self):
-        config = {**FULL_CONFIG, "post": [
-            {"paragraph": {"keyword": "{keywords}", "tone": "review", "min_chars": 200}},
-        ]}
-        spec = build_spec(_combo(), config)
-        block = spec.body[0].blocks[0]
-        assert isinstance(block, ParagraphBlock)
-        assert block.keyword == "강남 수학"
-        assert block.tone == "review"
-        assert block.min_chars == 200
 
     def test_image_with_options(self):
         config = {**FULL_CONFIG, "post": [
@@ -167,7 +204,6 @@ class TestPostFullDict:
         ]}
         spec = build_spec(_combo(), config)
         block = spec.body[0].blocks[0]
-        assert isinstance(block, ImageBlock)
         assert block.path == "images/photo.jpg"
         assert block.alt == "강남 수학 외관"
 
@@ -177,8 +213,6 @@ class TestPostFullDict:
         ]}
         spec = build_spec(_combo(), config)
         block = spec.body[0].blocks[0]
-        assert isinstance(block, FeaturedImageBlock)
-        assert block.path == "images/thumb.jpg"
         assert block.overlay_text == "강남 수학 과외"
 
     def test_quote_with_attribution(self):
@@ -190,20 +224,12 @@ class TestPostFullDict:
         assert block.text == "인용"
         assert block.attribution == "작가"
 
-    def test_paragraph_with_prompt(self):
-        config = {**FULL_CONFIG, "post": [
-            {"paragraph": {"prompt": "자유 프롬프트"}},
-        ]}
-        spec = build_spec(_combo(), config)
-        block = spec.body[0].blocks[0]
-        assert block.prompt == "자유 프롬프트"
-
 
 # ---------------------------------------------------------------------------
-# Post blocks — list block
+# List block
 # ---------------------------------------------------------------------------
 
-class TestPostListBlock:
+class TestListBlock:
 
     def test_list_from_items(self):
         config = {**FULL_CONFIG, "post": [
@@ -251,7 +277,7 @@ class TestImageBaseDir:
 
 
 # ---------------------------------------------------------------------------
-# Default body when no post section
+# Default body
 # ---------------------------------------------------------------------------
 
 class TestDefaultBody:

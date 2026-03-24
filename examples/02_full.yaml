@@ -1,5 +1,4 @@
 # ── 풀 캠페인 ───────────────────────────────────────────
-# 모든 기능을 사용하는 참조 예제.
 
 accounts:
   - username: naver_id_1
@@ -25,9 +24,9 @@ pools:
 
 post:
   - h2: "{keywords} 과외 소개"
-  - paragraph: "{keywords}"
+  - paragraph: "{keywords} 과외를 소개하는 글을 자연스럽게 써줘"
   - image: body.jpg
-  - paragraph: {keyword: "{keywords}", tone: review, min_chars: 200}
+  - paragraph: "{keywords} 과외 후기를 학부모 관점에서 200자 이상 써줘"
   - thumbnail: {src: thumb.jpg, overlay: "{keywords} 과외"}
 
 images: ./images
@@ -35,7 +34,6 @@ images: ./images
 publish:
   schedule: random ±30min
   tags: [교육, 과외, 학원]
-  tag_count: 12~20
   visibility: public
 
 run:
