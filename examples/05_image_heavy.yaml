@@ -1,0 +1,48 @@
+# ── 이미지 중심 캠페인 ───────────────────────────────────
+# 이미지가 많고 레이아웃이 복잡한 경우.
+
+accounts:
+  - username: photo_blog
+    password: pw1
+    blog_id: photoblog
+
+titles:
+  - "{pool:hook} {keywords} 베스트 {pool:count}"
+
+keywords:
+  region: [강남, 홍대, 이태원]
+  category: [브런치, 디저트, 와인바]
+
+pools:
+  hook: [요즘 핫한, 현지인 추천, 숨은 명소]
+  count: [TOP 5, TOP 7, BEST 10]
+
+post:
+  - thumbnail: {src: cover.jpg, overlay: "{keywords}"}
+  - h2: "{keywords} 소개"
+  - paragraph: {keyword: "{keywords}", tone: informational, min_chars: 300}
+  - image: {src: photo_1.jpg, alt: "{keywords} 외관"}
+  - paragraph: {keyword: "{keywords}", tone: review}
+  - image: {src: photo_2.jpg, alt: "{keywords} 메뉴"}
+  - paragraph: {keyword: "{keywords}", tone: review}
+  - image: {src: photo_3.jpg, alt: "{keywords} 분위기"}
+  - h3: "방문 팁"
+  - list:
+    - 주차는 근처 공영주차장 이용
+    - 예약 필수 (특히 주말)
+    - 런치 세트가 가성비 좋음
+  - divider
+  - paragraph: {keyword: "{keywords}", tone: promotional}
+
+images: ./photos
+
+publish:
+  schedule: random ±60min
+  tags: [맛집, 카페, 핫플]
+  visibility: public
+
+run:
+  interval: 90s
+  max_daily: 8
+  headless: true
+  upload_delay: 2000ms

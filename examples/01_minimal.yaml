@@ -1,0 +1,14 @@
+# ── 최소 캠페인 ─────────────────────────────────────────
+# 이것만 있으면 돌아간다.
+
+accounts:
+  - username: naver_id_1
+    password: pw1
+    blog_id: myblog1
+
+titles:
+  - "{keywords} 과외 추천"
+
+keywords:
+  region: [강남, 서초]
+  subject: [수학, 영어]

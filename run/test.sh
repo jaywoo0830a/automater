@@ -106,11 +106,19 @@ case "${MODE}" in
     echo "── unit/factory ─────────────────────────"
     pytest tests/unit/factory/ -v
     echo ""
+    echo "── unit/cli ────────────────────────────"
+    pytest tests/unit/cli/ -v
+    echo ""
     echo "── integration/automator ────────────────"
     pytest tests/integration/automator/ -v
     echo ""
     echo "── browser ──────────────────────────────"
     pytest tests/browser/ -v
+    ;;
+
+  --cli)
+    echo "── unit/cli ────────────────────────────"
+    pytest tests/unit/cli/ -v
     ;;
 
   --integration)

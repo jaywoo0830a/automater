@@ -1,0 +1,46 @@
+# ── 계정별 오버라이드 ────────────────────────────────────
+# 계정 레벨 설정이 글로벌 run을 덮어쓴다.
+
+accounts:
+  - username: main_account
+    password: pw1
+    blog_id: mainblog
+    session: main_session.json
+    proxy: 1.2.3.4:8080
+
+  - username: sub_account
+    password: pw2
+    blog_id: subblog
+    headless: false
+    interval: 120s
+
+titles:
+  - "{keywords} 과외 {pool:cta}"
+
+keywords:
+  region: [강남, 서초, 잠실, 송파, 강동]
+  subject: [수학, 영어, 국어]
+
+pools:
+  cta: [지금 신청, 무료 상담, 즉시 가능, 성적 보장]
+
+post:
+  - h2: "{keywords} 과외 소개"
+  - paragraph: "{keywords}"
+  - image: body.jpg
+  - paragraph: {keyword: "{keywords}", tone: story}
+  - paragraph: {keyword: "{keywords}", tone: promotional}
+  - thumbnail: {src: thumb.jpg, overlay: "{keywords} 과외"}
+
+images: ./images
+
+publish:
+  schedule: fixed 09:00
+  tags: [교육, 과외]
+  visibility: public
+
+run:
+  interval: 60s
+  max_daily: 15
+  on_failure: stop
+  headless: true

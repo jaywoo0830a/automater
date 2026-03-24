@@ -1,0 +1,43 @@
+# ── 개별 키워드 활용 ─────────────────────────────────────
+# {keywords}가 아니라 개별 차원이 필요한 경우.
+# 제목과 본문에서 지역·과목을 따로 쓰고 싶을 때.
+
+accounts:
+  - username: edu_blog
+    password: pw1
+    blog_id: edublog
+
+titles:
+  - "{keyword:region}에서 {keyword:subject} 배우기 — {pool:hook}"
+
+keywords:
+  region: [강남, 서초, 목동]
+  subject: [수학, 영어, 코딩]
+
+pools:
+  hook: [전문가 추천, 학부모 후기, 성적 보장]
+
+post:
+  - h2: "{keyword:region} {keyword:subject} 과외"
+  - paragraph: "{keyword:subject} 과외를 {keyword:region}에서 찾고 계신가요?"
+  - paragraph: "{keywords}"
+  - image: body.jpg
+  - h3: "{keyword:region} 학원가 특징"
+  - paragraph: {keyword: "{keyword:region}", tone: informational}
+  - h3: "{keyword:subject} 학습 전략"
+  - paragraph: {keyword: "{keyword:subject}", tone: review}
+  - divider
+  - paragraph: {keyword: "{keywords}", tone: promotional}
+  - thumbnail: {src: thumb.jpg, overlay: "{keywords} 과외"}
+
+images: ./images
+
+publish:
+  schedule: random ±30min
+  tags: [교육, 과외]
+  visibility: public
+
+run:
+  interval: 60s
+  max_daily: 10
+  headless: true

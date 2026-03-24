@@ -1,0 +1,33 @@
+# ── 텍스트 전용 캠페인 ───────────────────────────────────
+# 이미지 없음. 풀 없음. 제목이 완전히 결정적.
+
+accounts:
+  - username: writer1
+    password: pw1
+    blog_id: textblog
+
+titles:
+  - "{keywords} 완벽 가이드"
+
+keywords:
+  city: [서울, 부산, 제주]
+  topic: [맛집, 카페, 관광지]
+
+post:
+  - h2: "{keywords} 소개"
+  - paragraph: "{keywords}"
+  - paragraph: {keyword: "{keywords}", tone: informational}
+  - quote: "여행은 살아있는 교육이다"
+  - paragraph: {keyword: "{keywords}", tone: story}
+  - divider
+  - paragraph: {keyword: "{keywords}", tone: promotional}
+
+publish:
+  schedule: immediate
+  tags: [여행, 관광, 맛집]
+  visibility: public
+
+run:
+  interval: 30s
+  max_daily: 20
+  headless: true

@@ -1,0 +1,49 @@
+# ── 미래 확장 예시 ───────────────────────────────────────
+# 새 플랫폼, 새 블록 타입, 새 옵션.
+# 지금 구현 안 해도 DSL이 깨지지 않는다.
+
+accounts:
+  - username: naver_user
+    password: pw1
+    platform: naver
+    blog_id: myblog
+
+  - username: wp_user
+    password: pw2
+    platform: wordpress
+    api_url: https://myblog.com/wp-json
+    api_key: sk-xxxxx
+
+titles:
+  - "{pool:hook} {keywords} 과외"
+
+keywords:
+  region: [강남]
+  subject: [수학]
+
+pools:
+  hook: [검증된, 전문]
+
+post:
+  - h2: "{keywords} 소개"
+  - paragraph: "{keywords}"
+  - video: intro.mp4
+  - map: {lat: 37.5172, lng: 127.0473, zoom: 15}
+  - cta_button: {text: "무료 상담 신청", url: "https://example.com"}
+
+images: ./media
+
+publish:
+  schedule: random ±30min
+  tags: [교육]
+  visibility: public
+  wordpress_category: education
+  canonical_url: https://example.com/original
+
+run:
+  interval: 60s
+  max_daily: 10
+  on_failure: stop
+  headless: true
+  proxy_rotation: round_robin
+  retry_count: 3

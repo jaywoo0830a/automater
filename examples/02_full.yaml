@@ -1,0 +1,46 @@
+# ── 풀 캠페인 ───────────────────────────────────────────
+# 모든 기능을 사용하는 참조 예제.
+
+accounts:
+  - username: naver_id_1
+    password: pw1
+    blog_id: myblog1
+    session: naver_id_1_session.json
+
+  - username: naver_id_2
+    password: pw2
+    blog_id: myblog2
+
+titles:
+  - "{pool:prefix} {keyword:region} {keyword:subject} 과외 {pool:suffix}"
+  - "{pool:prefix} {keyword:region}{keyword:subject}과외 {pool:suffix}"
+
+keywords:
+  region: [강남, 서초, 잠실]
+  subject: [수학, 영어]
+
+pools:
+  prefix: [검증된, 전문, 추천]
+  suffix: [강력 추천, 즉시 가능]
+
+post:
+  - h2: "{keywords} 과외 소개"
+  - paragraph: "{keywords}"
+  - image: body.jpg
+  - paragraph: {keyword: "{keywords}", tone: review, min_chars: 200}
+  - thumbnail: {src: thumb.jpg, overlay: "{keywords} 과외"}
+
+images: ./images
+
+publish:
+  schedule: random ±30min
+  tags: [교육, 과외, 학원]
+  tag_count: 12~20
+  visibility: public
+
+run:
+  interval: 60s
+  max_daily: 10
+  on_failure: stop
+  headless: true
+  upload_delay: 1500ms
