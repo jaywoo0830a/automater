@@ -144,20 +144,53 @@ def _build_live_executor(
             headless = False
 
         pw = sync_playwright().start()
-        browser = pw.chromium.launch(headless=headless)
+        browser = pw.chromium.launch(
+            headless=headless,
+            slow_mo=config.get("run", {}).get("slow_mo", 0),
+        )
 
         session = account.get("session", "")
-        ctx = browser.new_context(
-            storage_state=session if session and os.path.exists(session) else None,
-            locale="ko-KR",
-            timezone_id="Asia/Seoul",
-        )
+        if session and os.path.exists(session):
+            ctx = browser.new_context(
+                storage_state=session,
+                locale="ko-KR",
+                timezone_id="Asia/Seoul",
+            )
+        else:
+            ctx = browser.new_context(
+                locale="ko-KR",
+                timezone_id="Asia/Seoul",
+            )
+            _auto_login(ctx, account)
+            if session:
+                ctx.storage_state(path=session)
+                log.info("Session saved: %s", session)
+
         page = ctx.new_page()
         blog_id = account.get("blog_id", account["username"])
         write_url = f"https://blog.naver.com/{blog_id}?Redirect=Write&"
         return SmartEditorOne(page, write_url, dry_run=False)
 
     return CampaignExecutor(runner=runner, editor_factory=editor_factory)
+
+
+def _auto_login(ctx, account: dict[str, Any]) -> None:
+    """Log in to Naver with username/password, then close the login page."""
+    from automator.selector_loader import SelectorLoader
+
+    log = logging.getLogger("cli")
+    log.info("No session found — logging in as %s", account["username"])
+
+    login_sel = SelectorLoader.load("selectors/naver/login.json")
+    page = ctx.new_page()
+    page.goto("https://nid.naver.com/nidlogin.login")
+
+    login_sel.locator(page, "naver_login_id").fill(account["username"])
+    login_sel.locator(page, "naver_login_pw").fill(account["password"])
+    login_sel.locator(page, "naver_login_submit").click()
+
+    page.wait_for_url(lambda url: "nidlogin" not in url, timeout=15_000)
+    page.close()
 
 
 def _print_plan(plan) -> None:
