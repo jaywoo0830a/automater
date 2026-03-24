@@ -270,7 +270,7 @@ class Section:
 # PublishOption
 # ---------------------------------------------------------------------------
 
-ScheduleMode  = Literal["immediate", "fixed", "random_window"]
+ScheduleMode  = Literal["immediate", "scheduled"]
 TagStyle      = Literal["dynamic", "education", "region", "subject", "learning_type"]
 Visibility    = Literal["public", "private", "draft"]
 
@@ -282,15 +282,12 @@ class PublishOption:
 
     Schedule
     --------
-    mode="immediate"     즉시 발행 (기본값).
-    mode="fixed"         at 시각에 정확히 예약.
-    mode="random_window" at ± jitter_minutes 범위 내 무작위 예약.
-    at 은 항상 timezone-aware datetime 이어야 한다. (권장: KST)
+    mode="immediate"   즉시 발행 (기본값).
+    mode="scheduled"   at 시각에 예약. at 은 항상 미래, timezone-aware.
     """
     # ── Schedule ──────────────────────────────────────────────────────────────
     mode:           ScheduleMode    = "immediate"
     at:             datetime | None = None
-    jitter_minutes: int             = 30
 
     # ── Tags ──────────────────────────────────────────────────────────────────
     tags:                list[str]  = field(default_factory=list)

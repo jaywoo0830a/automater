@@ -18,18 +18,17 @@ FUTURE = datetime(2099, 6, 1, 9, 0, tzinfo=KST)
 # load_publish
 # ---------------------------------------------------------------------------
 
-def test_publish_none_returns_fixed_default():
-    """No preset → fixed-schedule with scheduled_at."""
+def test_publish_none_returns_scheduled_default():
+    """No preset → scheduled with scheduled_at."""
     opt = load_publish(None, FUTURE)
-    assert opt.mode == "fixed"
+    assert opt.mode == "scheduled"
     assert opt.at == FUTURE
 
 
 def test_publish_config_overrides_mode():
     """Config values override defaults."""
-    opt = load_publish({"mode": "random_window", "jitter_minutes": 60}, FUTURE)
-    assert opt.mode == "random_window"
-    assert opt.jitter_minutes == 60
+    opt = load_publish({"mode": "immediate"}, FUTURE)
+    assert opt.mode == "immediate"
 
 
 def test_publish_at_always_from_scheduled():
@@ -47,7 +46,7 @@ def test_publish_unknown_keys_ignored():
 
 def test_publish_missing_keys_use_defaults():
     """Backward compat: old JSON missing new fields → dataclass defaults."""
-    opt = load_publish({"mode": "fixed"}, FUTURE)
+    opt = load_publish({"mode": "scheduled"}, FUTURE)
     assert opt.min_tags == 12
     assert opt.visibility == "public"
 

@@ -34,7 +34,7 @@ post:
 images: ./images
 
 publish:
-  schedule: fixed 09:00
+  schedule: now + 1h
   tags: [교육, 과외]
   visibility: public
 

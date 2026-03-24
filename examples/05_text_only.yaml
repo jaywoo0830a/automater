@@ -22,7 +22,7 @@ post:
   - paragraph: "{keyword:city} {keyword:topic}을 추천하며 마무리해줘. 행동 유도 포함"
 
 publish:
-  schedule: immediate
+  schedule: now
   tags: [여행, 관광, 맛집]
   visibility: public
 

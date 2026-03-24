@@ -317,7 +317,10 @@ def test_real_editor_json_loads(mock_frame):
 
 def test_real_editor_json_naming_convention(mock_frame):
     """All keys in editor.json follow the {context}_{element}_{variant?} rule."""
-    valid_contexts = {"overlay", "toolbar", "editor", "library", "publish"}
+    valid_contexts = {
+        "overlay", "toolbar", "editor", "library", "publish",
+        "heading", "quote", "divider", "size", "bold",
+    }
     loader = SelectorLoader.load("selectors/naver/editor.json")
     for key in loader.keys():
         context = key.split("_")[0]

@@ -23,7 +23,7 @@ post:
 images: ./asset/images
 
 publish:
-  schedule: immediate
+  schedule: now
   tags: [교육, 과외]
   visibility: public
 

@@ -39,15 +39,7 @@ def test_immediate_schedule_returns_none(builder):
     assert post.schedule_at is None
 
 
-def test_fixed_schedule_returns_exact_time(builder):
+def test_scheduled_returns_exact_time(builder):
     future = datetime.now(tz=KST) + timedelta(hours=2)
-    post = builder.build(_spec(publish=PublishOption(mode="fixed", at=future)))
+    post = builder.build(_spec(publish=PublishOption(mode="scheduled", at=future)))
     assert post.schedule_at == future
-
-
-def test_random_window_within_jitter(builder):
-    base = datetime.now(tz=KST) + timedelta(hours=2)
-    pub = PublishOption(mode="random_window", at=base, jitter_minutes=30)
-    post = builder.build(_spec(publish=pub))
-    delta = abs((post.schedule_at - base).total_seconds())
-    assert delta <= 30 * 60

@@ -47,6 +47,15 @@ class RecordingEditor(BlogEditor):
     def insert_text(self, text, newlines=2):
         self.calls.append(("insert_text", text, newlines))
 
+    def insert_heading(self, text, level=2):
+        self.calls.append(("insert_heading", text, level))
+
+    def insert_quote(self, text):
+        self.calls.append(("insert_quote", text))
+
+    def insert_divider(self):
+        self.calls.append(("insert_divider",))
+
     def upload_file(self, path):
         self.calls.append(("upload_file", path))
 

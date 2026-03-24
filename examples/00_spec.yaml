@@ -86,10 +86,16 @@
 # publish (선택) — 자유 키
 # ═══════════════════════════════════════════════════════════
 #
-# schedule: immediate | fixed HH:MM | random ±Nmin
+# schedule:
+#   now                → 즉시 발행
+#   now + 15s          → 15초 후
+#   now + 15m          → 15분 후
+#   now + 1h           → 1시간 후
+#   now + 1d           → 1일 후
+#   now + 30~60m       → 30~60분 사이 랜덤
 #
 # publish:
-#   schedule: random ±30min
+#   schedule: now + 15~30m
 #   tags: [교육]
 #   visibility: public
 

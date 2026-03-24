@@ -43,6 +43,15 @@ class _RecordingEditor(BlogEditor):
     def insert_text(self, text, newlines=2):
         self.calls.append(("insert_text", text, newlines))
 
+    def insert_heading(self, text, level=2):
+        self.calls.append(("insert_heading", text, level))
+
+    def insert_quote(self, text):
+        self.calls.append(("insert_quote", text))
+
+    def insert_divider(self):
+        self.calls.append(("insert_divider",))
+
     def upload_file(self, path):
         self.calls.append(("upload_file", path))
 
@@ -103,14 +112,15 @@ def test_run_with_paragraphs(runner, rec):
 
 
 def test_run_with_heading(runner, rec):
-    """HeadingBlock produces insert_text call."""
+    """HeadingBlock produces insert_heading call."""
     spec = _spec(body=(Section(blocks=(
         HeadingBlock(level=2, text="Section Title"),
     )),))
     runner.run(spec, rec)
-    inserts = [c for c in rec.calls if c[0] == "insert_text"]
+    inserts = [c for c in rec.calls if c[0] == "insert_heading"]
     assert len(inserts) == 1
     assert inserts[0][1] == "Section Title"
+    assert inserts[0][2] == 2
 
 
 def test_cursor_between_steps(runner, rec):
@@ -127,7 +137,7 @@ def test_cursor_between_steps(runner, rec):
 def test_publish_schedule_at(runner, rec):
     """Fixed schedule passes datetime to editor.publish()."""
     future = datetime.now(tz=KST) + timedelta(hours=2)
-    spec = _spec(publish=PublishOption(mode="fixed", at=future))
+    spec = _spec(publish=PublishOption(mode="scheduled", at=future))
     runner.run(spec, rec)
     pub_call = [c for c in rec.calls if c[0] == "publish"][0]
     assert pub_call[1] == future

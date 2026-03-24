@@ -2,7 +2,7 @@
   "_comment": [
     "Naver Smart Editor One selectors.",
     "Naming rule: {context}_{element}_{variant?}",
-    "  context : overlay | toolbar | editor | library | publish",
+    "  context : overlay | toolbar | editor | library | publish | heading | quote | divider | size | bold",
     "  element : what it is (title, body, paragraph, image, btn ...)",
     "  variant : state or qualifier (cancel, confirm, close, selected ...)",
     "locators are ordered most-stable → least-stable.",

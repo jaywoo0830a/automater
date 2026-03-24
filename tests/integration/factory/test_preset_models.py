@@ -125,17 +125,17 @@ class TestPublishPreset:
         preset = PublishPreset(
             user_id=user.id,
             name="edu-publish",
-            config={"mode": "random_window", "jitter_minutes": 45, "min_tags": 15},
+            config={"mode": "scheduled", "min_tags": 15},
         )
         session.add(preset)
         session.flush()
 
-        assert preset.config["mode"] == "random_window"
-        assert preset.config["jitter_minutes"] == 45
+        assert preset.config["mode"] == "scheduled"
+        assert preset.config["min_tags"] == 15
 
     def test_owner_relationship(self, session):
         user = _user(session)
-        preset = PublishPreset(user_id=user.id, name="p", config={"mode": "fixed"})
+        preset = PublishPreset(user_id=user.id, name="p", config={"mode": "scheduled"})
         session.add(preset)
         session.flush()
 
@@ -221,7 +221,7 @@ class TestCampaignPresets:
     def test_multiple_campaigns_share_preset(self, session):
         user = _user(session)
         platform = _platform(session)
-        pub = PublishPreset(user_id=user.id, name="shared", config={"mode": "fixed"})
+        pub = PublishPreset(user_id=user.id, name="shared", config={"mode": "scheduled"})
         session.add(pub)
         session.flush()
 

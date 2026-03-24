@@ -9,7 +9,7 @@ configuration errors early so the runner never starts invalid work.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from automator.contracts import PostingSpec
 from automator.layout import validate_sections
@@ -57,31 +57,24 @@ class SpecValidator:
             raise ValueError("PublishOption.internal_link_ratio must be 0-100")
 
         mode = pub.mode
-        if mode != "immediate":
-            if pub.at is None:
-                raise ValueError(
-                    f"PublishOption.at 은 mode='{mode}'일 때 필수입니다."
-                )
-            if pub.at.tzinfo is None:
-                raise ValueError(
-                    "PublishOption.at 은 timezone-aware datetime 이어야 합니다. "
-                    "예: datetime(2025, 6, 1, 9, 0, tzinfo=KST)"
-                )
-            now = datetime.now(tz=KST)
-            earliest = (
-                pub.at - timedelta(minutes=pub.jitter_minutes)
-                if mode == "random_window"
-                else pub.at
-            )
-            if earliest <= now:
-                raise ValueError(
-                    "PublishOption.at 은 현재 시각보다 미래여야 합니다. "
-                    f"(earliest={earliest.isoformat()}, now={now.isoformat()})"
-                )
-        if mode == "random_window" and pub.jitter_minutes <= 0:
+        if mode == "immediate":
+            return
+
+        # All non-immediate modes require a future, timezone-aware `at`
+        if pub.at is None:
             raise ValueError(
-                f"PublishOption.jitter_minutes 은 양수여야 합니다. "
-                f"(got {pub.jitter_minutes})"
+                f"PublishOption.at 은 mode='{mode}'일 때 필수입니다."
+            )
+        if pub.at.tzinfo is None:
+            raise ValueError(
+                "PublishOption.at 은 timezone-aware datetime 이어야 합니다. "
+                "예: datetime(2025, 6, 1, 9, 0, tzinfo=KST)"
+            )
+        now = datetime.now(tz=KST)
+        if pub.at <= now:
+            raise ValueError(
+                "PublishOption.at 은 현재 시각보다 미래여야 합니다. "
+                f"(at={pub.at.isoformat()}, now={now.isoformat()})"
             )
 
     @staticmethod

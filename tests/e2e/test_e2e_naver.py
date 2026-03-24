@@ -308,7 +308,7 @@ def test_pipeline_all_options(editor: SmartEditorOne, account: AccountOption):
             pools={"salt_suffix": ("강력 추천", "즉시 가능")},
         ),
         body=(Section(blocks=tuple(blocks)),),
-        publish=PublishOption(mode="fixed", at=_schedule()),
+        publish=PublishOption(mode="scheduled", at=_schedule()),
     )
     _run_spec(spec, editor)
 
@@ -358,6 +358,6 @@ def test_pipeline_real_publish(page: Page, account: AccountOption, real_run: boo
             pools={"salt_suffix": ("강력 추천", "즉시 가능")},
         ),
         body=(Section(blocks=tuple(blocks)),),
-        publish=PublishOption(mode="fixed", at=_schedule()),
+        publish=PublishOption(mode="scheduled", at=_schedule()),
     )
     _run_spec(spec, editor, real=True)

@@ -9,9 +9,8 @@ concrete implementations. Concrete instances are injected in __init__.
 
 from __future__ import annotations
 
-import random
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from automator.contracts import PostingSpec
 from automator.editor import PostStep, ParagraphStep, _PostContent
@@ -79,7 +78,4 @@ class ContentBuilder:
         """Compute the actual publish datetime from publish options."""
         if publish.mode == "immediate":
             return None
-        if publish.mode == "fixed":
-            return publish.at
-        jitter = publish.jitter_minutes * 60
-        return publish.at + timedelta(seconds=random.uniform(-jitter, jitter))
+        return publish.at

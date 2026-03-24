@@ -16,7 +16,7 @@ from automator.contracts import PostingSpec
 from automator.content_builder import ContentBuilder
 from automator.editor import (
     ParagraphStep, ImageStep, FeaturedImageStep,
-    HeadingStep, ListStep, QuoteStep,
+    HeadingStep, ListStep, QuoteStep, DividerStep,
 )
 from automator.stubs import StubTextGenerator, NoopImageProcessor
 from automator.options import (
@@ -84,9 +84,10 @@ def test_quote_block(builder):
     assert any(isinstance(s, QuoteStep) for s in post.steps)
 
 
-def test_divider_block_produces_no_step(builder):
+def test_divider_block_produces_step(builder):
     post = builder.build(_spec(DividerBlock()))
-    assert len(post.steps) == 0
+    assert len(post.steps) == 1
+    assert isinstance(post.steps[0], DividerStep)
 
 
 # ---------------------------------------------------------------------------

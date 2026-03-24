@@ -32,7 +32,7 @@ post:
 images: ./images
 
 publish:
-  schedule: random ±30min
+  schedule: now + 15~30m
   tags: [교육, 과외, 학원]
   visibility: public
 

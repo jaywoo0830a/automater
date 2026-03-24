@@ -77,20 +77,20 @@ def test_two_featured_images_rejected(v):
 
 def test_fixed_schedule_without_at_rejected(v):
     with pytest.raises(ValueError, match="at"):
-        v.validate(_spec(publish=PublishOption(mode="fixed")))
+        v.validate(_spec(publish=PublishOption(mode="scheduled")))
 
 
 def test_fixed_schedule_naive_datetime_rejected(v):
     with pytest.raises(ValueError, match="timezone"):
         v.validate(_spec(publish=PublishOption(
-            mode="fixed",
+            mode="scheduled",
             at=datetime(2099, 1, 1, 9, 0),
         )))
 
 
 def test_valid_fixed_schedule_passes(v):
     future = datetime.now(tz=KST) + timedelta(hours=2)
-    v.validate(_spec(publish=PublishOption(mode="fixed", at=future)))
+    v.validate(_spec(publish=PublishOption(mode="scheduled", at=future)))
 
 
 def test_tags_min_greater_than_max_rejected(v):

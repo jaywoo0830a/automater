@@ -46,7 +46,7 @@ def load_publish(
     The 'at' field is always overridden by scheduled_at from dispatch.
     """
     if config is None:
-        return PublishOption(mode="fixed", at=scheduled_at)
+        return PublishOption(mode="scheduled", at=scheduled_at)
 
     merged = dict(config)
     merged["at"] = scheduled_at

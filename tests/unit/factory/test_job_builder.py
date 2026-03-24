@@ -594,19 +594,19 @@ class TestBuildPostingSpec:
         scheduled = datetime.now(tz=KST) + timedelta(hours=2)
         spec = build_posting_spec(combo, _account(), scheduled)
         assert isinstance(spec, PostingSpec)
-        assert spec.publish.mode == "fixed"
+        assert spec.publish.mode == "scheduled"
         assert spec.publish.at == scheduled
         assert spec.setting.post_interval == 60  # RunSetting default
 
     def test_with_publish_preset(self):
         combo = _combo(
             keywords=[_keyword("region", "강남", cat_id=1)],
-            publish_preset=_preset({"mode": "random_window", "jitter_minutes": 45}),
+            publish_preset=_preset({"mode": "scheduled", "min_tags": 15}),
         )
         scheduled = datetime.now(tz=KST) + timedelta(hours=2)
         spec = build_posting_spec(combo, _account(), scheduled)
-        assert spec.publish.mode == "random_window"
-        assert spec.publish.jitter_minutes == 45
+        assert spec.publish.mode == "scheduled"
+        assert spec.publish.min_tags == 15
         assert spec.publish.at == scheduled  # always from dispatch
 
     def test_with_run_preset(self):

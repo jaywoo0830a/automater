@@ -12,6 +12,7 @@ DSL features:
 
 from __future__ import annotations
 
+import random
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import PurePosixPath
@@ -322,38 +323,59 @@ def _resolve_path(images_dir: str, filename: str) -> str:
 # Publish — schedule parsing
 # ---------------------------------------------------------------------------
 
-_RANDOM_RE = re.compile(r"random\s*[±+\-]\s*(\d+)\s*min", re.IGNORECASE)
-_FIXED_RE = re.compile(r"fixed\s+(\d{1,2}):(\d{2})", re.IGNORECASE)
 _KST = timezone(timedelta(hours=9))
+
+_UNIT_MAP = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+
+# now + 30~60m  or  now + 30m
+_RANGE_RE = re.compile(
+    r"now\s*\+\s*(\d+)\s*~\s*(\d+)\s*([smhd])",
+    re.IGNORECASE,
+)
+_OFFSET_RE = re.compile(
+    r"now\s*\+\s*(\d+)\s*([smhd])",
+    re.IGNORECASE,
+)
 
 
 def parse_schedule(raw: Any) -> dict[str, Any]:
     """
-    Parse schedule string → {mode, at, jitter_minutes}.
+    Parse schedule string → {mode, at}.
 
-    Formats: immediate, fixed HH:MM, random ±Nmin
+    Formats:
+        now                → immediate
+        immediate          → immediate (backward compat)
+        now + 15s          → scheduled, at = now + 15 seconds
+        now + 15m          → scheduled, at = now + 15 minutes
+        now + 1h           → scheduled, at = now + 1 hour
+        now + 1d           → scheduled, at = now + 1 day
+        now + 30~60m       → scheduled, at = now + random(30,60) minutes
     """
     if not raw:
         return {"mode": "immediate", "at": None}
 
-    s = str(raw).strip().lower()
-    if s == "immediate" or not s:
+    s = str(raw).strip()
+
+    if s.lower() in ("now", "immediate", ""):
         return {"mode": "immediate", "at": None}
 
-    fixed_match = _FIXED_RE.match(s)
-    if fixed_match:
-        hour, minute = int(fixed_match.group(1)), int(fixed_match.group(2))
-        now = datetime.now(tz=_KST)
-        at = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-        if at <= now:
-            at += timedelta(days=1)
-        return {"mode": "fixed", "at": at, "jitter_minutes": 0}
+    now = datetime.now(tz=_KST)
 
-    random_match = _RANDOM_RE.match(s)
-    if random_match:
-        jitter = int(random_match.group(1))
-        now = datetime.now(tz=_KST)
-        return {"mode": "random_window", "at": now, "jitter_minutes": jitter}
+    # now + 30~60m (random range)
+    m = _RANGE_RE.match(s)
+    if m:
+        lo, hi, unit = int(m.group(1)), int(m.group(2)), m.group(3).lower()
+        seconds = random.randint(lo, hi) * _UNIT_MAP[unit]
+        at = now + timedelta(seconds=seconds)
+        return {"mode": "scheduled", "at": at}
+
+    # now + 15m (fixed offset)
+    m = _OFFSET_RE.match(s)
+    if m:
+        amount, unit = int(m.group(1)), m.group(2).lower()
+        seconds = amount * _UNIT_MAP[unit]
+        at = now + timedelta(seconds=seconds)
+        return {"mode": "scheduled", "at": at}
 
     return {"mode": "immediate", "at": None}
 
@@ -366,7 +388,6 @@ def _build_publish(publish_config: dict[str, Any]) -> PublishOption:
     return PublishOption(
         mode=schedule["mode"],
         at=schedule.get("at"),
-        jitter_minutes=schedule.get("jitter_minutes", 30),
         tags=list(publish_config.get("tags", [])),
         visibility=publish_config.get("visibility", "public"),
     )
