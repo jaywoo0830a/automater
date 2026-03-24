@@ -6,7 +6,7 @@ accounts:
     blog_id: photoblog
 
 titles:
-  - "{pool:hook} {keywords} 베스트 {pool:count}"
+  - "{pool:hook} {keyword:region} {keyword:category} 베스트 {pool:count}"
 
 keywords:
   region: [강남, 홍대, 이태원]
@@ -17,21 +17,20 @@ pools:
   count: [TOP 5, TOP 7, BEST 10]
 
 post:
-  - thumbnail: {src: cover.jpg, overlay: "{keywords}"}
-  - h2: "{keywords} 소개"
-  - paragraph: "{keywords}를 소개하는 글을 300자 이상 써줘"
-  - image: {src: photo_1.jpg, alt: "{keywords} 외관"}
-  - paragraph: "{keywords}의 대표 메뉴를 리뷰해줘"
-  - image: {src: photo_2.jpg, alt: "{keywords} 메뉴"}
-  - paragraph: "{keywords}의 분위기와 서비스를 리뷰해줘"
-  - image: {src: photo_3.jpg, alt: "{keywords} 분위기"}
+  - thumbnail: {src: cover.jpg, overlay: "{keyword:region} {keyword:category}"}
+  - h2: "{keyword:region} {keyword:category} 소개"
+  - paragraph: "{keyword:region} {keyword:category}를 소개하는 글을 300자 이상 써줘"
+  - image: {src: photo_1.jpg, alt: "{keyword:region} {keyword:category} 외관"}
+  - paragraph: "{keyword:region} {keyword:category}의 대표 메뉴를 리뷰해줘"
+  - image: {src: photo_2.jpg, alt: "{keyword:region} {keyword:category} 메뉴"}
+  - paragraph: "{keyword:region} {keyword:category}의 분위기와 서비스를 리뷰해줘"
   - h3: "방문 팁"
   - list:
     - 주차는 근처 공영주차장 이용
     - 예약 필수 (특히 주말)
     - 런치 세트가 가성비 좋음
   - divider
-  - paragraph: "{keywords}를 추천하며 마무리해줘. 방문을 유도하는 톤으로"
+  - paragraph: "{keyword:region} {keyword:category}를 추천하며 마무리해줘. 방문 유도 톤"
 
 images: ./photos
 

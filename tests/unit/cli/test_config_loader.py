@@ -21,7 +21,7 @@ from cli.config_loader import load_config, ConfigError
 
 MINIMAL = {
     "accounts": [{"username": "u1", "password": "pw1", "blog_id": "b1"}],
-    "titles": ["{keywords} 과외"],
+    "titles": ["{keyword:region} {keyword:subject} 과외"],
     "keywords": {"region": ["강남"], "subject": ["수학"]},
 }
 
@@ -31,17 +31,17 @@ FULL = {
         {"username": "u2", "password": "pw2", "blog_id": "b2"},
     ],
     "titles": [
-        "{pool:prefix} {keywords} 과외 {pool:suffix}",
+        "{pool:prefix} {keyword:region} {keyword:subject} 과외 {pool:suffix}",
         "{pool:prefix} {keyword:region}{keyword:subject}과외",
     ],
     "keywords": {"region": ["강남", "서초"], "subject": ["수학", "영어"]},
     "pools": {"prefix": ["검증된", "전문"], "suffix": ["강력 추천"]},
     "post": [
-        {"h2": "{keywords} 소개"},
-        {"paragraph": "{keywords}"},
+        {"h2": "{keyword:region} {keyword:subject} 소개"},
+        {"paragraph": "{keyword:region} {keyword:subject}"},
         {"image": "body.jpg"},
-        {"paragraph": {"keyword": "{keywords}", "tone": "review"}},
-        {"thumbnail": {"src": "thumb.jpg", "overlay": "{keywords}"}},
+        {"paragraph": {"keyword": "{keyword:region} {keyword:subject}", "tone": "review"}},
+        {"thumbnail": {"src": "thumb.jpg", "overlay": "{keyword:region} {keyword:subject}"}},
     ],
     "images": "./images",
     "publish": {"schedule": "random ±30min", "tags": ["교육"], "visibility": "public"},
@@ -115,7 +115,7 @@ class TestLoadMinimal:
 
     def test_succeeds(self, write_yaml):
         config = load_config(write_yaml(MINIMAL))
-        assert config["titles"] == ["{keywords} 과외"]
+        assert config["titles"] == ["{keyword:region} {keyword:subject} 과외"]
 
     def test_optional_fields_absent(self, write_yaml):
         config = load_config(write_yaml(MINIMAL))
@@ -213,7 +213,7 @@ class TestSchemaValidation:
 class TestSemanticValidation:
 
     def test_pool_ref_without_pools(self, write_yaml):
-        data = {**MINIMAL, "titles": ["{pool:missing} {keywords}"]}
+        data = {**MINIMAL, "titles": ["{pool:missing} {keyword:region} {keyword:subject}"]}
         with pytest.raises(ConfigError, match="missing"):
             load_config(write_yaml(data))
 
@@ -225,7 +225,7 @@ class TestSemanticValidation:
     def test_empty_pool_list(self, write_yaml):
         data = {
             **MINIMAL,
-            "titles": ["{pool:prefix} {keywords}"],
+            "titles": ["{pool:prefix} {keyword:region} {keyword:subject}"],
             "pools": {"prefix": []},
         }
         with pytest.raises(ConfigError, match="prefix"):

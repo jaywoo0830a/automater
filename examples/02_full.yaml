@@ -23,11 +23,11 @@ pools:
   suffix: [강력 추천, 즉시 가능]
 
 post:
-  - h2: "{keywords} 과외 소개"
-  - paragraph: "{keywords} 과외를 소개하는 글을 자연스럽게 써줘"
+  - h2: "{keyword:region} {keyword:subject} 과외 소개"
+  - paragraph: "{keyword:region} {keyword:subject} 과외를 자연스럽게 소개해줘"
   - image: body.jpg
-  - paragraph: "{keywords} 과외 후기를 학부모 관점에서 200자 이상 써줘"
-  - thumbnail: {src: thumb.jpg, overlay: "{keywords} 과외"}
+  - paragraph: "{keyword:region} {keyword:subject} 과외 후기를 학부모 관점에서 200자 이상 써줘"
+  - thumbnail: {src: thumb.jpg, overlay: "{keyword:region} {keyword:subject} 과외"}
 
 images: ./images
 

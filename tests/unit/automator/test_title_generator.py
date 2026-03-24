@@ -46,10 +46,6 @@ def option() -> TitleOption:
     "{pool:salt_prefix} {keyword:region} 과외 {pool:salt_suffix}",
     "{keyword:region} {keyword:school} {keyword:grade} {keyword:subject}",
     "{keyword:region} {keyword:subject} {pool:cta}",
-    "{keywords}",
-    "{keywords} 과외",
-    "{pool:prefix} {keywords} 과외 {pool:suffix}",
-    "{keywords} — {keyword:region} 특집",
 ])
 def test_validate_template_valid(tmpl):
     validate_template(tmpl)
@@ -289,48 +285,4 @@ def test_five_dimension_template():
         pools={"salt_suffix": POOLS["salt_suffix"]},
     ))
     assert all(v in title for v in ["원주", "OO중", "중1", "수학", "과외"])
-
-
-# ---------------------------------------------------------------------------
-# {keywords} — joins all values in definition order
-# ---------------------------------------------------------------------------
-
-def test_keywords_joins_all_values():
-    title = generate_title(TitleOption(
-        template="{keywords} 과외",
-        values={"region": "강남", "subject": "수학"},
-    ))
-    assert title == "강남 수학 과외"
-
-
-def test_keywords_preserves_definition_order():
-    title = generate_title(TitleOption(
-        template="{keywords}",
-        values={"z_last": "C", "a_first": "A", "m_mid": "B"},
-    ))
-    # dict insertion order, not alphabetical
-    assert title == "C A B"
-
-
-def test_keywords_with_pools():
-    suffix_set = set(POOLS["salt_suffix"])
-    title = generate_title(TitleOption(
-        template="{pool:salt_prefix} {keywords} 과외 {pool:salt_suffix}",
-        values={"region": "강남", "subject": "수학"},
-        pools=POOLS,
-    ))
-    assert "강남 수학" in title
-
-
-def test_keywords_mixed_with_individual():
-    title = generate_title(TitleOption(
-        template="{keywords} — {keyword:region} 특집",
-        values={"region": "강남", "subject": "수학"},
-    ))
-    assert title == "강남 수학 — 강남 특집"
-
-
-def test_keywords_duplicate_raises():
-    with pytest.raises(ValueError, match="duplicate"):
-        validate_template("{keywords} {keywords}")
 

@@ -1,0 +1,49 @@
+# ── 조건부 블록 ──────────────────────────────────────────
+# 지역에 따라 다른 이미지와 문구를 쓰는 경우.
+
+accounts:
+  - username: local_blog
+    password: pw1
+    blog_id: localblog
+
+titles:
+  - "{keyword:region} {keyword:subject} 과외 추천"
+
+keywords:
+  region: [강남, 서초, 잠실, 송파, 강동]
+  subject: [수학, 영어]
+
+post:
+  - h2: "{keyword:region} {keyword:subject} 과외"
+
+  # 강남/서초는 지역별 사진 사용
+  - image: "{keyword:region}.jpg"
+    when: "{keyword:region} in [강남, 서초]"
+
+  # 나머지 지역은 기본 사진
+  - image: "default.jpg"
+    when: "{keyword:region} not in [강남, 서초]"
+
+  - paragraph: "{keyword:region} {keyword:subject} 과외를 소개해줘"
+
+  # 강남 전용 프로모션
+  - paragraph: "강남 프리미엄 과외의 차별점을 설명해줘"
+    when: "{keyword:region} == 강남"
+
+  # 강남 제외 일반 마무리
+  - paragraph: "{keyword:region} {keyword:subject} 과외를 추천하며 마무리해줘"
+    when: "{keyword:region} != 강남"
+
+  - thumbnail: {src: thumb.jpg, overlay: "{keyword:region} {keyword:subject} 과외"}
+
+images: ./images
+
+publish:
+  schedule: random ±30min
+  tags: [교육, 과외]
+  visibility: public
+
+run:
+  interval: 60s
+  max_daily: 10
+  headless: true

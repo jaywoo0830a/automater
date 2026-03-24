@@ -163,7 +163,7 @@ def _validate_semantic(config: dict[str, Any]) -> None:
 
     for template in all_templates:
         for raw in _DSL_TOKEN_RE.findall(template):
-            if raw == "keywords":
+            if raw == "i":
                 continue
             if ":" not in raw:
                 continue

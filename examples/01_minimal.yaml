@@ -6,7 +6,7 @@ accounts:
     blog_id: myblog1
 
 titles:
-  - "{keywords} 과외 추천"
+  - "{keyword:region} {keyword:subject} 과외 추천"
 
 keywords:
   region: [강남, 서초]

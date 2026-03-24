@@ -78,16 +78,12 @@ def _parse_token(raw: str) -> tuple[str, str]:
     """
     Parse a raw token string into (type, slug).
 
-    Special case: "keywords" (no colon) → ("keywords", "").
     Raises ValueError if the format is invalid.
     """
-    if raw == "keywords":
-        return ("keywords", "")
-
     if ":" not in raw or not raw.strip():
         raise ValueError(
             f"invalid token {{{raw}}} — "
-            f"use {{keyword:slug}}, {{keywords}}, or {{pool:slug}}"
+            f"use {{keyword:slug}} or {{pool:slug}}"
         )
 
     parts = raw.split(":", 1)
@@ -152,9 +148,6 @@ def generate_title(
     def _replace(match: re.Match) -> str:
         raw = match.group(1)
         token_type, slug = _parse_token(raw)
-
-        if token_type == "keywords":
-            return " ".join(option.values.values())
 
         if token_type == "keyword":
             if slug not in option.values:

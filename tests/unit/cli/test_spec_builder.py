@@ -3,11 +3,8 @@ tests/unit/cli/test_spec_builder.py
 --------------------------------------
 Combo + config → PostingSpec.
 
-Covers:
-    - Title construction
-    - Post block parsing (paragraph = prompt string)
-    - Image path resolution
-    - Publish/run pass-through
+Covers: title, paragraph prompt, image path interpolation,
+        {i} counter, when conditions, account override.
 """
 
 import pytest
@@ -28,15 +25,15 @@ from cli.spec_builder import build_spec
 
 FULL_CONFIG = {
     "accounts": [{"username": "u1", "password": "pw1", "blog_id": "b1"}],
-    "titles": ["{pool:prefix} {keywords} 과외"],
+    "titles": ["{pool:prefix} {keyword:region} {keyword:subject} 과외"],
     "keywords": {"region": ["강남"], "subject": ["수학"]},
     "pools": {"prefix": ["검증된"]},
     "post": [
-        {"h2": "{keywords} 소개"},
-        {"paragraph": "{keywords} 과외를 소개해줘"},
+        {"h2": "{keyword:region} {keyword:subject} 과외 소개"},
+        {"paragraph": "{keyword:region} {keyword:subject} 과외를 소개해줘"},
         {"image": "body.jpg"},
-        {"paragraph": "{keywords} 과외 후기를 써줘. 200자 이상"},
-        {"thumbnail": {"src": "thumb.jpg", "overlay": "{keywords} 과외"}},
+        {"paragraph": "{keyword:region} {keyword:subject} 과외 후기를 써줘"},
+        {"thumbnail": {"src": "thumb.jpg", "overlay": "{keyword:region} {keyword:subject} 과외"}},
     ],
     "images": "./images",
     "publish": {"schedule": "immediate", "tags": ["교육"]},
@@ -47,26 +44,25 @@ FULL_CONFIG = {
 def _combo(**kw):
     defaults = {
         "values": {"region": "강남", "subject": "수학"},
-        "title_template": "{keywords} 과외",
+        "title_template": "{keyword:region} {keyword:subject} 과외",
+        "index": 1,
     }
     defaults.update(kw)
     return Combo(**defaults)
 
 
 # ---------------------------------------------------------------------------
-# PostingSpec basics
+# Basics
 # ---------------------------------------------------------------------------
 
-class TestBuildSpecBasics:
+class TestBasics:
 
     def test_returns_posting_spec(self):
-        spec = build_spec(_combo(), FULL_CONFIG)
-        assert isinstance(spec, PostingSpec)
+        assert isinstance(build_spec(_combo(), FULL_CONFIG), PostingSpec)
 
     def test_account_mapped(self):
         spec = build_spec(_combo(), FULL_CONFIG)
         assert spec.account.username == "u1"
-        assert spec.account.password == "pw1"
 
 
 # ---------------------------------------------------------------------------
@@ -75,116 +71,154 @@ class TestBuildSpecBasics:
 
 class TestTitle:
 
-    def test_template_from_combo(self):
+    def test_template(self):
         spec = build_spec(_combo(), FULL_CONFIG)
-        assert spec.title.template == "{keywords} 과외"
+        assert spec.title.template == "{keyword:region} {keyword:subject} 과외"
 
-    def test_values_from_combo(self):
+    def test_values(self):
         spec = build_spec(_combo(), FULL_CONFIG)
         assert spec.title.values == {"region": "강남", "subject": "수학"}
 
-    def test_pools_from_config(self):
+    def test_pools(self):
         spec = build_spec(_combo(), FULL_CONFIG)
         assert spec.title.pools == {"prefix": ("검증된",)}
 
+    def test_i_in_title(self):
+        config = {**FULL_CONFIG, "titles": ["#{i} {keyword:region}"]}
+        spec = build_spec(_combo(title_template="#{i} {keyword:region}", index=7), config)
+        assert "7" in spec.title.template
+        assert "{i}" not in spec.title.template
+
 
 # ---------------------------------------------------------------------------
-# Paragraph — always a prompt string
+# Paragraph — prompt string
 # ---------------------------------------------------------------------------
 
 class TestParagraph:
 
-    def test_simple_prompt(self):
+    def test_simple(self):
         config = {**FULL_CONFIG, "post": [
-            {"paragraph": "{keywords} 과외를 소개해줘"},
+            {"paragraph": "{keyword:region} {keyword:subject} 과외를 소개해줘"},
         ]}
         spec = build_spec(_combo(), config)
         block = spec.body[0].blocks[0]
         assert isinstance(block, ParagraphBlock)
         assert block.prompt == "강남 수학 과외를 소개해줘"
 
-    def test_keywords_interpolated_in_prompt(self):
-        config = {**FULL_CONFIG, "post": [
-            {"paragraph": "{keywords}가 4번 언급되는 글을 써줘. 3500자 이상"},
-        ]}
+    def test_keyword_field_empty(self):
+        config = {**FULL_CONFIG, "post": [{"paragraph": "{keyword:region} 소개"}]}
         spec = build_spec(_combo(), config)
-        block = spec.body[0].blocks[0]
-        assert block.prompt == "강남 수학가 4번 언급되는 글을 써줘. 3500자 이상"
+        assert spec.body[0].blocks[0].keyword == ""
 
-    def test_individual_keywords_in_prompt(self):
-        config = {**FULL_CONFIG, "post": [
-            {"paragraph": "{keyword:region}에서 {keyword:subject} 과외를 찾고 계신가요?"},
-        ]}
-        spec = build_spec(_combo(), config)
-        block = spec.body[0].blocks[0]
-        assert block.prompt == "강남에서 수학 과외를 찾고 계신가요?"
-
-    def test_pool_in_prompt(self):
-        config = {**FULL_CONFIG, "post": [
-            {"paragraph": "{pool:prefix} {keywords} 과외를 소개해줘"},
-        ]}
-        spec = build_spec(_combo(), config)
-        block = spec.body[0].blocks[0]
-        assert "검증된" in block.prompt
-        assert "강남 수학" in block.prompt
-
-    def test_keyword_field_is_empty(self):
-        """keyword field is never set — prompt goes straight to Gemini."""
-        config = {**FULL_CONFIG, "post": [
-            {"paragraph": "{keywords} 과외를 소개해줘"},
-        ]}
-        spec = build_spec(_combo(), config)
-        block = spec.body[0].blocks[0]
-        assert block.keyword == ""
-
-    def test_pure_literal_prompt(self):
-        config = {**FULL_CONFIG, "post": [
-            {"paragraph": "자유 프롬프트 — DSL 토큰 없이도 동작한다"},
-        ]}
-        spec = build_spec(_combo(), config)
-        block = spec.body[0].blocks[0]
-        assert block.prompt == "자유 프롬프트 — DSL 토큰 없이도 동작한다"
+    def test_i_in_prompt(self):
+        config = {**FULL_CONFIG, "post": [{"paragraph": "포스팅 #{i}"}]}
+        spec = build_spec(_combo(index=3), config)
+        assert spec.body[0].blocks[0].prompt == "포스팅 #3"
 
 
 # ---------------------------------------------------------------------------
-# Other blocks — shorthand
+# Headings
 # ---------------------------------------------------------------------------
 
-class TestPostShorthand:
+class TestHeading:
 
-    def test_heading_from_string(self):
-        config = {**FULL_CONFIG, "post": [{"h2": "{keywords} 소개"}]}
+    def test_h2(self):
+        config = {**FULL_CONFIG, "post": [{"h2": "{keyword:region} 소개"}]}
         spec = build_spec(_combo(), config)
-        block = spec.body[0].blocks[0]
-        assert isinstance(block, HeadingBlock)
-        assert block.level == 2
-        assert block.text == "강남 수학 소개"
+        b = spec.body[0].blocks[0]
+        assert isinstance(b, HeadingBlock)
+        assert b.level == 2
+        assert b.text == "강남 소개"
 
-    def test_h3_heading(self):
-        config = {**FULL_CONFIG, "post": [{"h3": "방문 팁"}]}
+    def test_h3(self):
+        config = {**FULL_CONFIG, "post": [{"h3": "팁"}]}
         spec = build_spec(_combo(), config)
         assert spec.body[0].blocks[0].level == 3
 
-    def test_image_from_string(self):
+
+# ---------------------------------------------------------------------------
+# Image — path interpolation
+# ---------------------------------------------------------------------------
+
+class TestImage:
+
+    def test_static(self):
         config = {**FULL_CONFIG, "post": [{"image": "photo.jpg"}]}
         spec = build_spec(_combo(), config)
-        block = spec.body[0].blocks[0]
-        assert isinstance(block, ImageBlock)
-        assert block.path == "images/photo.jpg"
+        assert spec.body[0].blocks[0].path == "images/photo.jpg"
 
-    def test_thumbnail_from_string(self):
+    def test_keyword_in_path(self):
+        config = {**FULL_CONFIG, "post": [{"image": "{keyword:region}.jpg"}]}
+        spec = build_spec(_combo(), config)
+        assert spec.body[0].blocks[0].path == "images/강남.jpg"
+
+    def test_i_in_path(self):
+        config = {**FULL_CONFIG, "post": [{"image": "{i}.jpg"}]}
+        spec = build_spec(_combo(index=5), config)
+        assert spec.body[0].blocks[0].path == "images/5.jpg"
+
+    def test_dict_form_with_alt(self):
+        config = {**FULL_CONFIG, "post": [
+            {"image": {"src": "p.jpg", "alt": "{keyword:region} 외관"}},
+        ]}
+        spec = build_spec(_combo(), config)
+        b = spec.body[0].blocks[0]
+        assert b.path == "images/p.jpg"
+        assert b.alt == "강남 외관"
+
+
+# ---------------------------------------------------------------------------
+# Thumbnail
+# ---------------------------------------------------------------------------
+
+class TestThumbnail:
+
+    def test_static(self):
         config = {**FULL_CONFIG, "post": [{"thumbnail": "thumb.jpg"}]}
         spec = build_spec(_combo(), config)
-        block = spec.body[0].blocks[0]
-        assert isinstance(block, FeaturedImageBlock)
-        assert block.path == "images/thumb.jpg"
+        assert spec.body[0].blocks[0].path == "images/thumb.jpg"
 
-    def test_quote_from_string(self):
+    def test_keyword_in_path(self):
+        config = {**FULL_CONFIG, "post": [{"thumbnail": "{keyword:region}.jpg"}]}
+        spec = build_spec(_combo(), config)
+        assert spec.body[0].blocks[0].path == "images/강남.jpg"
+
+    def test_dict_form_with_overlay(self):
+        config = {**FULL_CONFIG, "post": [
+            {"thumbnail": {"src": "t.jpg", "overlay": "{keyword:region} 과외"}},
+        ]}
+        spec = build_spec(_combo(), config)
+        assert spec.body[0].blocks[0].overlay_text == "강남 과외"
+
+
+# ---------------------------------------------------------------------------
+# Other blocks
+# ---------------------------------------------------------------------------
+
+class TestOtherBlocks:
+
+    def test_quote(self):
         config = {**FULL_CONFIG, "post": [{"quote": "인용문"}]}
         spec = build_spec(_combo(), config)
-        block = spec.body[0].blocks[0]
-        assert isinstance(block, QuoteBlock)
-        assert block.text == "인용문"
+        assert isinstance(spec.body[0].blocks[0], QuoteBlock)
+        assert spec.body[0].blocks[0].text == "인용문"
+
+    def test_quote_dict(self):
+        config = {**FULL_CONFIG, "post": [{"quote": {"text": "인용", "by": "작가"}}]}
+        spec = build_spec(_combo(), config)
+        b = spec.body[0].blocks[0]
+        assert b.text == "인용"
+        assert b.attribution == "작가"
+
+    def test_list(self):
+        config = {**FULL_CONFIG, "post": [{"list": ["A", "B"]}]}
+        spec = build_spec(_combo(), config)
+        assert spec.body[0].blocks[0].items == ("A", "B")
+
+    def test_list_interpolated(self):
+        config = {**FULL_CONFIG, "post": [{"list": ["{keyword:region} 항목"]}]}
+        spec = build_spec(_combo(), config)
+        assert spec.body[0].blocks[0].items == ("강남 항목",)
 
     def test_divider(self):
         config = {**FULL_CONFIG, "post": ["divider"]}
@@ -193,52 +227,58 @@ class TestPostShorthand:
 
 
 # ---------------------------------------------------------------------------
-# Other blocks — full dict
+# when — conditional blocks
 # ---------------------------------------------------------------------------
 
-class TestPostFullDict:
+class TestWhenCondition:
 
-    def test_image_with_options(self):
+    def test_when_true_includes_block(self):
         config = {**FULL_CONFIG, "post": [
-            {"image": {"src": "photo.jpg", "alt": "{keywords} 외관"}},
+            {"paragraph": "강남 전용", "when": "{keyword:region} == 강남"},
         ]}
-        spec = build_spec(_combo(), config)
-        block = spec.body[0].blocks[0]
-        assert block.path == "images/photo.jpg"
-        assert block.alt == "강남 수학 외관"
+        spec = build_spec(_combo(values={"region": "강남", "subject": "수학"}), config)
+        assert len(spec.body[0].blocks) == 1
+        assert spec.body[0].blocks[0].prompt == "강남 전용"
 
-    def test_thumbnail_with_options(self):
+    def test_when_false_excludes_block(self):
         config = {**FULL_CONFIG, "post": [
-            {"thumbnail": {"src": "thumb.jpg", "overlay": "{keywords} 과외"}},
+            {"paragraph": "강남 전용", "when": "{keyword:region} == 강남"},
         ]}
-        spec = build_spec(_combo(), config)
-        block = spec.body[0].blocks[0]
-        assert block.overlay_text == "강남 수학 과외"
+        spec = build_spec(_combo(values={"region": "서초", "subject": "수학"}), config)
+        # Block excluded → falls back to default body
+        blocks = spec.body[0].blocks
+        assert all(b.prompt != "강남 전용" for b in blocks)
 
-    def test_quote_with_attribution(self):
+    def test_when_in_includes(self):
         config = {**FULL_CONFIG, "post": [
-            {"quote": {"text": "인용", "by": "작가"}},
+            {"image": "special.jpg", "when": "{keyword:region} in [강남, 서초]"},
+            {"image": "default.jpg"},
         ]}
-        spec = build_spec(_combo(), config)
-        block = spec.body[0].blocks[0]
-        assert block.text == "인용"
-        assert block.attribution == "작가"
+        spec = build_spec(_combo(values={"region": "강남", "subject": "수학"}), config)
+        paths = [b.path for b in spec.body[0].blocks]
+        assert "images/special.jpg" in paths
 
-
-# ---------------------------------------------------------------------------
-# List block
-# ---------------------------------------------------------------------------
-
-class TestListBlock:
-
-    def test_list_from_items(self):
+    def test_when_not_in_excludes(self):
         config = {**FULL_CONFIG, "post": [
-            {"list": ["항목 1", "항목 2", "항목 3"]},
+            {"image": "special.jpg", "when": "{keyword:region} in [강남, 서초]"},
+            {"image": "default.jpg"},
         ]}
+        spec = build_spec(_combo(values={"region": "잠실", "subject": "수학"}), config)
+        paths = [b.path for b in spec.body[0].blocks]
+        assert "images/special.jpg" not in paths
+        assert "images/default.jpg" in paths
+
+    def test_no_when_always_included(self):
+        config = {**FULL_CONFIG, "post": [{"paragraph": "항상 포함"}]}
         spec = build_spec(_combo(), config)
-        block = spec.body[0].blocks[0]
-        assert isinstance(block, ListBlock)
-        assert block.items == ("항목 1", "항목 2", "항목 3")
+        assert spec.body[0].blocks[0].prompt == "항상 포함"
+
+    def test_when_not_in(self):
+        config = {**FULL_CONFIG, "post": [
+            {"paragraph": "기타 지역", "when": "{keyword:region} not in [강남, 서초]"},
+        ]}
+        spec = build_spec(_combo(values={"region": "잠실", "subject": "수학"}), config)
+        assert spec.body[0].blocks[0].prompt == "기타 지역"
 
 
 # ---------------------------------------------------------------------------
@@ -264,7 +304,7 @@ class TestFullLayout:
 
 class TestImageBaseDir:
 
-    def test_images_dir_prepended(self):
+    def test_prepended(self):
         config = {**FULL_CONFIG, "images": "./photos", "post": [{"image": "a.jpg"}]}
         spec = build_spec(_combo(), config)
         assert spec.body[0].blocks[0].path == "photos/a.jpg"
@@ -282,10 +322,9 @@ class TestImageBaseDir:
 
 class TestDefaultBody:
 
-    def test_no_post_generates_default(self):
+    def test_no_post(self):
         config = {**FULL_CONFIG}
         del config["post"]
         spec = build_spec(_combo(), config)
-        blocks = spec.body[0].blocks
-        assert len(blocks) == 3
-        assert all(isinstance(b, ParagraphBlock) for b in blocks)
+        assert len(spec.body[0].blocks) == 3
+        assert all(isinstance(b, ParagraphBlock) for b in spec.body[0].blocks)

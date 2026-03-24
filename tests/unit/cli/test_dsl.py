@@ -1,18 +1,16 @@
 """
 tests/unit/cli/test_dsl.py
 ----------------------------
-DSL token interpolation for arbitrary strings.
+DSL token interpolation and condition evaluation.
 
-Same tokens as title_generator:
-    {keyword:slug}  → values[slug]
-    {keywords}      → all values joined
-    {pool:slug}     → random from pools[slug]
+Tokens: {keyword:slug}, {pool:slug}, {i}
+Conditions: ==, !=, in [...], not in [...]
 """
 
 import random
 import pytest
 
-from cli.dsl import interpolate
+from cli.dsl import interpolate, interpolate_deep, evaluate_condition
 
 
 # ---------------------------------------------------------------------------
@@ -21,46 +19,26 @@ from cli.dsl import interpolate
 
 class TestKeywordToken:
 
-    def test_single_keyword(self):
-        result = interpolate("{keyword:region} 소개", {"region": "강남"}, {})
-        assert result == "강남 소개"
+    def test_single(self):
+        assert interpolate("{keyword:region} 소개", {"region": "강남"}, {}) == "강남 소개"
 
-    def test_multiple_keywords(self):
+    def test_multiple(self):
         result = interpolate(
             "{keyword:region} {keyword:subject}",
             {"region": "강남", "subject": "수학"}, {},
         )
         assert result == "강남 수학"
 
-    def test_glued_keywords(self):
+    def test_glued(self):
         result = interpolate(
             "{keyword:region}{keyword:subject}과외",
             {"region": "강남", "subject": "수학"}, {},
         )
         assert result == "강남수학과외"
 
-    def test_missing_keyword_raises(self):
+    def test_missing_raises(self):
         with pytest.raises(KeyError, match="missing"):
             interpolate("{keyword:missing}", {}, {})
-
-
-# ---------------------------------------------------------------------------
-# {keywords}
-# ---------------------------------------------------------------------------
-
-class TestKeywordsToken:
-
-    def test_joins_all_values(self):
-        result = interpolate("{keywords} 과외", {"region": "강남", "subject": "수학"}, {})
-        assert result == "강남 수학 과외"
-
-    def test_preserves_order(self):
-        result = interpolate("{keywords}", {"z": "C", "a": "A", "m": "B"}, {})
-        assert result == "C A B"
-
-    def test_single_value(self):
-        result = interpolate("{keywords}", {"region": "강남"}, {})
-        assert result == "강남"
 
 
 # ---------------------------------------------------------------------------
@@ -69,24 +47,49 @@ class TestKeywordsToken:
 
 class TestPoolToken:
 
-    def test_pool_selects_from_list(self):
-        pools = {"prefix": ["검증된", "전문"]}
-        result = interpolate("{pool:prefix}", {}, pools, rng=random.Random(42))
-        assert result in ("검증된", "전문")
+    def test_selects_from_list(self):
+        result = interpolate("{pool:p}", {}, {"p": ["A", "B"]}, rng=random.Random(42))
+        assert result in ("A", "B")
 
-    def test_missing_pool_raises(self):
+    def test_missing_raises(self):
         with pytest.raises(KeyError, match="missing"):
             interpolate("{pool:missing}", {}, {})
 
-    def test_empty_pool_returns_empty(self):
-        result = interpolate("{pool:empty}", {}, {"empty": []})
-        assert result == ""
+    def test_empty_returns_empty(self):
+        assert interpolate("{pool:e}", {}, {"e": []}) == ""
 
     def test_deterministic_with_seed(self):
-        pools = {"p": ["A", "B", "C"]}
-        r1 = interpolate("{pool:p}", {}, pools, rng=random.Random(42))
-        r2 = interpolate("{pool:p}", {}, pools, rng=random.Random(42))
+        r1 = interpolate("{pool:p}", {}, {"p": ["A", "B"]}, rng=random.Random(42))
+        r2 = interpolate("{pool:p}", {}, {"p": ["A", "B"]}, rng=random.Random(42))
         assert r1 == r2
+
+
+# ---------------------------------------------------------------------------
+# {i} — combo index
+# ---------------------------------------------------------------------------
+
+class TestIndexToken:
+
+    def test_basic(self):
+        assert interpolate("{i}.jpg", {}, {}, index=3) == "3.jpg"
+
+    def test_in_path(self):
+        assert interpolate("images/{i}.jpg", {}, {}, index=1) == "images/1.jpg"
+
+    def test_mixed_with_keywords(self):
+        result = interpolate(
+            "{keyword:region}_{i}.jpg",
+            {"region": "강남"}, {},
+            index=5,
+        )
+        assert result == "강남_5.jpg"
+
+    def test_default_index_zero(self):
+        assert interpolate("{i}", {}, {}) == "0"
+
+    def test_in_text(self):
+        result = interpolate("포스팅 #{i}", {}, {}, index=12)
+        assert result == "포스팅 #12"
 
 
 # ---------------------------------------------------------------------------
@@ -97,47 +100,105 @@ class TestMixed:
 
     def test_all_token_types(self):
         result = interpolate(
-            "{pool:prefix} {keywords} 과외 {keyword:region} 특집",
+            "{pool:prefix} {keyword:region} {keyword:subject} #{i}",
             {"region": "강남", "subject": "수학"},
             {"prefix": ["검증된"]},
+            index=7,
         )
-        assert result == "검증된 강남 수학 과외 강남 특집"
+        assert result == "검증된 강남 수학 #7"
 
-    def test_no_tokens_returns_as_is(self):
-        result = interpolate("리터럴 텍스트만", {}, {})
-        assert result == "리터럴 텍스트만"
+    def test_no_tokens(self):
+        assert interpolate("리터럴 텍스트만", {}, {}) == "리터럴 텍스트만"
 
     def test_empty_string(self):
-        result = interpolate("", {}, {})
-        assert result == ""
+        assert interpolate("", {}, {}) == ""
 
 
 # ---------------------------------------------------------------------------
-# interpolate_deep — recursive dict/list interpolation
+# interpolate_deep
 # ---------------------------------------------------------------------------
 
 class TestInterpolateDeep:
 
-    def test_dict_values_interpolated(self):
-        from cli.dsl import interpolate_deep
-        data = {"text": "{keywords} 소개", "level": 2}
-        result = interpolate_deep(data, {"region": "강남"}, {})
+    def test_dict(self):
+        data = {"text": "{keyword:r} 소개", "level": 2}
+        result = interpolate_deep(data, {"r": "강남"}, {})
         assert result == {"text": "강남 소개", "level": 2}
 
-    def test_nested_dict(self):
-        from cli.dsl import interpolate_deep
-        data = {"outer": {"inner": "{keyword:region}"}}
-        result = interpolate_deep(data, {"region": "강남"}, {})
+    def test_nested(self):
+        data = {"outer": {"inner": "{keyword:r}"}}
+        result = interpolate_deep(data, {"r": "강남"}, {})
         assert result == {"outer": {"inner": "강남"}}
 
-    def test_list_items_interpolated(self):
-        from cli.dsl import interpolate_deep
-        data = ["{keyword:a}", "literal", "{keywords}"]
-        result = interpolate_deep(data, {"a": "X", "b": "Y"}, {})
-        assert result == ["X", "literal", "X Y"]
+    def test_list(self):
+        data = ["{keyword:a}", "literal"]
+        result = interpolate_deep(data, {"a": "X"}, {})
+        assert result == ["X", "literal"]
 
-    def test_non_string_passthrough(self):
-        from cli.dsl import interpolate_deep
+    def test_passthrough(self):
         data = {"num": 42, "flag": True, "nothing": None}
-        result = interpolate_deep(data, {}, {})
-        assert result == {"num": 42, "flag": True, "nothing": None}
+        assert interpolate_deep(data, {}, {}) == data
+
+    def test_index_in_deep(self):
+        data = {"path": "img_{i}.jpg"}
+        result = interpolate_deep(data, {}, {}, index=3)
+        assert result == {"path": "img_3.jpg"}
+
+
+# ---------------------------------------------------------------------------
+# evaluate_condition
+# ---------------------------------------------------------------------------
+
+class TestConditionEquals:
+
+    def test_eq_true(self):
+        assert evaluate_condition("{keyword:region} == 강남", {"region": "강남"}) is True
+
+    def test_eq_false(self):
+        assert evaluate_condition("{keyword:region} == 서초", {"region": "강남"}) is False
+
+    def test_neq_true(self):
+        assert evaluate_condition("{keyword:region} != 서초", {"region": "강남"}) is True
+
+    def test_neq_false(self):
+        assert evaluate_condition("{keyword:region} != 강남", {"region": "강남"}) is False
+
+
+class TestConditionIn:
+
+    def test_in_true(self):
+        assert evaluate_condition(
+            "{keyword:region} in [강남, 서초, 잠실]", {"region": "서초"}
+        ) is True
+
+    def test_in_false(self):
+        assert evaluate_condition(
+            "{keyword:region} in [강남, 서초]", {"region": "잠실"}
+        ) is False
+
+    def test_not_in_true(self):
+        assert evaluate_condition(
+            "{keyword:region} not in [강남, 서초]", {"region": "잠실"}
+        ) is True
+
+    def test_not_in_false(self):
+        assert evaluate_condition(
+            "{keyword:region} not in [강남, 서초]", {"region": "강남"}
+        ) is False
+
+
+class TestConditionEdgeCases:
+
+    def test_empty_is_true(self):
+        assert evaluate_condition("", {}) is True
+
+    def test_none_is_true(self):
+        assert evaluate_condition(None, {}) is True
+
+    def test_missing_slug_raises(self):
+        with pytest.raises(KeyError, match="missing"):
+            evaluate_condition("{keyword:missing} == x", {})
+
+    def test_unparseable_raises(self):
+        with pytest.raises(ValueError, match="Unparseable"):
+            evaluate_condition("gibberish", {"r": "v"})

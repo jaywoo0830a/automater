@@ -6,20 +6,20 @@ accounts:
     blog_id: textblog
 
 titles:
-  - "{keywords} 완벽 가이드"
+  - "{keyword:city} {keyword:topic} 완벽 가이드"
 
 keywords:
   city: [서울, 부산, 제주]
   topic: [맛집, 카페, 관광지]
 
 post:
-  - h2: "{keywords} 소개"
-  - paragraph: "{keywords}에 대해 정보 전달 위주로 소개해줘"
-  - paragraph: "{keywords}을 직접 방문한 경험담을 1인칭으로 써줘"
+  - h2: "{keyword:city} {keyword:topic} 소개"
+  - paragraph: "{keyword:city} {keyword:topic}에 대해 정보 전달 위주로 소개해줘"
+  - paragraph: "{keyword:city} {keyword:topic}을 직접 방문한 경험담을 1인칭으로 써줘"
   - quote: "여행은 살아있는 교육이다"
-  - paragraph: "{keywords} 여행의 감성을 이야기 형식으로 써줘"
+  - paragraph: "{keyword:city} {keyword:topic} 여행의 감성을 이야기 형식으로 써줘"
   - divider
-  - paragraph: "{keywords}을 추천하며 마무리해줘. 행동 유도 포함"
+  - paragraph: "{keyword:city} {keyword:topic}을 추천하며 마무리해줘. 행동 유도 포함"
 
 publish:
   schedule: immediate

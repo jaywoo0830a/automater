@@ -20,9 +20,10 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class Combo:
-    """One posting combination: keyword values + title template."""
+    """One posting combination: keyword values + title template + index."""
     values:         dict[str, str] = field(default_factory=dict)
     title_template: str            = ""
+    index:          int            = 1  # 1-based combo counter
 
 
 # ---------------------------------------------------------------------------
@@ -36,21 +37,22 @@ def build_combos(
     """
     Build all combinations from keywords × titles.
 
-    Args:
-        keywords: slug → value list (definition order preserved).
-        titles:   List of title template strings.
-
-    Returns:
-        List of Combo, one per (keyword_values, title_template) pair.
+    Each Combo gets a 1-based index for {i} token.
     """
     slugs = list(keywords.keys())
     groups = [_deduplicate(keywords[slug]) for slug in slugs]
 
     combos: list[Combo] = []
+    counter = 1
     for title_template in titles:
         for combo_values in itertools.product(*groups):
             values = dict(zip(slugs, combo_values))
-            combos.append(Combo(values=values, title_template=title_template))
+            combos.append(Combo(
+                values=values,
+                title_template=title_template,
+                index=counter,
+            ))
+            counter += 1
 
     return combos
 

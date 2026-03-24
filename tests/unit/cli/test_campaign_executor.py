@@ -27,10 +27,10 @@ def _config(n_accounts=2, n_keywords=3):
             {"username": f"user{i}", "password": f"pw{i}", "blog_id": f"blog{i}"}
             for i in range(n_accounts)
         ],
-        "titles": ["{keywords} 과외"],
+        "titles": ["{keyword:region} 과외"],
         "keywords": {"region": [f"kw{i}" for i in range(n_keywords)]},
         "pools": {},
-        "post": [{"paragraph": "{keywords}"}],
+        "post": [{"paragraph": "{keyword:region}"}],
         "images": ".",
         "publish": {},
         "run": {"interval": "0s"},
