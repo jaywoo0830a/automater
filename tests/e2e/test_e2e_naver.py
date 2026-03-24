@@ -22,7 +22,7 @@ from playwright.sync_api import Page
 from automator.config import browser_settings
 from automator.options import (
     AccountOption, TitleOption, KST,
-    ParagraphBlock, ImageBlock, FeaturedImageBlock, Section,
+    HeadingBlock, ParagraphBlock, ImageBlock, FeaturedImageBlock, Section,
     PublishOption,
 )
 from automator.selector_loader import SelectorLoader
@@ -111,6 +111,67 @@ def test_pipeline_text_only(editor: SmartEditorOne, account: AccountOption):
             ParagraphBlock(prompt="강남 수학 과외 홍보 블로그"),
             ParagraphBlock(prompt="후기 형식 마무리"),
         )),),
+        publish=PublishOption(mode="immediate"),
+    )
+    _run_spec(spec, editor)
+
+
+# ---------------------------------------------------------------------------
+# Pipeline: heading — all levels
+# ---------------------------------------------------------------------------
+
+@pytest.mark.slow
+@pytest.mark.parametrize("level,size", [
+    (1, 38), (2, 34), (3, 30), (4, 28), (5, 24), (6, 19),
+])
+def test_pipeline_heading_level(editor: SmartEditorOne, account: AccountOption, level: int, size: int):
+    """H1~H6 각 레벨별 소제목 삽입 — 서식 적용 + 일반 단락 복귀."""
+    spec = PostingSpec(
+        account=account,
+        title=TitleOption(fixed_title=f"H{level} 소제목 테스트 (size {size})"),
+        body=(Section(blocks=(
+            HeadingBlock(level=level, text=f"H{level} 소제목 — 크기 {size}"),
+            ParagraphBlock(prompt=f"H{level} 아래 일반 본문"),
+        )),),
+        publish=PublishOption(mode="immediate"),
+    )
+    _run_spec(spec, editor)
+
+
+@pytest.mark.slow
+def test_pipeline_heading_mixed_levels(editor: SmartEditorOne, account: AccountOption):
+    """H1 + H3 + H5 혼합 — 서로 다른 크기가 순서대로 적용되는지 확인."""
+    spec = PostingSpec(
+        account=account,
+        title=TitleOption(fixed_title="혼합 소제목 테스트"),
+        body=(Section(blocks=(
+            HeadingBlock(level=1, text="대제목 (H1, 38)"),
+            ParagraphBlock(prompt="대제목 아래 본문"),
+            HeadingBlock(level=3, text="소제목 (H3, 30)"),
+            ParagraphBlock(prompt="소제목 아래 본문"),
+            HeadingBlock(level=5, text="작은 제목 (H5, 24)"),
+            ParagraphBlock(prompt="작은 제목 아래 본문"),
+        )),),
+        publish=PublishOption(mode="immediate"),
+    )
+    _run_spec(spec, editor)
+
+
+@pytest.mark.slow
+def test_pipeline_heading_with_image(editor: SmartEditorOne, account: AccountOption):
+    """소제목 + 이미지 + 본문 — 이미지 업로드 후 소제목이 깨지지 않는지 확인."""
+    image = _asset("images", 0)
+    blocks: list = [
+        HeadingBlock(level=2, text="이미지 포함 소제목 (H2, 34)"),
+        ParagraphBlock(prompt="이미지 위 본문"),
+    ]
+    if image:
+        blocks.insert(1, ImageBlock(path=image))
+
+    spec = PostingSpec(
+        account=account,
+        title=TitleOption(fixed_title="소제목 + 이미지 테스트"),
+        body=(Section(blocks=tuple(blocks)),),
         publish=PublishOption(mode="immediate"),
     )
     _run_spec(spec, editor)

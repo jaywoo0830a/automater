@@ -185,6 +185,74 @@ class SmartEditorOne(BlogEditor):
         for _ in range(max(newlines, 1)):
             self._page.keyboard.press("Enter")
 
+    _HEADING_SIZE_MAP = {
+        1: "size_38",
+        2: "size_34",
+        3: "size_30",
+        4: "size_28",
+        5: "size_24",
+        6: "size_19",
+    }
+
+    def insert_heading(self, text: str, level: int = 2) -> None:
+        """
+        Insert a heading with Naver SE One's native subtitle formatting.
+
+        Font sizes by level:
+            H1: 38, H2: 34, H3: 30, H4: 28, H5: 24, H6: 19
+
+        Sequence (from interactive debug):
+            0. Click last paragraph to position cursor in body area
+            1. Click heading_trigger ("본문" dropdown)
+            2. Click heading_button ("소제목")
+            3. Type the heading text
+            4. Select text (Home → Shift+End) → size_trigger → level size
+            5. Click bold_button ("굵게")
+            6. Click paragraph to deselect → Enter (exits subtitle)
+
+        Falls back to insert_text for unsupported scenarios.
+        """
+        frame = self._frame()
+        sel   = self._sel()
+
+        # Step 0: Position cursor in body area (toolbar is inactive without this)
+        last_para = sel.locator(frame, "editor_paragraph_container").last
+        last_para.wait_for(state="visible", timeout=5_000)
+        last_para.click()
+
+        # Step 1: Open paragraph style dropdown
+        trigger = sel.locator(frame, "heading_trigger")
+        if not click_if_visible(trigger, timeout_ms=3_000):
+            self.insert_text(text, 1)
+            return
+
+        # Step 2: Click "소제목"
+        heading_btn = sel.locator(frame, "heading_button")
+        if not click_if_visible(heading_btn, timeout_ms=3_000):
+            self.insert_text(text, 1)
+            return
+
+        # Step 3: Type heading text
+        self._page.keyboard.type(text)
+
+        # Step 4: Select text → change font size by level
+        self._page.keyboard.press("Home")
+        self._page.keyboard.press("Shift+End")
+        size_key = self._HEADING_SIZE_MAP.get(level, "size_34")
+        size_trigger = sel.locator(frame, "size_trigger")
+        if click_if_visible(size_trigger, timeout_ms=3_000):
+            size_btn = sel.locator(frame, size_key)
+            click_if_visible(size_btn, timeout_ms=3_000)
+
+        # Step 5: Bold
+        bold_btn = sel.locator(frame, "bold_button")
+        click_if_visible(bold_btn, timeout_ms=3_000)
+
+        # Step 6: Click paragraph to deselect text, then Enter to exit subtitle
+        last_para = sel.locator(frame, "editor_paragraph_container").last
+        last_para.click()
+        self._page.keyboard.press("Enter")
+
     def upload_file(self, path: str) -> None:
         """
         Upload a file via toolbar button.

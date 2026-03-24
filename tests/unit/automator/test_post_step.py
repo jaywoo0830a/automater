@@ -42,10 +42,16 @@ def test_featured_image_step_calls_upload_file(mock_editor):
     mock_editor.upload_file.assert_called_once_with("/some/thumb.jpg")
 
 
-def test_heading_step_calls_insert_text(mock_editor):
+def test_heading_step_calls_insert_heading(mock_editor):
     step = HeadingStep(level=2, text="Section title")
     step.execute(mock_editor)
-    mock_editor.insert_text.assert_called_once_with("Section title", 1)
+    mock_editor.insert_heading.assert_called_once_with("Section title", 2)
+
+
+def test_heading_step_passes_level(mock_editor):
+    step = HeadingStep(level=3, text="Sub section")
+    step.execute(mock_editor)
+    mock_editor.insert_heading.assert_called_once_with("Sub section", 3)
 
 
 def test_list_step_calls_insert_text(mock_editor):

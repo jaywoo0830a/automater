@@ -66,6 +66,16 @@ class BlogEditor(ABC):
         """Insert text at the current cursor position."""
 
     @abstractmethod
+    def insert_heading(self, text: str, level: int = 2) -> None:
+        """
+        Insert a heading with editor-native formatting.
+
+        Args:
+            text:  Heading text.
+            level: Heading level (2=소제목 in Naver, platform-specific).
+        """
+
+    @abstractmethod
     def upload_file(self, path: str) -> None:
         """Upload a file via the file chooser dialog."""
 
@@ -160,12 +170,12 @@ class FeaturedImageStep(PostStep):
 
 @dataclass(frozen=True)
 class HeadingStep(PostStep):
-    """Insert a heading as text."""
+    """Insert a heading with editor-native formatting."""
     level: int
     text:  str
 
     def execute(self, editor: BlogEditor) -> None:
-        editor.insert_text(self.text, 1)
+        editor.insert_heading(self.text, self.level)
 
 
 @dataclass(frozen=True)
