@@ -422,5 +422,125 @@
         "value": "button.__se-sentry.se-toolbar-option-icon-button.se-toolbar-option-insert-horizontal-line-line1-button"
       }
     ]
+  },
+  "quote_2": {
+    "description": "인용구 — 인용구 2 스타일",
+    "locators": [
+      {
+        "type": "role",
+        "value": "button",
+        "name": "인용구 2"
+      }
+    ]
+  },
+  "quote_3": {
+    "description": "인용구 — 인용구 3 스타일",
+    "locators": [
+      {
+        "type": "role",
+        "value": "button",
+        "name": "인용구 3"
+      }
+    ]
+  },
+  "quote_4": {
+    "description": "인용구 — 인용구 4 스타일",
+    "locators": [
+      {
+        "type": "role",
+        "value": "button",
+        "name": "인용구 4"
+      }
+    ]
+  },
+  "quote_5": {
+    "description": "인용구 — 인용구 5 스타일",
+    "locators": [
+      {
+        "type": "role",
+        "value": "button",
+        "name": "인용구 5"
+      }
+    ]
+  },
+  "quote_6": {
+    "description": "인용구 — 인용구 6 스타일",
+    "locators": [
+      {
+        "type": "role",
+        "value": "button",
+        "name": "인용구 6"
+      }
+    ]
+  },
+  "divider_1": {
+    "description": "구분선 — 구분선 1 스타일",
+    "locators": [
+      {
+        "type": "role",
+        "value": "button",
+        "name": "구분선 1"
+      }
+    ]
+  },
+  "divider_3": {
+    "description": "구분선 — 구분선 3 스타일",
+    "locators": [
+      {
+        "type": "role",
+        "value": "button",
+        "name": "구분선 3"
+      }
+    ]
+  },
+  "divider_4": {
+    "description": "구분선 — 구분선 4 스타일",
+    "locators": [
+      {
+        "type": "role",
+        "value": "button",
+        "name": "구분선 4"
+      }
+    ]
+  },
+  "divider_5": {
+    "description": "구분선 — 구분선 5 스타일",
+    "locators": [
+      {
+        "type": "role",
+        "value": "button",
+        "name": "구분선 5"
+      }
+    ]
+  },
+  "divider_6": {
+    "description": "구분선 — 구분선 6 스타일",
+    "locators": [
+      {
+        "type": "role",
+        "value": "button",
+        "name": "구분선 6"
+      }
+    ]
+  },
+  "divider_7": {
+    "description": "구분선 — 구분선 7 스타일",
+    "locators": [
+      {
+        "type": "role",
+        "value": "button",
+        "name": "구분선 7"
+      }
+    ]
+  },
+  "divider_8": {
+    "description": "구분선 — 구분선 8 스타일",
+    "locators": [
+      {
+        "type": "role",
+        "value": "button",
+        "name": "구분선 8"
+      }
+    ]
   }
 }
