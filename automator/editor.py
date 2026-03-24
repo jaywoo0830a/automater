@@ -76,6 +76,15 @@ class BlogEditor(ABC):
         """
 
     @abstractmethod
+    def insert_quote(self, text: str) -> None:
+        """
+        Insert a quote block with editor-native formatting.
+
+        Args:
+            text: Quote text.
+        """
+
+    @abstractmethod
     def upload_file(self, path: str) -> None:
         """Upload a file via the file chooser dialog."""
 
@@ -189,11 +198,11 @@ class ListStep(PostStep):
 
 @dataclass(frozen=True)
 class QuoteStep(PostStep):
-    """Insert a quote as formatted text."""
+    """Insert a quote with editor-native formatting."""
     text: str
 
     def execute(self, editor: BlogEditor) -> None:
-        editor.insert_text(self.text, 2)
+        editor.insert_quote(self.text)
 
 
 # ---------------------------------------------------------------------------

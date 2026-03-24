@@ -366,5 +366,33 @@
         "name": "34"
       }
     ]
+  },
+  "quote_trigger": {
+    "description": "툴바 — 인용구 선택 드롭다운",
+    "locators": [
+      {
+        "type": "role",
+        "value": "button",
+        "name": "인용구 선택"
+      },
+      {
+        "type": "css",
+        "value": "button.se-document-toolbar-select-option-button.se-text-icon-toolbar-select-option-button.__se-sentry"
+      }
+    ]
+  },
+  "quote_1": {
+    "description": "인용구 — 인용구 1 스타일",
+    "locators": [
+      {
+        "type": "css",
+        "value": "button.__se-sentry.se-toolbar-option-icon-button.se-toolbar-option-insert-quotation-default-button"
+      },
+      {
+        "type": "role",
+        "value": "button",
+        "name": "인용구 1"
+      }
+    ]
   }
 }

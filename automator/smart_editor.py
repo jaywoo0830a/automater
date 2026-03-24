@@ -253,6 +253,45 @@ class SmartEditorOne(BlogEditor):
         last_para.click()
         self._page.keyboard.press("Enter")
 
+    def insert_quote(self, text: str) -> None:
+        """
+        Insert a quote block with Naver SE One's native quote formatting.
+
+        Sequence (from interactive debug):
+            0. Click last paragraph to position cursor in body area
+            1. Click quote_trigger ("인용구 선택" dropdown)
+            2. Click quote_1 ("인용구 1" style) — cursor lands inside quote
+            3. Type text (cursor is already in quote content)
+            4. Click bottom of .se-content to exit quote → creates new paragraph
+
+        Falls back to insert_text for unsupported scenarios.
+        """
+        frame = self._frame()
+        sel   = self._sel()
+
+        # Step 0: Position cursor in body area
+        last_para = sel.locator(frame, "editor_paragraph_container").last
+        last_para.wait_for(state="visible", timeout=5_000)
+        last_para.click()
+
+        # Step 1: Open quote dropdown
+        trigger = sel.locator(frame, "quote_trigger")
+        if not click_if_visible(trigger, timeout_ms=3_000):
+            self.insert_text(text, 2)
+            return
+
+        # Step 2: Select "인용구 1" — cursor lands inside quote automatically
+        quote_btn = sel.locator(frame, "quote_1")
+        if not click_if_visible(quote_btn, timeout_ms=3_000):
+            self.insert_text(text, 2)
+            return
+
+        # Step 3: Type directly (cursor is already in quote content)
+        self._page.keyboard.type(text)
+
+        # Step 4: Click bottom of editor body to exit quote block
+        self._click_editor_bottom(frame)
+
     def upload_file(self, path: str) -> None:
         """
         Upload a file via toolbar button.
@@ -453,6 +492,22 @@ class SmartEditorOne(BlogEditor):
             else:
                 self._sel_cache = SelectorLoader.load(_EDITOR_JSON)
         return self._sel_cache
+
+    def _click_editor_bottom(self, frame) -> None:
+        """
+        Click the bottom of .se-content to create a new empty paragraph.
+
+        Used to exit quote/list blocks that trap the cursor.
+        Clicking below the last block in the editor body creates a new
+        normal paragraph and moves the cursor there.
+        """
+        editor_body = frame.locator(_EDITOR_BODY)
+        box = editor_body.bounding_box()
+        if box:
+            editor_body.click(position={
+                "x": box["width"] / 2,
+                "y": box["height"] - 5,
+            })
 
     def _frame(self):
         """Editor content frame — checks .se-content visibility (for editor actions)."""

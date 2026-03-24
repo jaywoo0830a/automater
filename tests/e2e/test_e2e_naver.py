@@ -22,7 +22,8 @@ from playwright.sync_api import Page
 from automator.config import browser_settings
 from automator.options import (
     AccountOption, TitleOption, KST,
-    HeadingBlock, ParagraphBlock, ImageBlock, FeaturedImageBlock, Section,
+    HeadingBlock, ParagraphBlock, ImageBlock, FeaturedImageBlock,
+    QuoteBlock, Section,
     PublishOption,
 )
 from automator.selector_loader import SelectorLoader
@@ -172,6 +173,58 @@ def test_pipeline_heading_with_image(editor: SmartEditorOne, account: AccountOpt
         account=account,
         title=TitleOption(fixed_title="소제목 + 이미지 테스트"),
         body=(Section(blocks=tuple(blocks)),),
+        publish=PublishOption(mode="immediate"),
+    )
+    _run_spec(spec, editor)
+
+
+# ---------------------------------------------------------------------------
+# Pipeline: quote
+# ---------------------------------------------------------------------------
+
+@pytest.mark.slow
+def test_pipeline_quote_only(editor: SmartEditorOne, account: AccountOption):
+    """인용구만 삽입 — 인용구 서식 적용 + 다음 단락으로 빠져나오는지 확인."""
+    spec = PostingSpec(
+        account=account,
+        title=TitleOption(fixed_title="인용구 테스트"),
+        body=(Section(blocks=(
+            QuoteBlock(text="교육의 목적은 시험이 아니다"),
+            ParagraphBlock(prompt="인용구 아래 일반 본문"),
+        )),),
+        publish=PublishOption(mode="immediate"),
+    )
+    _run_spec(spec, editor)
+
+
+@pytest.mark.slow
+def test_pipeline_quote_with_heading(editor: SmartEditorOne, account: AccountOption):
+    """소제목 + 본문 + 인용구 + 본문 — 혼합 레이아웃."""
+    spec = PostingSpec(
+        account=account,
+        title=TitleOption(fixed_title="소제목 + 인용구 혼합 테스트"),
+        body=(Section(blocks=(
+            HeadingBlock(level=2, text="명언 모음"),
+            ParagraphBlock(prompt="명언을 소개하는 도입부"),
+            QuoteBlock(text="여행은 살아있는 교육이다"),
+            ParagraphBlock(prompt="명언에 대한 감상을 작성해줘"),
+        )),),
+        publish=PublishOption(mode="immediate"),
+    )
+    _run_spec(spec, editor)
+
+
+@pytest.mark.slow
+def test_pipeline_multiple_quotes(editor: SmartEditorOne, account: AccountOption):
+    """인용구 2개 연속 — 각각 독립적으로 서식이 적용되는지 확인."""
+    spec = PostingSpec(
+        account=account,
+        title=TitleOption(fixed_title="연속 인용구 테스트"),
+        body=(Section(blocks=(
+            QuoteBlock(text="첫 번째 인용구"),
+            QuoteBlock(text="두 번째 인용구"),
+            ParagraphBlock(prompt="인용구 아래 마무리 본문"),
+        )),),
         publish=PublishOption(mode="immediate"),
     )
     _run_spec(spec, editor)

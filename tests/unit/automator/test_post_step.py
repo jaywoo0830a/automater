@@ -60,10 +60,10 @@ def test_list_step_calls_insert_text(mock_editor):
     mock_editor.insert_text.assert_called_once_with("- item1\n- item2", 2)
 
 
-def test_quote_step_calls_insert_text(mock_editor):
+def test_quote_step_calls_insert_quote(mock_editor):
     step = QuoteStep(text="wise words")
     step.execute(mock_editor)
-    mock_editor.insert_text.assert_called_once_with("wise words", 2)
+    mock_editor.insert_quote.assert_called_once_with("wise words")
 
 
 # ---------------------------------------------------------------------------
