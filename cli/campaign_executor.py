@@ -19,7 +19,7 @@ from automator.runner import JobRunner
 from automator.title_generator import generate_title
 
 from cli.combo_builder import Combo, build_combos
-from cli.spec_builder import build_spec
+from cli.spec_builder import build_spec, merge_account_run
 
 logger = logging.getLogger(__name__)
 
@@ -150,10 +150,12 @@ class CampaignExecutor:
         assignments = assign_round_robin(combos, config["accounts"])
         result = ExecutionResult()
 
-        interval = self._parse_interval(config.get("run", {}))
+        global_run = config.get("run", {})
 
         for account, assigned_combos in assignments:
             account_idx = config["accounts"].index(account)
+            merged_run = merge_account_run(global_run, account)
+            interval = self._parse_interval(merged_run)
             self._execute_batch(
                 combos=assigned_combos,
                 config=config,

@@ -15,6 +15,7 @@ Post block parsing rules (from 00_spec.yaml):
 from __future__ import annotations
 
 import re
+from datetime import datetime, timedelta, timezone
 from pathlib import PurePosixPath
 from typing import Any
 
@@ -54,16 +55,16 @@ def build_spec(
     """
     Build a PostingSpec from a Combo and campaign config dict.
 
-    Args:
-        combo:         One keyword×title combination.
-        config:        Full campaign config (from load_config).
-        account_index: Which account to use (default first).
+    Account-level keys (headless, interval, etc.) override global run config.
     """
-    account_opt = _build_account(config["accounts"][account_index])
+    account_dict = config["accounts"][account_index]
+    account_opt = _build_account(account_dict)
     title_opt = _build_title(combo, config)
     body = _build_body(combo, config)
     publish_opt = _build_publish(config.get("publish", {}))
-    run_setting = _build_run(config.get("run", {}))
+
+    run_config = merge_account_run(config.get("run", {}), account_dict)
+    run_setting = _build_run(run_config)
 
     return PostingSpec(
         account=account_opt,
@@ -296,14 +297,92 @@ def _resolve_path(images_dir: str, filename: str) -> str:
 
 
 def _build_publish(publish_config: dict[str, Any]) -> PublishOption:
-    """Build PublishOption — immediate mode for CLI."""
+    """Build PublishOption from config dict with schedule parsing."""
     if not publish_config:
         return PublishOption(mode="immediate")
+
+    schedule = parse_schedule(publish_config.get("schedule"))
+
     return PublishOption(
-        mode="immediate",
+        mode=schedule["mode"],
+        at=schedule.get("at"),
+        jitter_minutes=schedule.get("jitter_minutes", 30),
         tags=list(publish_config.get("tags", [])),
         visibility=publish_config.get("visibility", "public"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Schedule parsing
+# ---------------------------------------------------------------------------
+
+_RANDOM_RE = re.compile(r"random\s*[±+\-]\s*(\d+)\s*min", re.IGNORECASE)
+_FIXED_RE = re.compile(r"fixed\s+(\d{1,2}):(\d{2})", re.IGNORECASE)
+
+_KST = timezone(timedelta(hours=9))
+
+
+def parse_schedule(raw: Any) -> dict[str, Any]:
+    """
+    Parse a schedule string into mode, at, jitter_minutes.
+
+    Formats:
+        immediate      → mode="immediate"
+        fixed HH:MM    → mode="fixed", at=today HH:MM KST
+        random ±Nmin   → mode="random_window", jitter_minutes=N, at=now KST
+        None / ""      → mode="immediate"
+    """
+    if not raw:
+        return {"mode": "immediate", "at": None}
+
+    s = str(raw).strip().lower()
+
+    if s == "immediate" or not s:
+        return {"mode": "immediate", "at": None}
+
+    fixed_match = _FIXED_RE.match(s)
+    if fixed_match:
+        hour, minute = int(fixed_match.group(1)), int(fixed_match.group(2))
+        now = datetime.now(tz=_KST)
+        at = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if at <= now:
+            at += timedelta(days=1)
+        return {"mode": "fixed", "at": at, "jitter_minutes": 0}
+
+    random_match = _RANDOM_RE.match(s)
+    if random_match:
+        jitter = int(random_match.group(1))
+        now = datetime.now(tz=_KST)
+        return {"mode": "random_window", "at": now, "jitter_minutes": jitter}
+
+    return {"mode": "immediate", "at": None}
+
+
+# ---------------------------------------------------------------------------
+# Account override
+# ---------------------------------------------------------------------------
+
+_ACCOUNT_IDENTITY_KEYS = {
+    "username", "password", "blog_id", "session", "proxy",
+    "proxies", "meta", "platform", "api_url", "api_key",
+}
+
+
+def merge_account_run(
+    global_run: dict[str, Any],
+    account: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Merge account-level overrides into global run config.
+
+    Account keys that are identity fields (username, password, etc.)
+    are excluded. Everything else overrides the global value.
+    """
+    merged = dict(global_run)
+    for key, value in account.items():
+        if key not in _ACCOUNT_IDENTITY_KEYS:
+            merged[key] = value
+    return merged
 
 
 def _build_run(run_config: dict[str, Any]) -> RunSetting:
