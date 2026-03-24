@@ -292,6 +292,37 @@ class SmartEditorOne(BlogEditor):
         # Step 4: Click bottom of editor body to exit quote block
         self._click_editor_bottom(frame)
 
+    def insert_divider(self) -> None:
+        """
+        Insert a horizontal divider with Naver SE One's native formatting.
+
+        Sequence:
+            0. Click last paragraph to position cursor in body area
+            1. Click divider_trigger ("구분선 선택" dropdown)
+            2. Click divider_2 ("구분선 2" style)
+            3. Click bottom of editor body to exit divider
+        """
+        frame = self._frame()
+        sel   = self._sel()
+
+        # Step 0: Position cursor in body area
+        last_para = sel.locator(frame, "editor_paragraph_container").last
+        last_para.wait_for(state="visible", timeout=5_000)
+        last_para.click()
+
+        # Step 1: Open divider dropdown
+        trigger = sel.locator(frame, "divider_trigger")
+        if not click_if_visible(trigger, timeout_ms=3_000):
+            return
+
+        # Step 2: Select "구분선 2"
+        divider_btn = sel.locator(frame, "divider_2")
+        if not click_if_visible(divider_btn, timeout_ms=3_000):
+            return
+
+        # Step 3: Click bottom of editor to exit
+        self._click_editor_bottom(frame)
+
     def upload_file(self, path: str) -> None:
         """
         Upload a file via toolbar button.

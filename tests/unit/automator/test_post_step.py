@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 from automator.editor import (
     BlogEditor,
     ParagraphStep, ImageStep, FeaturedImageStep, HeadingStep,
-    ListStep, QuoteStep,
+    ListStep, QuoteStep, DividerStep,
 )
 
 
@@ -100,3 +100,17 @@ def test_heading_step_no_upload_delay():
 
 def test_heading_step_not_representative():
     assert not HeadingStep(level=1, text="x").marks_representative
+
+
+def test_divider_step_calls_insert_divider(mock_editor):
+    step = DividerStep()
+    step.execute(mock_editor)
+    mock_editor.insert_divider.assert_called_once()
+
+
+def test_divider_step_no_upload_delay():
+    assert not DividerStep().needs_upload_delay
+
+
+def test_divider_step_not_representative():
+    assert not DividerStep().marks_representative

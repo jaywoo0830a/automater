@@ -23,7 +23,7 @@ from automator.config import browser_settings
 from automator.options import (
     AccountOption, TitleOption, KST,
     HeadingBlock, ParagraphBlock, ImageBlock, FeaturedImageBlock,
-    QuoteBlock, Section,
+    QuoteBlock, DividerBlock, Section,
     PublishOption,
 )
 from automator.selector_loader import SelectorLoader
@@ -224,6 +224,46 @@ def test_pipeline_multiple_quotes(editor: SmartEditorOne, account: AccountOption
             QuoteBlock(text="첫 번째 인용구"),
             QuoteBlock(text="두 번째 인용구"),
             ParagraphBlock(prompt="인용구 아래 마무리 본문"),
+        )),),
+        publish=PublishOption(mode="immediate"),
+    )
+    _run_spec(spec, editor)
+
+
+# ---------------------------------------------------------------------------
+# Pipeline: divider
+# ---------------------------------------------------------------------------
+
+@pytest.mark.slow
+def test_pipeline_divider_between_paragraphs(editor: SmartEditorOne, account: AccountOption):
+    """본문 + 구분선 + 본문 — 구분선이 삽입되고 다음 단락이 정상 입력되는지 확인."""
+    spec = PostingSpec(
+        account=account,
+        title=TitleOption(fixed_title="구분선 테스트"),
+        body=(Section(blocks=(
+            ParagraphBlock(prompt="구분선 위 본문"),
+            DividerBlock(),
+            ParagraphBlock(prompt="구분선 아래 본문"),
+        )),),
+        publish=PublishOption(mode="immediate"),
+    )
+    _run_spec(spec, editor)
+
+
+@pytest.mark.slow
+def test_pipeline_divider_with_heading_and_quote(editor: SmartEditorOne, account: AccountOption):
+    """소제목 + 본문 + 구분선 + 인용구 — 전체 레이아웃 혼합."""
+    spec = PostingSpec(
+        account=account,
+        title=TitleOption(fixed_title="혼합 레이아웃 테스트"),
+        body=(Section(blocks=(
+            HeadingBlock(level=2, text="첫 번째 섹션"),
+            ParagraphBlock(prompt="첫 번째 본문"),
+            DividerBlock(),
+            QuoteBlock(text="섹션 사이 인용구"),
+            DividerBlock(),
+            HeadingBlock(level=3, text="두 번째 섹션"),
+            ParagraphBlock(prompt="두 번째 본문"),
         )),),
         publish=PublishOption(mode="immediate"),
     )

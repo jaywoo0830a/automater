@@ -85,6 +85,10 @@ class BlogEditor(ABC):
         """
 
     @abstractmethod
+    def insert_divider(self) -> None:
+        """Insert a horizontal divider with editor-native formatting."""
+
+    @abstractmethod
     def upload_file(self, path: str) -> None:
         """Upload a file via the file chooser dialog."""
 
@@ -203,6 +207,14 @@ class QuoteStep(PostStep):
 
     def execute(self, editor: BlogEditor) -> None:
         editor.insert_quote(self.text)
+
+
+@dataclass(frozen=True)
+class DividerStep(PostStep):
+    """Insert a horizontal divider."""
+
+    def execute(self, editor: BlogEditor) -> None:
+        editor.insert_divider()
 
 
 # ---------------------------------------------------------------------------

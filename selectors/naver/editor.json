@@ -394,5 +394,33 @@
         "name": "인용구 1"
       }
     ]
+  },
+  "divider_trigger": {
+    "description": "툴바 — 구분선 선택 드롭다운",
+    "locators": [
+      {
+        "type": "role",
+        "value": "button",
+        "name": "구분선 선택"
+      },
+      {
+        "type": "css",
+        "value": "button.se-document-toolbar-select-option-button.se-text-icon-toolbar-select-option-button.__se-sentry"
+      }
+    ]
+  },
+  "divider_2": {
+    "description": "구분선 — 구분선 2 스타일",
+    "locators": [
+      {
+        "type": "role",
+        "value": "button",
+        "name": "구분선 2"
+      },
+      {
+        "type": "css",
+        "value": "button.__se-sentry.se-toolbar-option-icon-button.se-toolbar-option-insert-horizontal-line-line1-button"
+      }
+    ]
   }
 }

@@ -28,6 +28,7 @@ from automator.editor import (
     HeadingStep,
     ListStep,
     QuoteStep,
+    DividerStep,
 )
 from automator.options import (
     Block,
@@ -172,10 +173,10 @@ class QuoteHandler(BlockHandler):
 
 
 class DividerHandler(BlockHandler):
-    """DividerBlock -> [] (no editor primitive for dividers yet)"""
+    """DividerBlock -> [DividerStep]"""
 
     def to_steps(self, block: DividerBlock, ctx: ContentContext) -> list[PostStep]:
-        return []
+        return [DividerStep()]
 
 
 # ---------------------------------------------------------------------------
