@@ -83,7 +83,8 @@ def test_stub_cycles_beyond_paragraph_count(monkeypatch):
 
 
 def test_generate_does_not_call_api_in_dev():
-    with patch("automator.paragraph_generator._call_api") as mock_api:
+    with patch("automator.paragraph_generator.is_production", return_value=False), \
+         patch("automator.paragraph_generator._call_api") as mock_api:
         generate_paragraphs("p", 1)
     mock_api.assert_not_called()
 

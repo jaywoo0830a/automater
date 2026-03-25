@@ -193,6 +193,19 @@ class CampaignExecutor:
         account = config["accounts"][account_idx]
         username = account["username"]
 
+        # Create editor once per account batch (not per spec)
+        editor = None
+        if not dry_run and self._editor_factory is not None:
+            try:
+                editor = self._editor_factory(account)
+            except Exception as exc:
+                logger.error("[FAIL] %s | editor init: %s", username, exc)
+                for _ in combos:
+                    result.total_attempted += 1
+                    result.total_failed += 1
+                    result.errors.append(str(exc))
+                return
+
         for i, combo in enumerate(combos):
             result.total_attempted += 1
 
@@ -205,7 +218,7 @@ class CampaignExecutor:
                     result.total_succeeded += 1
                     continue
 
-                self._run_spec(spec, account)
+                self._run_spec(spec, editor)
                 result.total_succeeded += 1
 
             except Exception as exc:
@@ -216,12 +229,11 @@ class CampaignExecutor:
             if not dry_run and i < len(combos) - 1 and interval > 0:
                 time.sleep(interval)
 
-    def _run_spec(self, spec: PostingSpec, account: dict[str, Any]) -> None:
+    def _run_spec(self, spec: PostingSpec, editor: BlogEditor) -> None:
         if self._runner is None:
             raise RuntimeError("JobRunner not provided")
-        if self._editor_factory is None:
-            raise RuntimeError("editor_factory not provided")
-        editor = self._editor_factory(account)
+        if editor is None:
+            raise RuntimeError("editor not initialized")
         self._runner.run(spec, editor)
 
     @staticmethod
