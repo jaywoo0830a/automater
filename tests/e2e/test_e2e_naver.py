@@ -361,3 +361,174 @@ def test_pipeline_real_publish(page: Page, account: AccountOption, real_run: boo
         publish=PublishOption(mode="scheduled", at=_schedule()),
     )
     _run_spec(spec, editor, real=True)
+
+
+# ---------------------------------------------------------------------------
+# DSL pipeline — CLI config → PostingSpec → editor
+# ---------------------------------------------------------------------------
+
+@pytest.mark.slow
+def test_pipeline_dsl_full_blocks(editor: SmartEditorOne, account: AccountOption):
+    """
+    DSL-style post: image + divider + thumbnail + divider + quote + paragraph.
+
+    Mimics a real campaign YAML config. dry_run=True — popover opens but
+    confirm is skipped.
+    """
+    image = _asset("images", 0)
+    thumb = _asset("thumbnails", 0)
+
+    blocks: list = [
+        ParagraphBlock(prompt="강남 중등 수학과외를 홍보하는 블로그 글"),
+    ]
+    if image:
+        blocks.insert(0, ImageBlock(path=image))
+        blocks.insert(1, DividerBlock())
+    if thumb:
+        blocks.append(DividerBlock())
+        blocks.append(FeaturedImageBlock(
+            path=thumb,
+            overlay_text="강남 수학과외",
+            overlay_background=0.5,
+            overlay_position="bottom",
+        ))
+    blocks.append(QuoteBlock(text="강남 중등 수학과외 즉시 가능"))
+
+    spec = PostingSpec(
+        account=account,
+        title=TitleOption(fixed_title="DSL 풀블록 E2E 테스트"),
+        body=(Section(blocks=tuple(blocks)),),
+        publish=PublishOption(mode="scheduled", at=_schedule()),
+    )
+    _run_spec(spec, editor)
+
+
+# ---------------------------------------------------------------------------
+# Consecutive posts — same editor, 2 posts back-to-back
+# ---------------------------------------------------------------------------
+
+@pytest.mark.slow
+def test_pipeline_consecutive_scheduled(editor: SmartEditorOne, account: AccountOption):
+    """
+    Two posts on the same editor instance — verifies cursor restoration
+    after set_representative_media and publish popover flow.
+
+    dry_run=True — popover opens but confirm is skipped.
+    """
+    thumb = _asset("thumbnails", 0)
+    schedule = _schedule()
+
+    for i in range(2):
+        blocks: list = [
+            ParagraphBlock(prompt=f"연속 발행 테스트 #{i+1}"),
+        ]
+        if thumb:
+            blocks.append(FeaturedImageBlock(
+                path=thumb,
+                overlay_text=f"테스트 #{i+1}",
+                overlay_background=0.4,
+                overlay_position="bottom",
+            ))
+
+        spec = PostingSpec(
+            account=account,
+            title=TitleOption(fixed_title=f"연속 발행 E2E #{i+1}"),
+            body=(Section(blocks=tuple(blocks)),),
+            publish=PublishOption(mode="scheduled", at=schedule),
+        )
+        _run_spec(spec, editor)
+
+
+@pytest.mark.slow
+def test_pipeline_consecutive_real_publish(
+    page: Page, account: AccountOption, real_run: bool,
+):
+    """
+    Two real scheduled posts back-to-back — --real-run flag required.
+
+    Verifies:
+        - _wait_for_publish_complete() lets page transition finish
+        - editor.open() reloads cleanly for the second post
+        - set_representative_media() restores cursor to body
+        - publish trigger opens on both posts
+    """
+    if not real_run:
+        pytest.skip("--real-run 플래그 없음")
+
+    thumb = _asset("thumbnails", 0)
+    schedule = _schedule()
+
+    write_url = f"https://blog.naver.com/{account.meta['blog_id']}?Redirect=Write&"
+    editor    = SmartEditorOne(page, write_url, dry_run=False)
+
+    for i in range(2):
+        blocks: list = [
+            ParagraphBlock(prompt=f"연속 실발행 테스트 #{i+1}"),
+        ]
+        if thumb:
+            blocks.append(FeaturedImageBlock(
+                path=thumb,
+                overlay_text=f"실발행 #{i+1}",
+                overlay_background=0.5,
+                overlay_position="bottom",
+            ))
+
+        spec = PostingSpec(
+            account=account,
+            title=TitleOption(fixed_title=f"연속 실발행 E2E #{i+1}"),
+            body=(Section(blocks=tuple(blocks)),),
+            publish=PublishOption(mode="scheduled", at=schedule),
+        )
+        _run_spec(spec, editor, real=True)
+
+
+
+# ---------------------------------------------------------------------------
+# Long paragraph — real Gemini API → browser rendering
+# ---------------------------------------------------------------------------
+
+@pytest.mark.slow
+def test_pipeline_long_paragraph_real_gemini(
+    page: Page, account: AccountOption, real_run: bool,
+):
+    """
+    Real Gemini API → 3500+ char response → browser rendering.
+
+    --real-run required. Calls Gemini with the exact DSL prompt,
+    then types the full response into the editor and publishes.
+    """
+    if not real_run:
+        pytest.skip("--real-run 플래그 없음")
+
+    thumb = _asset("thumbnails", 0)
+
+    blocks: list = []
+    if thumb:
+        blocks.append(FeaturedImageBlock(
+            path=thumb,
+            overlay_text="강남 수학과외",
+            overlay_background=0.5,
+            overlay_position="bottom",
+        ))
+        blocks.append(DividerBlock())
+    blocks.append(QuoteBlock(text="강남 중등 수학과외 즉시 가능"))
+    blocks.append(ParagraphBlock(
+        prompt=(
+            "블로그에 글을 적을 껀데 학생의 성향별 수학과외의 후기 형식의 "
+            "긴 글이 필요해요. 조건이 있어요. 먼저, 글 초반에는 "
+            "강남 중등 수학과외라는 문구가 모두 합쳐서 4번 이상 들어가야 해요. "
+            "그리고 글의 길이는 딱 3500자가 필요해요. "
+            "글의 톤은 친절하고 따뜻한 느낌이었으면 좋겠습니다."
+        ),
+    ))
+
+    write_url = f"https://blog.naver.com/{account.meta['blog_id']}?Redirect=Write&"
+    editor    = SmartEditorOne(page, write_url, dry_run=False)
+
+    spec = PostingSpec(
+        account=account,
+        title=TitleOption(fixed_title="Gemini 장문 E2E 실발행"),
+        body=(Section(blocks=tuple(blocks)),),
+        publish=PublishOption(mode="scheduled", at=_schedule()),
+    )
+    _run_spec(spec, editor, real=True)

@@ -162,30 +162,36 @@ def _parse(raw: str, count: int) -> list[str]:
         - Markdown fences around JSON
         - Literal newlines inside JSON strings (Gemini quirk)
         - Truncated responses (max_output_tokens hit mid-string)
+        - Gemini splitting one paragraph into many array elements:
+          when count=1 but API returns N elements, join them all
     """
     clean = re.sub(r"```(?:json)?\s*|\s*```", "", raw).strip()
-
-    # Gemini often emits literal newlines inside JSON strings,
-    # which is invalid JSON. Escape them before parsing.
     sanitized = _escape_newlines_in_json(clean)
 
-    # Try exact match first
-    match = re.search(r"\[.*\]", sanitized, re.DOTALL)
+    parsed = _try_parse_json_array(sanitized)
+
+    if parsed is not None:
+        return _fit_to_count(parsed, count)
+
+    raise ValueError(f"No JSON array found in response: {raw!r:.200s}")
+
+
+def _try_parse_json_array(text: str) -> list[str] | None:
+    """Try to extract a JSON string array from text. Returns None on failure."""
+    # Exact match
+    match = re.search(r"\[.*\]", text, re.DOTALL)
     if match:
         try:
             parsed = json.loads(match.group())
             if isinstance(parsed, list):
-                result = [str(p) for p in parsed if str(p).strip()]
-                while len(result) < count:
-                    result.append(f"(단락 {len(result) + 1} 생성 실패)")
-                return result[:count]
+                return [str(p) for p in parsed if str(p).strip()]
         except json.JSONDecodeError:
             pass
 
-    # Truncated array repair: find '[' and close it
-    bracket = sanitized.find("[")
+    # Truncated array repair
+    bracket = text.find("[")
     if bracket >= 0:
-        fragment = sanitized[bracket:]
+        fragment = text[bracket:]
         if fragment.count('"') % 2 == 1:
             fragment += '"'
         if not fragment.rstrip().endswith("]"):
@@ -193,14 +199,31 @@ def _parse(raw: str, count: int) -> list[str]:
         try:
             parsed = json.loads(fragment)
             if isinstance(parsed, list):
-                result = [str(p) for p in parsed if str(p).strip()]
-                while len(result) < count:
-                    result.append(f"(단락 {len(result) + 1} 생성 실패)")
-                return result[:count]
+                return [str(p) for p in parsed if str(p).strip()]
         except json.JSONDecodeError:
             pass
 
-    raise ValueError(f"No JSON array found in response: {raw!r:.200s}")
+    return None
+
+
+def _fit_to_count(paragraphs: list[str], count: int) -> list[str]:
+    """
+    Fit parsed paragraphs to the requested count.
+
+    When count=1 but Gemini returned multiple elements (common for
+    long-form prompts), join them all into one text with paragraph
+    breaks so the full content is preserved.
+    """
+    if not paragraphs:
+        return [f"(단락 {i + 1} 생성 실패)" for i in range(count)]
+
+    if count == 1 and len(paragraphs) > 1:
+        return ["\n\n".join(paragraphs)]
+
+    result = list(paragraphs)
+    while len(result) < count:
+        result.append(f"(단락 {len(result) + 1} 생성 실패)")
+    return result[:count]
 
 
 def _escape_newlines_in_json(text: str) -> str:

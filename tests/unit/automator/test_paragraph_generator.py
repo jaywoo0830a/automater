@@ -114,6 +114,22 @@ def test_parse_truncates_long_response():
     assert result == ["a", "b"]
 
 
+def test_parse_count_one_joins_all_elements():
+    """When count=1 but API returns many, join them all."""
+    result = _parse('["first", "second", "third"]', 1)
+    assert len(result) == 1
+    assert "first" in result[0]
+    assert "second" in result[0]
+    assert "third" in result[0]
+    assert "\n\n" in result[0]
+
+
+def test_parse_count_one_single_element():
+    """When count=1 and API returns exactly 1, no join needed."""
+    result = _parse('["only one"]', 1)
+    assert result == ["only one"]
+
+
 def test_parse_raises_on_no_json():
     with pytest.raises(ValueError, match="No JSON"):
         _parse("no json here", 1)
