@@ -70,6 +70,12 @@ class TestFeaturedImageBlockDefaults:
     def test_saturation_shift_default(self):
         assert FeaturedImageBlock().saturation_shift == 0.30
 
+    def test_hue_shift_default(self):
+        assert FeaturedImageBlock().hue_shift == 0.03
+
+    def test_brightness_shift_default(self):
+        assert FeaturedImageBlock().brightness_shift == 0.05
+
     def test_overlay_text_default(self):
         assert FeaturedImageBlock().overlay_text == ""
 
@@ -200,6 +206,45 @@ class TestProcessFeatured:
         )
         result = process_featured(_jpeg(200, 200), block)
         assert result[:2] == b"\xff\xd8"
+
+    def test_hue_shift_changes_colors(self):
+        """hue_shift > 0 produces different pixel colors."""
+        no_hue = FeaturedImageBlock(
+            pixel_jitter=False, size_jitter_px=0, saturation_shift=0.0,
+            hue_shift=0.0, brightness_shift=0.0,
+        )
+        with_hue = FeaturedImageBlock(
+            pixel_jitter=False, size_jitter_px=0, saturation_shift=0.0,
+            hue_shift=0.5, brightness_shift=0.0,
+        )
+        img = _jpeg(100, 100, color=(200, 100, 50))
+        result_no  = process_featured(img, no_hue)
+        result_yes = process_featured(img, with_hue)
+        assert result_no != result_yes
+
+    def test_hue_shift_zero_preserves(self):
+        block = FeaturedImageBlock(
+            pixel_jitter=False, size_jitter_px=0, saturation_shift=0.0,
+            hue_shift=0.0, brightness_shift=0.0, exif_optimization=False,
+        )
+        img = _jpeg(100, 100)
+        r1 = process_featured(img, block)
+        r2 = process_featured(img, block)
+        assert r1 == r2
+
+    def test_brightness_shift_changes_output(self):
+        no_br = FeaturedImageBlock(
+            pixel_jitter=False, size_jitter_px=0, saturation_shift=0.0,
+            hue_shift=0.0, brightness_shift=0.0,
+        )
+        with_br = FeaturedImageBlock(
+            pixel_jitter=False, size_jitter_px=0, saturation_shift=0.0,
+            hue_shift=0.0, brightness_shift=0.5,
+        )
+        img = _jpeg(100, 100, color=(150, 150, 150))
+        result_no  = process_featured(img, no_br)
+        result_yes = process_featured(img, with_br)
+        assert result_no != result_yes
 
 
 # ---------------------------------------------------------------------------

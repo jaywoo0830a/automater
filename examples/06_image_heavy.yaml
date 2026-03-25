@@ -42,7 +42,7 @@ post:
 images: ./photos
 
 publish:
-  schedule: now + 30~60m
+  schedule: 'now + 30m ~ 60m'
   tags: [맛집, 카페, 핫플]
 
 run:

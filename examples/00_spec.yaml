@@ -61,11 +61,21 @@
 #   - thumbnail:
 #       src: thumb.jpg
 #       overlay: "{keyword:region} 과외"
-#       color: "#FFD700"          # 텍스트 색상 (기본 #FFFFFF)
-#       background: 0.6           # 반투명 배너 (0.0~1.0, 기본 0.0=없음)
-#       position: bottom          # top / center / bottom (기본 center)
-#       gps: [37.497, 127.027]    # GPS 좌표
-#       filename: "gangnam-tutor" # 파일명 키워드
+#       color: "#FFD700"            # 텍스트 색상 (기본 #FFFFFF)
+#       background: 0.6             # 반투명 배너 (0.0~1.0, 기본 0.0=없음)
+#       position: bottom            # top / center / bottom (기본 center)
+#       hue_shift: 0.03             # 색조 랜덤 회전 (±, 기본 0.03)
+#       hue_shift: "0.1 ~ 0.3"     # 범위 문법: 조합마다 0.1~0.3 사이 랜덤
+#       saturation_shift: "0.5 ~ 1.5"  # 채도 (기본 0.30)
+#       brightness_shift: 0.05      # 밝기 (±, 기본 0.05)
+#       brightness_shift: "0.05 ~ 0.15"  # 범위 문법
+#       gps: [37.497, 127.027]      # GPS 좌표
+#       filename: "gangnam-tutor"   # 파일명 키워드
+#
+# ── 기본 jitter (모든 이미지 공통, DSL 없이 자동 적용)
+#   pixel_jitter: true     # 1~3 픽셀 RGB 미세 변경
+#   size_jitter_px: 2      # ±2px 리사이즈
+#   saturation_jitter: 0.03 (본문) / saturation_shift: 0.30 (썸네일)
 #
 # ── quote (인용구)
 #   - quote: "인용문"
@@ -98,7 +108,7 @@
 # publish (선택)
 # ═══════════════════════════════════════════════════════════
 #
-# schedule: now | now + 15s | now + 15m | now + 1h | now + 1d | now + 30~60m
+# schedule: 'now' | 'now + 15s' | 'now + 15m' | 'now + 1h' | 'now + 1d' | 'now + 15m ~ 30m'
 
 # ═══════════════════════════════════════════════════════════
 # run (선택)

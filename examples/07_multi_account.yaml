@@ -44,7 +44,7 @@ post:
 images: ./images
 
 publish:
-  schedule: now + 1h
+  schedule: 'now + 1h'
   tags: [교육, 과외]
 
 run:

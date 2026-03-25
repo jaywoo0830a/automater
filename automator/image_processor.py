@@ -64,12 +64,14 @@ def process_featured(src: bytes, block: FeaturedImageBlock) -> bytes:
     """
     대표 이미지 변환 파이프라인.
 
-    size_jitter → pixel_jitter → saturation_shift → overlay → exif optimization
+    size_jitter → pixel_jitter → saturation → hue → brightness → overlay → exif
     """
     img = Image.open(io.BytesIO(src)).convert("RGB")
     img = _apply_size_jitter(img, block.size_jitter_px)
     img = _apply_pixel_jitter(img, block.pixel_jitter)
     img = _apply_saturation(img, block.saturation_shift)
+    img = _apply_hue_shift(img, block.hue_shift)
+    img = _apply_brightness(img, block.brightness_shift)
     img = _apply_text_overlay(
         img,
         text=block.overlay_text,
@@ -139,6 +141,31 @@ def _apply_saturation(img: Image.Image, jitter: float) -> Image.Image:
     from PIL import ImageEnhance
     factor = max(0.0, 1.0 + random.uniform(-jitter, jitter))
     return ImageEnhance.Color(img).enhance(factor)
+
+
+def _apply_hue_shift(img: Image.Image, shift: float) -> Image.Image:
+    """
+    Rotate hue by a random amount within ±shift (0.0~1.0 = 0~360°).
+
+    Converts RGB → HSV, shifts hue channel, converts back.
+    Pure Pillow — no numpy dependency.
+    """
+    if shift <= 0.0:
+        return img
+    offset = random.uniform(-shift, shift)
+    hsv = img.convert("HSV")
+    h, s, v = hsv.split()
+    h = h.point(lambda p: (p + int(offset * 255)) % 256)
+    return Image.merge("HSV", (h, s, v)).convert("RGB")
+
+
+def _apply_brightness(img: Image.Image, shift: float) -> Image.Image:
+    """Randomly adjust brightness within ±shift factor."""
+    if shift <= 0.0:
+        return img
+    from PIL import ImageEnhance
+    factor = max(0.1, 1.0 + random.uniform(-shift, shift))
+    return ImageEnhance.Brightness(img).enhance(factor)
 
 
 def _apply_text_overlay(

@@ -282,6 +282,9 @@ def _parse_thumbnail(
             overlay_background=float(cfg.get("background", 0.0)),
             overlay_position=str(cfg.get("position", "center")),
             exif_optimization=exif_opt,
+            saturation_shift=_parse_shift(cfg.get("saturation_shift"), 0.30),
+            hue_shift=_parse_shift(cfg.get("hue_shift"), 0.03),
+            brightness_shift=_parse_shift(cfg.get("brightness_shift"), 0.05),
             exif_description=str(cfg.get("exif_desc", "")),
             exif_gps_lat=gps_lat,
             exif_gps_lng=gps_lng,
@@ -329,6 +332,33 @@ def _parse_list(
 # Helpers
 # ---------------------------------------------------------------------------
 
+_SHIFT_RANGE_RE = re.compile(
+    r"([\d.]+)\s*~\s*([\d.]+)",
+)
+
+
+def _parse_shift(value: Any, default: float) -> float:
+    """
+    Parse a shift value — fixed float or range string.
+
+        0.03        → 0.03
+        "0.1 ~ 0.3" → random.uniform(0.1, 0.3)
+    """
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return float(value)
+    s = str(value).strip()
+    m = _SHIFT_RANGE_RE.match(s)
+    if m:
+        lo, hi = float(m.group(1)), float(m.group(2))
+        return random.uniform(lo, hi)
+    try:
+        return float(s)
+    except ValueError:
+        return default
+
+
 def _resolve_path(images_dir: str, filename: str) -> str:
     if not filename:
         return ""
@@ -345,11 +375,12 @@ _KST = timezone(timedelta(hours=9))
 
 _UNIT_MAP = {"s": 1, "m": 60, "h": 3600, "d": 86400}
 
-# now + 30~60m  or  now + 30m
+# now + 15m ~ 30m  (range with unit on each side)
 _RANGE_RE = re.compile(
-    r"now\s*\+\s*(\d+)\s*~\s*(\d+)\s*([smhd])",
+    r"now\s*\+\s*(\d+)\s*([smhd])\s*~\s*(\d+)\s*([smhd])",
     re.IGNORECASE,
 )
+# now + 15m  (fixed offset)
 _OFFSET_RE = re.compile(
     r"now\s*\+\s*(\d+)\s*([smhd])",
     re.IGNORECASE,
@@ -361,13 +392,14 @@ def parse_schedule(raw: Any) -> dict[str, Any]:
     Parse schedule string → {mode, at}.
 
     Formats:
-        now                → immediate
-        immediate          → immediate (backward compat)
-        now + 15s          → scheduled, at = now + 15 seconds
-        now + 15m          → scheduled, at = now + 15 minutes
-        now + 1h           → scheduled, at = now + 1 hour
-        now + 1d           → scheduled, at = now + 1 day
-        now + 30~60m       → scheduled, at = now + random(30,60) minutes
+        'now'              → immediate
+        'immediate'        → immediate (backward compat)
+        'now + 15s'        → scheduled, at = now + 15 seconds
+        'now + 15m'        → scheduled, at = now + 15 minutes
+        'now + 1h'         → scheduled, at = now + 1 hour
+        'now + 1d'         → scheduled, at = now + 1 day
+        'now + 15m ~ 30m'  → scheduled, at = now + random(15min, 30min)
+        'now + 30s ~ 2m'   → scheduled, at = now + random(30sec, 120sec)
     """
     if not raw:
         return {"mode": "immediate", "at": None}
@@ -379,11 +411,14 @@ def parse_schedule(raw: Any) -> dict[str, Any]:
 
     now = datetime.now(tz=_KST)
 
-    # now + 30~60m (random range)
+    # now + 15m ~ 30m (random range, each side has its own unit)
     m = _RANGE_RE.match(s)
     if m:
-        lo, hi, unit = int(m.group(1)), int(m.group(2)), m.group(3).lower()
-        seconds = random.randint(lo, hi) * _UNIT_MAP[unit]
+        lo_val, lo_unit = int(m.group(1)), m.group(2).lower()
+        hi_val, hi_unit = int(m.group(3)), m.group(4).lower()
+        lo_sec = lo_val * _UNIT_MAP[lo_unit]
+        hi_sec = hi_val * _UNIT_MAP[hi_unit]
+        seconds = random.randint(min(lo_sec, hi_sec), max(lo_sec, hi_sec))
         at = now + timedelta(seconds=seconds)
         return {"mode": "scheduled", "at": at}
 

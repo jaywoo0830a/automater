@@ -196,10 +196,13 @@ class FeaturedImageBlock:
         overlay_color:           텍스트 색상 (hex, 기본 "#FFFFFF").
         overlay_background:      텍스트 뒤 반투명 배너 불투명도 (0.0~1.0, 기본 0.0=없음).
         overlay_position:        텍스트 위치 ("top", "center", "bottom").
+        exif_optimization:       True면 현실적인 카메라 EXIF 자동 삽입.
         pixel_jitter:            1-3 픽셀 RGB 미세 변경.
         size_jitter_px:          ±N px 리사이즈.
         saturation_shift:        채도 변화 (±, 기본 ±30%).
-        exif_description:        Exif ImageDescription 값.
+        hue_shift:               색조 회전 (±, 기본 ±3%). 같은 이미지가 다른 톤으로 보임.
+        brightness_shift:        밝기 변화 (±, 기본 ±5%).
+        exif_description:        Exif ImageDescription 값 (ASCII만).
         exif_gps_lat:            Exif GPS 위도.
         exif_gps_lng:            Exif GPS 경도.
         filename_keyword:        업로드 파일명에 포함할 키워드.
@@ -213,6 +216,8 @@ class FeaturedImageBlock:
     pixel_jitter:           bool       = True
     size_jitter_px:         int        = 2
     saturation_shift:       float      = 0.30
+    hue_shift:              float      = 0.03
+    brightness_shift:       float      = 0.05
     exif_description:       str        = ""
     exif_gps_lat:           float | None = None
     exif_gps_lng:           float | None = None

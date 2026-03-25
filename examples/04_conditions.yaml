@@ -43,7 +43,7 @@ post:
 images: ./images
 
 publish:
-  schedule: now + 15~30m
+  schedule: 'now + 15m ~ 30m'
   tags: [교육, 과외]
 
 run:

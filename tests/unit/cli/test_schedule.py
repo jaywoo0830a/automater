@@ -9,6 +9,7 @@ Schedule DSL parsing.
     now + 1h           → scheduled, at = now + 1 hour
     now + 1d           → scheduled, at = now + 1 day
     now + 30~60m       → scheduled, at = now + random(30,60) minutes
+    now + 30m ~ 60m    → same, with explicit units
 """
 
 from __future__ import annotations
@@ -101,29 +102,37 @@ class TestRandomRange:
 
     def test_random_minutes(self):
         before = datetime.now(tz=KST)
-        result = parse_schedule("now + 30~60m")
+        result = parse_schedule("now + 30m ~ 60m")
         assert result["mode"] == "scheduled"
         assert result["at"] >= before + timedelta(minutes=29)
         assert result["at"] <= before + timedelta(minutes=61)
 
     def test_random_seconds(self):
         before = datetime.now(tz=KST)
-        result = parse_schedule("now + 10~30s")
+        result = parse_schedule("now + 10s ~ 30s")
         assert result["at"] >= before + timedelta(seconds=9)
         assert result["at"] <= before + timedelta(seconds=31)
 
     def test_random_hours(self):
         before = datetime.now(tz=KST)
-        result = parse_schedule("now + 1~3h")
+        result = parse_schedule("now + 1h ~ 3h")
         assert result["at"] >= before + timedelta(minutes=59)
         assert result["at"] <= before + timedelta(hours=3, minutes=1)
 
+    def test_mixed_units(self):
+        """Different units on each side: 30s ~ 2m = 30sec ~ 120sec."""
+        before = datetime.now(tz=KST)
+        result = parse_schedule("now + 30s ~ 2m")
+        assert result["mode"] == "scheduled"
+        assert result["at"] >= before + timedelta(seconds=29)
+        assert result["at"] <= before + timedelta(minutes=2, seconds=1)
+
     def test_random_at_is_kst(self):
-        result = parse_schedule("now + 30~60m")
+        result = parse_schedule("now + 30m ~ 60m")
         assert result["at"].tzinfo is not None
 
     def test_no_spaces_range(self):
-        result = parse_schedule("now+30~60m")
+        result = parse_schedule("now+30m~60m")
         assert result["mode"] == "scheduled"
 
 
@@ -140,7 +149,7 @@ class TestValidatorCompat:
 
     def test_random_at_is_future(self):
         now = datetime.now(tz=KST)
-        result = parse_schedule("now + 30~60m")
+        result = parse_schedule("now + 30m ~ 60m")
         assert result["at"] > now
 
     def test_immediate_passes_validator(self):

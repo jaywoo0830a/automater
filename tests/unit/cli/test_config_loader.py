@@ -44,7 +44,7 @@ FULL = {
         {"thumbnail": {"src": "thumb.jpg", "overlay": "{keyword:region} {keyword:subject}"}},
     ],
     "images": "./images",
-    "publish": {"schedule": "now + 15~30m", "tags": ["교육"], "visibility": "public"},
+    "publish": {"schedule": "now + 15m ~ 30m", "tags": ["교육"], "visibility": "public"},
     "run": {"interval": "60s", "max_daily": 10, "headless": True},
 }
 
@@ -104,7 +104,7 @@ class TestLoadFull:
 
     def test_publish(self, write_yaml):
         config = load_config(write_yaml(FULL))
-        assert config["publish"]["schedule"] == "now + 15~30m"
+        assert config["publish"]["schedule"] == "now + 15m ~ 30m"
 
     def test_run(self, write_yaml):
         config = load_config(write_yaml(FULL))
