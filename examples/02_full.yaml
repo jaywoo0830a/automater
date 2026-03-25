@@ -25,13 +25,16 @@ pools:
 post:
   - h2: "{keyword:region} {keyword:subject} 과외 소개"
   - paragraph: "{keyword:region} {keyword:subject} 과외를 자연스럽게 소개해줘"
-  - image: body.jpg
+  - image:
+      src: body.jpg
+      link: "tel:01012345678"
   - quote: "교육은 미래를 여는 열쇠다"
   - paragraph: "{keyword:region} {keyword:subject} 과외 후기를 학부모 관점에서 200자 이상 써줘"
   - divider
   - paragraph: "{keyword:region} {keyword:subject} 과외 홍보 마무리. 행동 유도 포함"
   - thumbnail:
       src: thumb.jpg
+      link: "tel:01012345678"
       overlay: "{keyword:region} {keyword:subject} 과외"
       color: "#FFFFFF"
       background: 0.5

@@ -20,6 +20,7 @@ post:
   - thumbnail:
       src: cover.jpg
       overlay: "{keyword:region} {keyword:category}"
+      link: "https://map.naver.com"
       color: "#FFFFFF"
       background: 0.6
       position: bottom
