@@ -140,7 +140,7 @@ def _call_api(prompt: str, count: int, api_key: str, model: str) -> str:
             config=types.GenerateContentConfig(
                 system_instruction=_SYSTEM_PROMPT,
                 temperature=0.8,
-                max_output_tokens=2048,
+                max_output_tokens=8192,
             ),
         )
     except Exception as exc:
@@ -155,17 +155,45 @@ def _call_api(prompt: str, count: int, api_key: str, model: str) -> str:
 
 
 def _parse(raw: str, count: int) -> list[str]:
-    """Parse a JSON array from the raw API response."""
+    """
+    Parse a JSON array from the raw API response.
+
+    Handles truncated responses: if the API hit max_output_tokens,
+    the JSON array may be incomplete (e.g. '["text...'). This repairs
+    the array by closing the last string and bracket before parsing.
+    """
     clean = re.sub(r"```(?:json)?\s*|\s*```", "", raw).strip()
+
+    # Try exact match first
     match = re.search(r"\[.*\]", clean, re.DOTALL)
-    if not match:
-        raise ValueError(f"No JSON array found in response: {raw!r:.200s}")
+    if match:
+        try:
+            parsed = json.loads(match.group())
+            if isinstance(parsed, list):
+                result = [str(p) for p in parsed if str(p).strip()]
+                while len(result) < count:
+                    result.append(f"(단락 {len(result) + 1} 생성 실패)")
+                return result[:count]
+        except json.JSONDecodeError:
+            pass
 
-    parsed = json.loads(match.group())
-    if not isinstance(parsed, list):
-        raise ValueError(f"Expected JSON array, got {type(parsed)}")
+    # Truncated array repair: find '[' and close it
+    bracket = clean.find("[")
+    if bracket >= 0:
+        fragment = clean[bracket:]
+        # Close open string and array
+        if fragment.count('"') % 2 == 1:
+            fragment += '"'
+        if not fragment.rstrip().endswith("]"):
+            fragment = fragment.rstrip().rstrip(",") + "]"
+        try:
+            parsed = json.loads(fragment)
+            if isinstance(parsed, list):
+                result = [str(p) for p in parsed if str(p).strip()]
+                while len(result) < count:
+                    result.append(f"(단락 {len(result) + 1} 생성 실패)")
+                return result[:count]
+        except json.JSONDecodeError:
+            pass
 
-    result = [str(p) for p in parsed]
-    while len(result) < count:
-        result.append(f"(단락 {len(result) + 1} 생성 실패)")
-    return result[:count]
+    raise ValueError(f"No JSON array found in response: {raw!r:.200s}")

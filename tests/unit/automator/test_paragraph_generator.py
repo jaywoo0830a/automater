@@ -124,6 +124,28 @@ def test_parse_raises_on_non_list():
         _parse('{"key": "value"}', 1)
 
 
+def test_parse_truncated_single_element():
+    """API hit max_output_tokens mid-string."""
+    result = _parse('["안녕하세요, 긴 텍스트가 여기서 잘림', 1)
+    assert len(result) == 1
+    assert "안녕하세요" in result[0]
+
+
+def test_parse_truncated_after_comma():
+    """Truncated between array elements."""
+    result = _parse('["first paragraph", "second paragraph is cut off here', 2)
+    assert len(result) == 2
+    assert result[0] == "first paragraph"
+    assert "second paragraph" in result[1]
+
+
+def test_parse_truncated_with_complete_elements():
+    """First element complete, second truncated."""
+    result = _parse('["complete", "trunc', 3)
+    assert result[0] == "complete"
+    assert len(result) == 3
+
+
 # ===========================================================================
 # RateLimitError — 429 handling
 # ===========================================================================

@@ -175,6 +175,7 @@ class SmartEditorOne(BlogEditor):
 
         Uses editor_paragraph_container (p.se-text-paragraph).
         Presses Enter newlines times after typing (default: 2).
+        After long text, waits for the editor DOM to catch up.
         """
         frame     = self._frame()
         sel       = self._sel()
@@ -182,6 +183,14 @@ class SmartEditorOne(BlogEditor):
         last_para.wait_for(state="visible", timeout=5_000)
         last_para.click()
         self._page.keyboard.type(text)
+
+        # Editor DOM lags behind keyboard.type() on long text.
+        # Without this wait, the next Enter / move_cursor / insert_text
+        # fires before the editor finishes rendering, breaking the flow.
+        if len(text) >= 500:
+            settle = min(10, max(2, len(text) // 500))
+            time.sleep(settle)
+
         for _ in range(max(newlines, 1)):
             self._page.keyboard.press("Enter")
 
@@ -390,6 +399,13 @@ class SmartEditorOne(BlogEditor):
             sel.locator(frame, "editor_image_rep_selected").first,
             timeout_ms=5_000,
         )
+
+        # Restore cursor to body — hover/click on image block moves focus
+        # outside the text area, which breaks subsequent toolbar actions.
+        try:
+            sel.locator(frame, "editor_paragraph_container").last.click()
+        except Exception:
+            pass
 
     def move_cursor(self, position: CursorPosition = "end") -> None:
         """
