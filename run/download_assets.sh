@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run/download_fonts.sh
+# run/download_assets.sh
 # ----------------------
 # Google Fonts 에서 NotoSansKR (Regular 400) 를 다운로드해
 # assets/fonts/NotoSansKR.ttf 로 저장한다.
@@ -7,7 +7,7 @@
 # 한 번만 실행하면 됩니다.
 #
 # Usage:
-#   bash ./run/download_fonts.sh
+#   bash ./run/download_assets.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

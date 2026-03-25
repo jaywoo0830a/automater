@@ -443,10 +443,22 @@ class SmartEditorOne(BlogEditor):
             return
 
         self._click_publish_confirm()
+        self._wait_for_publish_complete()
 
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    def _wait_for_publish_complete(self, timeout: int = 15_000) -> None:
+        """Wait for Naver to finish publishing and navigate away from the editor."""
+        try:
+            self._page.wait_for_url(
+                lambda url: "Redirect=Write" not in url,
+                timeout=timeout,
+            )
+        except Exception:
+            pass
+        time.sleep(1)
 
     @staticmethod
     def _round_minute_to_10(minute: int) -> str:
@@ -575,7 +587,10 @@ class SmartEditorOne(BlogEditor):
 
     def _click_publish_trigger(self, timeout: int = 5_000) -> None:
         sel = self._sel()
-        for ctx in (self._page, self._frame()):
+        # The publish button lives inside #mainFrame.
+        # Use _popover_frame() (direct frame_locator) to avoid the
+        # 1-second .se-content visibility probe in _frame().
+        for ctx in (self._popover_frame(), self._page):
             if click_if_visible(sel.locator(ctx, "toolbar_publish"), timeout):
                 return
 

@@ -69,8 +69,12 @@
     ]
   },
   "toolbar_publish": {
-    "description": "툴바 — 발행 버튼 (iframe 밖 페이지 레벨)",
+    "description": "툴바 — 발행 트리거 버튼 (CSS 우선, role은 3개 매칭 문제)",
     "locators": [
+      {
+        "type": "css",
+        "value": "button[data-click-area=\"tpb.publish\"]"
+      },
       {
         "type": "role",
         "value": "button",
