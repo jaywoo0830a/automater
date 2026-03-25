@@ -16,7 +16,7 @@ keywords:
 post:
   - h2: "{keyword:region} {keyword:subject} 과외"
 
-  # 강남/서초는 지역별 사진 사용
+  # 강남/서초는 지역별 사진
   - image: "{keyword:region}.jpg"
     when: "{keyword:region} in [강남, 서초]"
 
@@ -30,18 +30,21 @@ post:
   - paragraph: "강남 프리미엄 과외의 차별점을 설명해줘"
     when: "{keyword:region} == 강남"
 
-  # 강남 제외 일반 마무리
+  # 강남 제외 마무리
   - paragraph: "{keyword:region} {keyword:subject} 과외를 추천하며 마무리해줘"
     when: "{keyword:region} != 강남"
 
-  - thumbnail: {src: thumb.jpg, overlay: "{keyword:region} {keyword:subject} 과외"}
+  - thumbnail:
+      src: thumb.jpg
+      overlay: "{keyword:region} {keyword:subject} 과외"
+      background: 0.6
+      position: bottom
 
 images: ./images
 
 publish:
   schedule: now + 15~30m
   tags: [교육, 과외]
-  visibility: public
 
 run:
   interval: 60s

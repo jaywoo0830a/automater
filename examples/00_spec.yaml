@@ -1,4 +1,4 @@
-# ── Campaign DSL Specification v5 ────────────────────────
+# ── Campaign DSL Specification v6 ────────────────────────
 #
 # 원칙: 쓰는 게 곧 결과. 보이는 게 전부. 암묵적 동작 없음.
 
@@ -9,128 +9,99 @@
 #   {keyword:slug}  — keywords[slug] 결정적 치환
 #   {pool:slug}     — pools[slug] 랜덤 선택
 #   {i}             — 1부터 시작하는 조합 인덱스
-#
-# 토큰 밖은 리터럴.
 
 # ═══════════════════════════════════════════════════════════
-# accounts (필수) — 최소 1개. username, password 필수.
+# accounts (필수) — 최소 1개
 # ═══════════════════════════════════════════════════════════
 #
 # accounts:
 #   - username: id
 #     password: pw
 #     blog_id: myblog
+#     session: my_session.json    # 명시 경로 (선택)
 
 # ═══════════════════════════════════════════════════════════
 # session_store (선택) — 세션 저장소
 # ═══════════════════════════════════════════════════════════
 #
-# 기본값: file (JSON 파일, 현재 디렉토리)
-#
-# session_store: file
-# session_store: redis://localhost:6379
-#
-# file: {username}_session.json 파일에 저장
-# redis: session:{username} 키에 TTL 24시간으로 저장
-#
-# account에 session: path.json 명시하면 해당 경로 우선
+# session_store: file                    # 기본: {username}_session.json
+# session_store: redis://localhost:6379  # Redis TTL 24시간
 
 # ═══════════════════════════════════════════════════════════
-# titles (필수) — 한 줄 = 제목 한 변형
+# titles (필수) — 제목 템플릿
 # ═══════════════════════════════════════════════════════════
 #
 # titles:
 #   - "{pool:prefix} {keyword:region} {keyword:subject} 과외"
 
 # ═══════════════════════════════════════════════════════════
-# keywords (필수) — 조합 = ∏(카테고리별 값 수) × titles 줄 수
+# keywords (필수) — 조합 = ∏(카테고리별 값 수) × titles 수
 # ═══════════════════════════════════════════════════════════
-#
-# keywords:
-#   region: [강남, 서초]
-#   subject: [수학, 영어]
 
 # ═══════════════════════════════════════════════════════════
 # pools (선택) — 매번 랜덤
 # ═══════════════════════════════════════════════════════════
-#
-# pools:
-#   prefix: [검증된, 전문]
 
 # ═══════════════════════════════════════════════════════════
 # post (선택) — 블록 리스트
 # ═══════════════════════════════════════════════════════════
 #
-# h1~h6:
-#   - h2: "{keyword:region} {keyword:subject} 소개"
+# ── h1~h6 (소제목, 크기: H1=38 H2=34 H3=30 H4=28 H5=24 H6=19)
+#   - h2: "{keyword:region} 소개"
 #
-# paragraph: 값 = AI에 전달하는 프롬프트 그 자체
-#   - paragraph: "{keyword:region} {keyword:subject} 과외를 소개해줘"
-#   - paragraph: "{keyword:region}의 학원가 특징을 설명해줘"
+# ── paragraph (값 = AI 프롬프트)
+#   - paragraph: "{keyword:region} 과외를 소개해줘"
 #
-# image / thumbnail: 경로에도 토큰 사용 가능
+# ── image
 #   - image: "{keyword:region}.jpg"
-#   - image: "{i}.jpg"
 #   - image: {src: photo.jpg, alt: "{keyword:region} 외관"}
-#   - thumbnail: {src: thumb.jpg, overlay: "{keyword:region} 과외"}
 #
-# list / quote / divider:
-#   - list: [항목1, 항목2]
+# ── thumbnail (대표 이미지)
+#   - thumbnail: thumb.jpg
+#   - thumbnail:
+#       src: thumb.jpg
+#       overlay: "{keyword:region} 과외"
+#       color: "#FFD700"          # 텍스트 색상 (기본 #FFFFFF)
+#       background: 0.6           # 반투명 배너 (0.0~1.0, 기본 0.0=없음)
+#       position: bottom          # top / center / bottom (기본 center)
+#       gps: [37.497, 127.027]    # GPS 좌표
+#       filename: "gangnam-tutor" # 파일명 키워드
+#
+# ── quote (인용구)
 #   - quote: "인용문"
+#   - quote: {text: "인용", by: "작가"}
+#
+# ── list
+#   - list: [항목1, 항목2]
+#
+# ── divider (구분선)
 #   - divider
 #
-# ── when — 조건부 블록 ────────────────────────────────
-#
-#   - image: "{keyword:region}.jpg"
+# ── when (조건)
+#   - image: "a.jpg"
 #     when: "{keyword:region} in [강남, 서초]"
-#
-#   - image: "default.jpg"
-#     when: "{keyword:region} not in [강남, 서초]"
-#
-# 조건식: ==, !=, in [...], not in [...]
-# when이 없으면 항상 포함.
 
 # ═══════════════════════════════════════════════════════════
 # images (선택) — 이미지 베이스 디렉토리
 # ═══════════════════════════════════════════════════════════
-#
-# images: ./images
 
 # ═══════════════════════════════════════════════════════════
-# exif_optimization (선택) — EXIF 메타데이터 자동 최적화
+# exif_optimization (선택, 기본 true)
 # ═══════════════════════════════════════════════════════════
 #
-# 기본값: true
-# true면 모든 이미지에 현실적인 카메라 EXIF를 자동 삽입:
-#   - make, model, software (한국 시장 스마트폰 풀에서 랜덤)
-#   - datetime_original, datetime_digitized (최근 7일 내 랜덤)
-#   - orientation, color_space, pixel_x/y_dimension
-#   - focal_length, f_number, exposure_time, photographic_sensitivity
-#   - image_description (DSL에서 exif_desc 지정 시)
-#   - GPS 좌표 (DSL에서 gps 지정 시)
+# 모든 이미지에 카메라 EXIF 자동 삽입:
+# make, model, software, datetime, orientation, focal_length 등
 #
-# exif_optimization: true
-# exif_optimization: false   # EXIF 삽입 비활성화
+# exif_optimization: false  # 비활성화
 
 # ═══════════════════════════════════════════════════════════
-# publish (선택) — 자유 키
+# publish (선택)
 # ═══════════════════════════════════════════════════════════
 #
-# schedule:
-#   now                → 즉시 발행
-#   now + 15s          → 15초 후
-#   now + 15m          → 15분 후
-#   now + 1h           → 1시간 후
-#   now + 1d           → 1일 후
-#   now + 30~60m       → 30~60분 사이 랜덤
-#
-# publish:
-#   schedule: now + 15~30m
-#   tags: [교육]
-#   visibility: public
+# schedule: now | now + 15s | now + 15m | now + 1h | now + 1d | now + 30~60m
 
 # ═══════════════════════════════════════════════════════════
-# run (선택) — 자유 키. 시간: 60s, 5min, 1500ms
+# run (선택)
 # ═══════════════════════════════════════════════════════════
 #
 # run:

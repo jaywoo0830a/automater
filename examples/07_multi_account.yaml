@@ -31,16 +31,21 @@ post:
   - h2: "{keyword:region} {keyword:subject} 과외 소개"
   - paragraph: "{keyword:region} {keyword:subject} 과외를 소개해줘"
   - image: body.jpg
+  - quote: {text: "배움에는 끝이 없다", by: "공자"}
   - paragraph: "{keyword:region} {keyword:subject} 과외 후기를 감성적으로 써줘"
+  - divider
   - paragraph: "{keyword:region} {keyword:subject} 과외 홍보 마무리. 행동 유도 포함"
-  - thumbnail: {src: thumb.jpg, overlay: "{keyword:region} {keyword:subject} 과외"}
+  - thumbnail:
+      src: thumb.jpg
+      overlay: "{keyword:region} {keyword:subject} 과외"
+      background: 0.5
+      position: bottom
 
 images: ./images
 
 publish:
   schedule: now + 1h
   tags: [교육, 과외]
-  visibility: public
 
 run:
   interval: 60s

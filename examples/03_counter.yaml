@@ -18,16 +18,18 @@ post:
   - paragraph: "{keyword:region} {keyword:subject} 과외를 소개해줘"
   - image: "{keyword:region}.jpg"
   - paragraph: "{keyword:region} 지역의 교육 환경을 설명해줘"
-  - thumbnail: "{i}.jpg"
+  - thumbnail:
+      src: "{i}.jpg"
+      overlay: "{keyword:region} 과외 #{i}"
+      background: 0.4
+      position: bottom
 
 images: ./asset/images
 
 publish:
   schedule: now
   tags: [교육, 과외]
-  visibility: public
 
 run:
   interval: 60s
-  max_daily: 10
   headless: true
