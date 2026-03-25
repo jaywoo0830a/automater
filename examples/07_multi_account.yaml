@@ -1,15 +1,19 @@
 # ── 계정별 오버라이드 ────────────────────────────────────
 
+# Redis로 세션 관리 (여러 머신에서 공유)
+# session_store: redis://localhost:6379
+
 accounts:
   - username: main_account
     password: pw1
     blog_id: mainblog
-    session: main_session.json
+    session: main_session.json    # 명시 경로 우선 (file 모드)
     proxy: 1.2.3.4:8080
 
   - username: sub_account
     password: pw2
     blog_id: subblog
+    # session 없으면 → store.save("sub_account", ...) 자동
     headless: false
     interval: 120s
 

@@ -133,6 +133,11 @@ def _build_live_executor(
     from automator.local_processor import LocalImageProcessor
     runner = JobRunner(SpecValidator(), ContentBuilder(text_gen, LocalImageProcessor()))
 
+    from cli.session_store import create_session_store
+
+    store_url = config.get("session_store")
+    session_store = create_session_store(store_url)
+
     def editor_factory(account: dict[str, Any]):
         from playwright.sync_api import sync_playwright
         from automator.smart_editor import SmartEditorOne
@@ -149,10 +154,19 @@ def _build_live_executor(
             slow_mo=config.get("run", {}).get("slow_mo", 0),
         )
 
-        session = account.get("session", "")
-        if session and os.path.exists(session):
+        username = account["username"]
+        explicit_path = account.get("session", "")
+        state = None
+
+        # Load session: explicit path takes priority, then store by key
+        if explicit_path:
+            state = session_store.load_path(explicit_path) if hasattr(session_store, "load_path") else session_store.load(username)
+        else:
+            state = session_store.load(username)
+
+        if state:
             ctx = browser.new_context(
-                storage_state=session,
+                storage_state=state,
                 locale="ko-KR",
                 timezone_id="Asia/Seoul",
             )
@@ -162,12 +176,17 @@ def _build_live_executor(
                 timezone_id="Asia/Seoul",
             )
             _auto_login(ctx, account)
-            if session:
-                ctx.storage_state(path=session)
-                log.info("Session saved: %s", session)
+
+            # Save session: explicit path or store by key
+            new_state = ctx.storage_state()
+            if explicit_path and hasattr(session_store, "save_path"):
+                session_store.save_path(explicit_path, new_state)
+            else:
+                session_store.save(username, new_state)
+            log.info("Session saved for %s", username)
 
         page = ctx.new_page()
-        blog_id = account.get("blog_id", account["username"])
+        blog_id = account.get("blog_id", username)
         write_url = f"https://blog.naver.com/{blog_id}?Redirect=Write&"
         return SmartEditorOne(page, write_url, dry_run=False)
 
