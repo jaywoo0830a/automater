@@ -532,3 +532,85 @@ def test_pipeline_long_paragraph_real_gemini(
         publish=PublishOption(mode="scheduled", at=_schedule()),
     )
     _run_spec(spec, editor, real=True)
+
+
+# ---------------------------------------------------------------------------
+# Image link insertion — click image → link button → URL → confirm
+# ---------------------------------------------------------------------------
+
+@pytest.mark.slow
+def test_pipeline_image_with_link(editor: SmartEditorOne, account: AccountOption):
+    """
+    Upload an image with a link — verifies the link insertion
+    toolbar flow works in the browser.
+
+    dry_run=True — popover opens but publish is not confirmed.
+    """
+    image = _asset("images", 0)
+    if not image:
+        pytest.skip("No image in assets/images/")
+
+    spec = PostingSpec(
+        account=account,
+        title=TitleOption(fixed_title="이미지 링크 E2E 테스트"),
+        body=(Section(blocks=(
+            ImageBlock(path=image, link="tel:01012345678"),
+            ParagraphBlock(prompt="이미지 링크 삽입 후 본문"),
+        )),),
+        publish=PublishOption(mode="scheduled", at=_schedule()),
+    )
+    _run_spec(spec, editor)
+
+
+@pytest.mark.slow
+def test_pipeline_thumbnail_with_link(editor: SmartEditorOne, account: AccountOption):
+    """
+    Upload a thumbnail with a link — verifies link insertion
+    works on featured images too.
+
+    dry_run=True.
+    """
+    thumb = _asset("thumbnails", 0)
+    if not thumb:
+        pytest.skip("No thumbnail in assets/thumbnails/")
+
+    spec = PostingSpec(
+        account=account,
+        title=TitleOption(fixed_title="썸네일 링크 E2E 테스트"),
+        body=(Section(blocks=(
+            FeaturedImageBlock(path=thumb, link="https://example.com"),
+            ParagraphBlock(prompt="썸네일 링크 삽입 후 본문"),
+        )),),
+        publish=PublishOption(mode="scheduled", at=_schedule()),
+    )
+    _run_spec(spec, editor)
+
+
+@pytest.mark.slow
+def test_pipeline_mixed_links_and_no_links(
+    editor: SmartEditorOne, account: AccountOption,
+):
+    """
+    Mix of images with and without links — verifies selective
+    link insertion doesn't break the flow.
+
+    dry_run=True.
+    """
+    image = _asset("images", 0)
+    thumb = _asset("thumbnails", 0)
+    if not image or not thumb:
+        pytest.skip("Need both assets/images/ and assets/thumbnails/")
+
+    spec = PostingSpec(
+        account=account,
+        title=TitleOption(fixed_title="혼합 링크 E2E 테스트"),
+        body=(Section(blocks=(
+            ImageBlock(path=image, link="tel:01012345678"),
+            DividerBlock(),
+            ImageBlock(path=image),
+            FeaturedImageBlock(path=thumb, link="https://example.com"),
+            ParagraphBlock(prompt="혼합 링크 테스트 본문"),
+        )),),
+        publish=PublishOption(mode="scheduled", at=_schedule()),
+    )
+    _run_spec(spec, editor)

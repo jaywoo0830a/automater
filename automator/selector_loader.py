@@ -80,6 +80,8 @@ def _resolve_one(ctx: Any, entry: dict) -> Any:
         return ctx.get_by_label(value)
     if t == "text":
         return ctx.get_by_text(value, exact=True)
+    if t == "placeholder":
+        return ctx.get_by_placeholder(value)
     if t == "css":
         return ctx.locator(value)
     if t == "xpath":

@@ -166,6 +166,18 @@ class TestImage:
         assert b.path == "images/p.jpg"
         assert b.alt == "강남 외관"
 
+    def test_dict_form_with_link(self):
+        config = {**FULL_CONFIG, "post": [
+            {"image": {"src": "p.jpg", "link": "tel:01012345678"}},
+        ]}
+        spec = build_spec(_combo(), config)
+        assert spec.body[0].blocks[0].link == "tel:01012345678"
+
+    def test_string_form_has_no_link(self):
+        config = {**FULL_CONFIG, "post": [{"image": "photo.jpg"}]}
+        spec = build_spec(_combo(), config)
+        assert spec.body[0].blocks[0].link == ""
+
 
 # ---------------------------------------------------------------------------
 # Thumbnail
@@ -218,6 +230,13 @@ class TestThumbnail:
         spec = build_spec(_combo(), config)
         assert spec.body[0].blocks[0].exif_gps_lat == 37.497
         assert spec.body[0].blocks[0].exif_gps_lng == 127.027
+
+    def test_dict_form_with_link(self):
+        config = {**FULL_CONFIG, "post": [
+            {"thumbnail": {"src": "t.jpg", "link": "tel:01012345678"}},
+        ]}
+        spec = build_spec(_combo(), config)
+        assert spec.body[0].blocks[0].link == "tel:01012345678"
 
     def test_dict_form_with_hue_shift_fixed(self):
         config = {**FULL_CONFIG, "post": [

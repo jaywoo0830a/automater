@@ -80,6 +80,11 @@ class JobRunner:
                     if upload_delay_ms > 0:
                         time.sleep(upload_delay_ms / 1000)
 
+                # Insert link to image if step carries one
+                step_link = getattr(step, "link", "")
+                if step_link and hasattr(editor, "_insert_link_to_image"):
+                    editor._insert_link_to_image(step_link)
+
         finally:
             for path in post.tmp_files:
                 try:

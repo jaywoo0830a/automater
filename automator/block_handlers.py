@@ -103,7 +103,7 @@ class ImageHandler(BlockHandler):
         path = block.path
         if Path(path).exists():
             path = self._process(block, ctx)
-        return [ImageStep(path=path)]
+        return [ImageStep(path=path, link=block.link)]
 
     def _process(self, block: ImageBlock, ctx: ContentContext) -> str:
         raw = Path(block.path).read_bytes()
@@ -125,7 +125,7 @@ class FeaturedImageHandler(BlockHandler):
         path = block.path
         if Path(path).exists():
             path = self._process(block, ctx)
-        return [FeaturedImageStep(path=path)]
+        return [FeaturedImageStep(path=path, link=block.link)]
 
     def _process(self, block: FeaturedImageBlock, ctx: ContentContext) -> str:
         raw = Path(block.path).read_bytes()

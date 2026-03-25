@@ -362,6 +362,54 @@ class SmartEditorOne(BlogEditor):
             state="visible", timeout=10_000
         )
 
+    def _insert_link_to_image(self, link: str) -> None:
+        """
+        Attach a hyperlink to the last uploaded image.
+
+        Sequence:
+            1. Click last image block (shows image toolbar)
+            2. Click link button
+            3. Fill URL input
+            4. Click confirm
+            5. Click body to restore cursor
+
+        Not exposed on BlogEditor ABC — SmartEditorOne-specific.
+        """
+        if not link:
+            return
+
+        frame = self._frame()
+        sel   = self._sel()
+
+        # Step 1: click the last image to show its toolbar
+        image_block = sel.locator(frame, "editor_image_block").last
+        image_block.wait_for(state="visible", timeout=5_000)
+        image_block.click()
+        time.sleep(0.5)
+
+        # Step 2: click link button
+        link_btn = sel.locator(frame, "editor_link_button")
+        if not click_if_visible(link_btn, timeout_ms=3_000):
+            return
+
+        # Step 3: fill URL
+        link_input = sel.locator(frame, "editor_link_input")
+        link_input.wait_for(state="visible", timeout=3_000)
+        link_input.fill(link)
+
+        # Step 4: confirm
+        confirm_btn = sel.locator(frame, "editor_link_confirm")
+        if not click_if_visible(confirm_btn, timeout_ms=3_000):
+            return
+
+        time.sleep(0.3)
+
+        # Step 5: restore cursor to body
+        try:
+            sel.locator(frame, "editor_paragraph_container").last.click()
+        except Exception:
+            pass
+
     def set_representative_media(self, index: int) -> None:
         """
         Set representative (thumbnail) image by insertion index.

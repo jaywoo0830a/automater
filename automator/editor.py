@@ -155,6 +155,7 @@ class ParagraphStep(PostStep):
 class ImageStep(PostStep):
     """Upload a body image."""
     path: str
+    link: str = ""
 
     def execute(self, editor: BlogEditor) -> None:
         editor.upload_file(self.path)
@@ -168,6 +169,7 @@ class ImageStep(PostStep):
 class FeaturedImageStep(PostStep):
     """Upload a featured image (marked as representative)."""
     path: str
+    link: str = ""
 
     def execute(self, editor: BlogEditor) -> None:
         editor.upload_file(self.path)

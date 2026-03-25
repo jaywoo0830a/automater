@@ -161,6 +161,7 @@ class ImageBlock:
     Attributes:
         path:               업로드할 이미지 파일 경로.
         alt:                이미지 대체 텍스트.
+        link:               이미지 클릭 시 이동할 URL (tel:, http:// 등).
         exif_optimization:  True면 현실적인 카메라 EXIF 자동 삽입.
         pixel_jitter:       1-3 픽셀 RGB 미세 변경.
         size_jitter_px:     ±N px 리사이즈.
@@ -172,6 +173,7 @@ class ImageBlock:
     """
     path:               str        = ""
     alt:                str        = ""
+    link:               str        = ""
     exif_optimization:  bool       = True
     pixel_jitter:       bool       = True
     size_jitter_px:     int        = 2
@@ -196,6 +198,7 @@ class FeaturedImageBlock:
         overlay_color:           텍스트 색상 (hex, 기본 "#FFFFFF").
         overlay_background:      텍스트 뒤 반투명 배너 불투명도 (0.0~1.0, 기본 0.0=없음).
         overlay_position:        텍스트 위치 ("top", "center", "bottom").
+        link:                    이미지 클릭 시 이동할 URL (tel:, http:// 등).
         exif_optimization:       True면 현실적인 카메라 EXIF 자동 삽입.
         pixel_jitter:            1-3 픽셀 RGB 미세 변경.
         size_jitter_px:          ±N px 리사이즈.
@@ -212,6 +215,7 @@ class FeaturedImageBlock:
     overlay_color:          str        = "#FFFFFF"
     overlay_background:     float      = 0.0
     overlay_position:       str        = "center"
+    link:                   str        = ""
     exif_optimization:      bool       = True
     pixel_jitter:           bool       = True
     size_jitter_px:         int        = 2

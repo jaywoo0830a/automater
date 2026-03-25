@@ -247,6 +247,7 @@ def _parse_image(
         return ImageBlock(
             path=path,
             alt=str(cfg.get("alt", "")),
+            link=str(cfg.get("link", "")),
             exif_optimization=exif_opt,
         )
 
@@ -281,6 +282,7 @@ def _parse_thumbnail(
             overlay_color=str(cfg.get("color", "#FFFFFF")),
             overlay_background=float(cfg.get("background", 0.0)),
             overlay_position=str(cfg.get("position", "center")),
+            link=str(cfg.get("link", "")),
             exif_optimization=exif_opt,
             saturation_shift=_parse_shift(cfg.get("saturation_shift"), 0.30),
             hue_shift=_parse_shift(cfg.get("hue_shift"), 0.03),

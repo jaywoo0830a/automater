@@ -546,5 +546,46 @@
         "name": "구분선 8"
       }
     ]
+  },
+  "editor_link_button": {
+    "description": "이미지 선택 후 — 링크 버튼 (CSS 우선)",
+    "locators": [
+      {
+        "type": "css",
+        "value": "button.se-link-toolbar-button"
+      },
+      {
+        "type": "role",
+        "value": "button",
+        "name": "링크"
+      }
+    ]
+  },
+  "editor_link_input": {
+    "description": "링크 팝오버 — URL 입력 필드 (CSS 우선)",
+    "locators": [
+      {
+        "type": "css",
+        "value": "input.se-custom-layer-link-input"
+      },
+      {
+        "type": "placeholder",
+        "value": "URL을 입력하세요."
+      }
+    ]
+  },
+  "editor_link_confirm": {
+    "description": "링크 팝오버 — 링크 입력 확인 버튼 (CSS 우선)",
+    "locators": [
+      {
+        "type": "css",
+        "value": "button.se-custom-layer-link-apply-button"
+      },
+      {
+        "type": "role",
+        "value": "button",
+        "name": "링크 입력"
+      }
+    ]
   }
 }
