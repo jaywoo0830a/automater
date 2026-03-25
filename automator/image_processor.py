@@ -81,8 +81,8 @@ def process_featured(src: bytes, block: FeaturedImageBlock) -> bytes:
         img,
         text=block.overlay_text,
         color=block.overlay_color,
-        line_spacing=block.overlay_line_spacing,
-        letter_spacing=block.overlay_letter_spacing,
+        background=block.overlay_background,
+        position=block.overlay_position,
     )
     return _encode_with_exif(
         img,
@@ -146,11 +146,11 @@ def _apply_saturation(img: Image.Image, jitter: float) -> Image.Image:
 
 
 def _apply_text_overlay(
-    img:            Image.Image,
-    text:           str | list,
-    color:          str,
-    line_spacing:   int,
-    letter_spacing: int,
+    img:        Image.Image,
+    text:       str | list,
+    color:      str,
+    background: float,
+    position:   str,
 ) -> Image.Image:
     if not text:
         return img
@@ -163,19 +163,44 @@ def _apply_text_overlay(
     w, h = img.size
     font = _resolve_overlay_font(draw, chunks, w, h)
 
-    line_widths  = [_chunk_width(draw, c, font, letter_spacing) for c in chunks]
-    line_heights = [_chunk_height(draw, c, font) for c in chunks]
+    line_heights = [_text_height(draw, c, font) for c in chunks]
+    line_widths  = [_text_width(draw, c, font) for c in chunks]
+    line_spacing = max(4, font.size // 4) if hasattr(font, "size") else 8
     total_h      = sum(line_heights) + line_spacing * (len(chunks) - 1)
-    start_y      = (h - total_h) // 2
+    padding_y    = max(16, font.size // 2) if hasattr(font, "size") else 16
 
+    # Position: top / center / bottom
+    if position == "top":
+        start_y = padding_y
+    elif position == "bottom":
+        start_y = h - total_h - padding_y
+    else:
+        start_y = (h - total_h) // 2
+
+    # Background banner
+    if background > 0.0:
+        banner_top    = max(0, start_y - padding_y)
+        banner_bottom = min(h, start_y + total_h + padding_y)
+        overlay_img   = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        overlay_draw  = ImageDraw.Draw(overlay_img)
+        alpha = int(min(1.0, background) * 255)
+        overlay_draw.rectangle(
+            [(0, banner_top), (w, banner_bottom)],
+            fill=(0, 0, 0, alpha),
+        )
+        img = Image.alpha_composite(img.convert("RGBA"), overlay_img).convert("RGB")
+        draw = ImageDraw.Draw(img)
+
+    # Text shadow
     shadow_offset = max(1, font.size // 18) if hasattr(font, "size") else 1
     shadow_color  = "#000000" if color.upper() in ("#FFFFFF", "#FFF") else "#FFFFFF"
 
     y = start_y
     for i, chunk in enumerate(chunks):
         x = (w - line_widths[i]) // 2
-        _draw_spaced_text(draw, x, y, chunk, font, color, shadow_color,
-                          shadow_offset, letter_spacing)
+        draw.text((x + shadow_offset, y + shadow_offset), chunk,
+                  font=font, fill=shadow_color)
+        draw.text((x, y), chunk, font=font, fill=color)
         y += line_heights[i] + line_spacing
 
     return img
@@ -222,42 +247,16 @@ def _resolve_overlay_font(
     return font
 
 
-def _chunk_width(draw: ImageDraw.ImageDraw, chunk: str, font, spacing: int) -> int:
-    """Calculate total width of a chunk with letter spacing."""
-    total = sum(
-        draw.textbbox((0, 0), ch, font=font)[2]
-        - draw.textbbox((0, 0), ch, font=font)[0]
-        + spacing
-        for ch in chunk
-    )
-    return max(0, total - spacing)
+def _text_width(draw: ImageDraw.ImageDraw, text: str, font) -> int:
+    """Calculate rendered width of a text string."""
+    bbox = draw.textbbox((0, 0), text, font=font)
+    return bbox[2] - bbox[0]
 
 
-def _chunk_height(draw: ImageDraw.ImageDraw, chunk: str, font) -> int:
-    """Calculate the height of a rendered text chunk."""
-    bbox = draw.textbbox((0, 0), chunk, font=font)
+def _text_height(draw: ImageDraw.ImageDraw, text: str, font) -> int:
+    """Calculate rendered height of a text string."""
+    bbox = draw.textbbox((0, 0), text, font=font)
     return bbox[3] - bbox[1]
-
-
-def _draw_spaced_text(
-    draw: ImageDraw.ImageDraw,
-    x: int,
-    y: int,
-    chunk: str,
-    font,
-    color: str,
-    shadow_color: str,
-    shadow_offset: int,
-    letter_spacing: int,
-) -> None:
-    """Draw a single line with per-character letter spacing and shadow."""
-    for ch in chunk:
-        ch_bbox = draw.textbbox((0, 0), ch, font=font)
-        ch_w    = ch_bbox[2] - ch_bbox[0]
-        draw.text((x + shadow_offset, y + shadow_offset), ch,
-                  font=font, fill=shadow_color)
-        draw.text((x, y), ch, font=font, fill=color)
-        x += ch_w + letter_spacing
 
 
 def _encode_with_exif(

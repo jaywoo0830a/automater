@@ -265,9 +265,21 @@ def _parse_thumbnail(
         cfg = interpolate_deep(dict(value), values, pools, index)
         src = cfg.get("src", cfg.get("path", ""))
         path = _resolve_path(images_dir, src)
+
+        gps = cfg.get("gps")
+        gps_lat = gps[0] if isinstance(gps, (list, tuple)) and len(gps) >= 2 else None
+        gps_lng = gps[1] if isinstance(gps, (list, tuple)) and len(gps) >= 2 else None
+
         return FeaturedImageBlock(
             path=path,
-            overlay_text=str(cfg.get("overlay", cfg.get("overlay_text", ""))),
+            overlay_text=cfg.get("overlay", cfg.get("overlay_text", "")),
+            overlay_color=str(cfg.get("color", "#FFFFFF")),
+            overlay_background=float(cfg.get("background", 0.0)),
+            overlay_position=str(cfg.get("position", "center")),
+            exif_description=str(cfg.get("exif_desc", "")),
+            exif_gps_lat=gps_lat,
+            exif_gps_lng=gps_lng,
+            filename_keyword=str(cfg.get("filename", "")),
         )
 
     return FeaturedImageBlock()

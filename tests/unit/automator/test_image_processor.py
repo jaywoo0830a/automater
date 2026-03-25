@@ -70,6 +70,12 @@ class TestFeaturedImageBlockDefaults:
     def test_overlay_text_default(self):
         assert FeaturedImageBlock().overlay_text == ""
 
+    def test_overlay_background_default(self):
+        assert FeaturedImageBlock().overlay_background == 0.0
+
+    def test_overlay_position_default(self):
+        assert FeaturedImageBlock().overlay_position == "center"
+
 
 # ---------------------------------------------------------------------------
 # process_image
@@ -136,6 +142,37 @@ class TestProcessFeatured:
 
     def test_list_overlay_text(self):
         block  = FeaturedImageBlock(overlay_text=["강남", "수학 과외"])
+        result = process_featured(_jpeg(200, 200), block)
+        assert result[:2] == b"\xff\xd8"
+
+    def test_background_banner_changes_output(self):
+        """overlay_background > 0 draws a semi-transparent banner."""
+        no_bg = FeaturedImageBlock(
+            pixel_jitter=False, size_jitter_px=0,
+            overlay_text="테스트", overlay_background=0.0,
+        )
+        with_bg = FeaturedImageBlock(
+            pixel_jitter=False, size_jitter_px=0,
+            overlay_text="테스트", overlay_background=0.6,
+        )
+        img = _jpeg(200, 200, color=(255, 255, 255))
+        result_no  = process_featured(img, no_bg)
+        result_yes = process_featured(img, with_bg)
+        assert result_no != result_yes
+
+    def test_position_bottom(self):
+        block = FeaturedImageBlock(
+            pixel_jitter=False, size_jitter_px=0,
+            overlay_text="하단 텍스트", overlay_position="bottom",
+        )
+        result = process_featured(_jpeg(200, 200), block)
+        assert result[:2] == b"\xff\xd8"
+
+    def test_position_top(self):
+        block = FeaturedImageBlock(
+            pixel_jitter=False, size_jitter_px=0,
+            overlay_text="상단 텍스트", overlay_position="top",
+        )
         result = process_featured(_jpeg(200, 200), block)
         assert result[:2] == b"\xff\xd8"
 

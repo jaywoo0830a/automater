@@ -192,8 +192,8 @@ class FeaturedImageBlock:
                                  str → 공백으로 분리해 줄별 표시.
                                  list[str] → 각 요소가 한 줄.
         overlay_color:           텍스트 색상 (hex, 기본 "#FFFFFF").
-        overlay_line_spacing:    줄 간격 (px).
-        overlay_letter_spacing:  자간 (px).
+        overlay_background:      텍스트 뒤 반투명 배너 불투명도 (0.0~1.0, 기본 0.0=없음).
+        overlay_position:        텍스트 위치 ("top", "center", "bottom").
         pixel_jitter:            1-3 픽셀 RGB 미세 변경.
         size_jitter_px:          ±N px 리사이즈.
         saturation_shift:        채도 변화 (±, 기본 ±30%).
@@ -205,8 +205,8 @@ class FeaturedImageBlock:
     path:                   str        = ""
     overlay_text:           str | list = ""
     overlay_color:          str        = "#FFFFFF"
-    overlay_line_spacing:   int        = 24
-    overlay_letter_spacing: int        = 3
+    overlay_background:     float      = 0.0
+    overlay_position:       str        = "center"
     pixel_jitter:           bool       = True
     size_jitter_px:         int        = 2
     saturation_shift:       float      = 0.30

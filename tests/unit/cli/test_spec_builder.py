@@ -190,6 +190,35 @@ class TestThumbnail:
         spec = build_spec(_combo(), config)
         assert spec.body[0].blocks[0].overlay_text == "강남 과외"
 
+    def test_dict_form_with_color(self):
+        config = {**FULL_CONFIG, "post": [
+            {"thumbnail": {"src": "t.jpg", "overlay": "텍스트", "color": "#FFD700"}},
+        ]}
+        spec = build_spec(_combo(), config)
+        assert spec.body[0].blocks[0].overlay_color == "#FFD700"
+
+    def test_dict_form_with_background(self):
+        config = {**FULL_CONFIG, "post": [
+            {"thumbnail": {"src": "t.jpg", "overlay": "텍스트", "background": 0.6}},
+        ]}
+        spec = build_spec(_combo(), config)
+        assert spec.body[0].blocks[0].overlay_background == 0.6
+
+    def test_dict_form_with_position(self):
+        config = {**FULL_CONFIG, "post": [
+            {"thumbnail": {"src": "t.jpg", "overlay": "텍스트", "position": "bottom"}},
+        ]}
+        spec = build_spec(_combo(), config)
+        assert spec.body[0].blocks[0].overlay_position == "bottom"
+
+    def test_dict_form_with_gps(self):
+        config = {**FULL_CONFIG, "post": [
+            {"thumbnail": {"src": "t.jpg", "gps": [37.497, 127.027]}},
+        ]}
+        spec = build_spec(_combo(), config)
+        assert spec.body[0].blocks[0].exif_gps_lat == 37.497
+        assert spec.body[0].blocks[0].exif_gps_lng == 127.027
+
 
 # ---------------------------------------------------------------------------
 # Other blocks
