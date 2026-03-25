@@ -3,7 +3,7 @@ tests/test_image_processor.py
 -------------------------------
 process_image() / process_featured() / build_filename() 단위 테스트.
 
-Pillow 와 piexif 를 사용해 이미지를 변형하는 로직을 검증한다.
+Pillow + exif 패키지를 사용해 이미지를 변형하는 로직을 검증한다.
 실제 파일 I/O 는 tmp_path fixture 로 격리한다.
 """
 
@@ -37,6 +37,9 @@ class TestImageBlockDefaults:
 
     def test_pixel_jitter_default(self):
         assert ImageBlock(path="x.jpg").pixel_jitter is True
+
+    def test_exif_optimization_default(self):
+        assert ImageBlock(path="x.jpg").exif_optimization is True
 
     def test_size_jitter_default(self):
         assert ImageBlock(path="x.jpg").size_jitter_px == 2
@@ -76,6 +79,9 @@ class TestFeaturedImageBlockDefaults:
     def test_overlay_position_default(self):
         assert FeaturedImageBlock().overlay_position == "center"
 
+    def test_exif_optimization_default(self):
+        assert FeaturedImageBlock().exif_optimization is True
+
 
 # ---------------------------------------------------------------------------
 # process_image
@@ -106,16 +112,35 @@ class TestProcessImage:
         assert result[:2] == b"\xff\xd8"
 
     def test_exif_description_embedded(self):
+        from exif import Image as ExifImage
         block  = ImageBlock(path="x.jpg", pixel_jitter=False, size_jitter_px=0,
-                            exif_description="강남 수학 과외")
+                            exif_description="gangnam math tutor")
         result = process_image(_jpeg(), block)
-        assert "강남 수학 과외".encode() in result
+        img = ExifImage(result)
+        assert img.image_description == "gangnam math tutor"
 
     def test_gps_embedded_when_provided(self):
+        from exif import Image as ExifImage
         block  = ImageBlock(path="x.jpg", pixel_jitter=False, size_jitter_px=0,
                             exif_gps_lat=37.49, exif_gps_lng=127.06)
         result = process_image(_jpeg(), block)
-        assert len(result) > 0   # GPS 삽입 후에도 유효한 JPEG
+        img = ExifImage(result)
+        assert img.gps_latitude is not None
+
+    def test_exif_device_metadata_injected(self):
+        from exif import Image as ExifImage
+        block = ImageBlock(path="x.jpg", pixel_jitter=False, size_jitter_px=0)
+        result = process_image(_jpeg(), block)
+        img = ExifImage(result)
+        assert img.make != ""
+        assert img.model != ""
+
+    def test_exif_optimization_disabled(self):
+        block = ImageBlock(path="x.jpg", pixel_jitter=False, size_jitter_px=0,
+                           exif_optimization=False)
+        src = _jpeg()
+        result = process_image(src, block)
+        assert result[:2] == b"\xff\xd8"
 
 
 # ---------------------------------------------------------------------------

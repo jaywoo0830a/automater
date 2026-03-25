@@ -123,11 +123,12 @@ def _build_body(combo: Combo, config: dict[str, Any]) -> list[Section]:
     values = combo.values
     pools = config.get("pools", {})
     images_dir = config.get("images", ".")
+    exif_opt = config.get("exif_optimization", True)
     idx = combo.index
     blocks = []
 
     for entry in post:
-        block = _parse_block(entry, values, pools, images_dir, idx)
+        block = _parse_block(entry, values, pools, images_dir, idx, exif_opt)
         if block is not None:
             blocks.append(block)
 
@@ -155,6 +156,7 @@ def _parse_block(
     pools: dict[str, list[str]],
     images_dir: str,
     index: int,
+    exif_opt: bool = True,
 ) -> Any:
     """Parse one post block entry. Returns None if skipped (when=false or unknown)."""
     # Bare string: "divider"
@@ -194,10 +196,10 @@ def _parse_block(
         return _parse_paragraph(value, values, pools, index)
 
     if block_type == "image":
-        return _parse_image(value, values, pools, images_dir, index)
+        return _parse_image(value, values, pools, images_dir, index, exif_opt)
 
     if block_type == "thumbnail":
-        return _parse_thumbnail(value, values, pools, images_dir, index)
+        return _parse_thumbnail(value, values, pools, images_dir, index, exif_opt)
 
     if block_type == "quote":
         return _parse_quote(value, values, pools, index)
@@ -231,11 +233,12 @@ def _parse_image(
     pools: dict[str, list[str]],
     images_dir: str,
     index: int,
+    exif_opt: bool = True,
 ) -> ImageBlock:
     if isinstance(value, str):
         filename = interpolate(value, values, pools, index)
         path = _resolve_path(images_dir, filename)
-        return ImageBlock(path=path)
+        return ImageBlock(path=path, exif_optimization=exif_opt)
 
     if isinstance(value, dict):
         cfg = interpolate_deep(dict(value), values, pools, index)
@@ -244,9 +247,10 @@ def _parse_image(
         return ImageBlock(
             path=path,
             alt=str(cfg.get("alt", "")),
+            exif_optimization=exif_opt,
         )
 
-    return ImageBlock()
+    return ImageBlock(exif_optimization=exif_opt)
 
 
 def _parse_thumbnail(
@@ -255,11 +259,12 @@ def _parse_thumbnail(
     pools: dict[str, list[str]],
     images_dir: str,
     index: int,
+    exif_opt: bool = True,
 ) -> FeaturedImageBlock:
     if isinstance(value, str):
         filename = interpolate(value, values, pools, index)
         path = _resolve_path(images_dir, filename)
-        return FeaturedImageBlock(path=path)
+        return FeaturedImageBlock(path=path, exif_optimization=exif_opt)
 
     if isinstance(value, dict):
         cfg = interpolate_deep(dict(value), values, pools, index)
@@ -276,13 +281,14 @@ def _parse_thumbnail(
             overlay_color=str(cfg.get("color", "#FFFFFF")),
             overlay_background=float(cfg.get("background", 0.0)),
             overlay_position=str(cfg.get("position", "center")),
+            exif_optimization=exif_opt,
             exif_description=str(cfg.get("exif_desc", "")),
             exif_gps_lat=gps_lat,
             exif_gps_lng=gps_lng,
             filename_keyword=str(cfg.get("filename", "")),
         )
 
-    return FeaturedImageBlock()
+    return FeaturedImageBlock(exif_optimization=exif_opt)
 
 
 def _parse_quote(

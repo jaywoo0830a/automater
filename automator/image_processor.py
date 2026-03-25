@@ -21,28 +21,18 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 from automator.options import ImageBlock, FeaturedImageBlock
+from automator.exif_optimizer import optimize_exif
 
 
 # ---------------------------------------------------------------------------
-# GPS conversion helpers
+# JPEG encoding helper
 # ---------------------------------------------------------------------------
 
-def _decimal_to_dms_rational(value: float) -> list[tuple[int, int]]:
-    abs_val  = abs(value)
-    degrees  = int(abs_val)
-    minutes  = int((abs_val - degrees) * 60)
-    seconds  = round(((abs_val - degrees) * 60 - minutes) * 60 * 10000)
-    return [(degrees, 1), (minutes, 1), (seconds, 10000)]
-
-
-def _latitude_ref(value: float) -> bytes:
-    """Return GPS latitude reference: b'N' for positive, b'S' for negative."""
-    return b"N" if value >= 0 else b"S"
-
-
-def _longitude_ref(value: float) -> bytes:
-    """Return GPS longitude reference: b'E' for positive, b'W' for negative."""
-    return b"E" if value >= 0 else b"W"
+def _to_jpeg(img: Image.Image, quality: int = 92) -> bytes:
+    """Encode a PIL Image to JPEG bytes."""
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=quality)
+    return buf.getvalue()
 
 
 # ---------------------------------------------------------------------------
@@ -53,15 +43,18 @@ def process_image(src: bytes, block: ImageBlock) -> bytes:
     """
     본문 이미지 변환 파이프라인.
 
-    size_jitter → pixel_jitter → saturation_jitter → exif
+    size_jitter → pixel_jitter → saturation_jitter → exif optimization
     """
     img = Image.open(io.BytesIO(src)).convert("RGB")
     img = _apply_size_jitter(img, block.size_jitter_px)
     img = _apply_pixel_jitter(img, block.pixel_jitter)
     img = _apply_saturation(img, block.saturation_jitter)
-    return _encode_with_exif(
-        img,
-        keyword=block.exif_description,
+
+    jpeg_bytes = _to_jpeg(img)
+    return optimize_exif(
+        jpeg_bytes,
+        enabled=block.exif_optimization,
+        description=block.exif_description,
         gps_lat=block.exif_gps_lat,
         gps_lng=block.exif_gps_lng,
     )
@@ -71,7 +64,7 @@ def process_featured(src: bytes, block: FeaturedImageBlock) -> bytes:
     """
     대표 이미지 변환 파이프라인.
 
-    size_jitter → pixel_jitter → saturation_shift → overlay → exif
+    size_jitter → pixel_jitter → saturation_shift → overlay → exif optimization
     """
     img = Image.open(io.BytesIO(src)).convert("RGB")
     img = _apply_size_jitter(img, block.size_jitter_px)
@@ -84,9 +77,12 @@ def process_featured(src: bytes, block: FeaturedImageBlock) -> bytes:
         background=block.overlay_background,
         position=block.overlay_position,
     )
-    return _encode_with_exif(
-        img,
-        keyword=block.exif_description,
+
+    jpeg_bytes = _to_jpeg(img)
+    return optimize_exif(
+        jpeg_bytes,
+        enabled=block.exif_optimization,
+        description=block.exif_description,
         gps_lat=block.exif_gps_lat,
         gps_lng=block.exif_gps_lng,
     )
@@ -257,39 +253,3 @@ def _text_height(draw: ImageDraw.ImageDraw, text: str, font) -> int:
     """Calculate rendered height of a text string."""
     bbox = draw.textbbox((0, 0), text, font=font)
     return bbox[3] - bbox[1]
-
-
-def _encode_with_exif(
-    img:     Image.Image,
-    keyword: str,
-    gps_lat: float | None,
-    gps_lng: float | None,
-) -> bytes:
-    buf = io.BytesIO()
-
-    if not keyword and gps_lat is None:
-        img.save(buf, format="JPEG", quality=92)
-        return buf.getvalue()
-
-    try:
-        import piexif
-
-        zeroth: dict = {}
-        gps:    dict = {}
-
-        if keyword:
-            zeroth[piexif.ImageIFD.ImageDescription] = keyword.encode("utf-8")
-
-        if gps_lat is not None and gps_lng is not None:
-            gps[piexif.GPSIFD.GPSLatitudeRef]  = _latitude_ref(gps_lat)
-            gps[piexif.GPSIFD.GPSLatitude]     = _decimal_to_dms_rational(gps_lat)
-            gps[piexif.GPSIFD.GPSLongitudeRef] = _longitude_ref(gps_lng)
-            gps[piexif.GPSIFD.GPSLongitude]    = _decimal_to_dms_rational(gps_lng)
-
-        exif_bytes = piexif.dump({"0th": zeroth, "GPS": gps, "Exif": {}, "1st": {}})
-        img.save(buf, format="JPEG", quality=92, exif=exif_bytes)
-
-    except ImportError:
-        img.save(buf, format="JPEG", quality=92)
-
-    return buf.getvalue()

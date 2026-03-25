@@ -97,6 +97,22 @@
 # images: ./images
 
 # ═══════════════════════════════════════════════════════════
+# exif_optimization (선택) — EXIF 메타데이터 자동 최적화
+# ═══════════════════════════════════════════════════════════
+#
+# 기본값: true
+# true면 모든 이미지에 현실적인 카메라 EXIF를 자동 삽입:
+#   - make, model, software (한국 시장 스마트폰 풀에서 랜덤)
+#   - datetime_original, datetime_digitized (최근 7일 내 랜덤)
+#   - orientation, color_space, pixel_x/y_dimension
+#   - focal_length, f_number, exposure_time, photographic_sensitivity
+#   - image_description (DSL에서 exif_desc 지정 시)
+#   - GPS 좌표 (DSL에서 gps 지정 시)
+#
+# exif_optimization: true
+# exif_optimization: false   # EXIF 삽입 비활성화
+
+# ═══════════════════════════════════════════════════════════
 # publish (선택) — 자유 키
 # ═══════════════════════════════════════════════════════════
 #
