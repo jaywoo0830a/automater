@@ -146,6 +146,27 @@ def test_parse_truncated_with_complete_elements():
     assert len(result) == 3
 
 
+def test_parse_literal_newlines_in_string():
+    """Gemini returns literal newlines inside JSON strings."""
+    raw = '["This is sentence 1.\n\nThis is sentence 2.", "Another"]'
+    result = _parse(raw, 2)
+    assert "sentence 1" in result[0]
+    assert "sentence 2" in result[0]
+
+
+def test_parse_korean_with_newlines():
+    raw = '["안녕하세요.\n\n반갑습니다.", "두 번째"]'
+    result = _parse(raw, 2)
+    assert "안녕하세요" in result[0]
+    assert "반갑습니다" in result[0]
+
+
+def test_parse_truncated_with_newlines():
+    raw = '["First.\n\nStill going'
+    result = _parse(raw, 2)
+    assert "First" in result[0]
+
+
 # ===========================================================================
 # RateLimitError — 429 handling
 # ===========================================================================

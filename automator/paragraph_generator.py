@@ -158,14 +158,19 @@ def _parse(raw: str, count: int) -> list[str]:
     """
     Parse a JSON array from the raw API response.
 
-    Handles truncated responses: if the API hit max_output_tokens,
-    the JSON array may be incomplete (e.g. '["text...'). This repairs
-    the array by closing the last string and bracket before parsing.
+    Handles:
+        - Markdown fences around JSON
+        - Literal newlines inside JSON strings (Gemini quirk)
+        - Truncated responses (max_output_tokens hit mid-string)
     """
     clean = re.sub(r"```(?:json)?\s*|\s*```", "", raw).strip()
 
+    # Gemini often emits literal newlines inside JSON strings,
+    # which is invalid JSON. Escape them before parsing.
+    sanitized = _escape_newlines_in_json(clean)
+
     # Try exact match first
-    match = re.search(r"\[.*\]", clean, re.DOTALL)
+    match = re.search(r"\[.*\]", sanitized, re.DOTALL)
     if match:
         try:
             parsed = json.loads(match.group())
@@ -178,10 +183,9 @@ def _parse(raw: str, count: int) -> list[str]:
             pass
 
     # Truncated array repair: find '[' and close it
-    bracket = clean.find("[")
+    bracket = sanitized.find("[")
     if bracket >= 0:
-        fragment = clean[bracket:]
-        # Close open string and array
+        fragment = sanitized[bracket:]
         if fragment.count('"') % 2 == 1:
             fragment += '"'
         if not fragment.rstrip().endswith("]"):
@@ -197,3 +201,32 @@ def _parse(raw: str, count: int) -> list[str]:
             pass
 
     raise ValueError(f"No JSON array found in response: {raw!r:.200s}")
+
+
+def _escape_newlines_in_json(text: str) -> str:
+    """
+    Replace literal newlines inside JSON string values with \\n.
+
+    Walks character by character tracking whether we're inside a
+    quoted string. Literal \\n/\\r inside quotes become escaped.
+    """
+    result = []
+    in_string = False
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if ch == '\\' and in_string and i + 1 < len(text):
+            result.append(ch)
+            result.append(text[i + 1])
+            i += 2
+            continue
+        if ch == '"':
+            in_string = not in_string
+        if in_string and ch == '\n':
+            result.append('\\n')
+        elif in_string and ch == '\r':
+            result.append('\\r')
+        else:
+            result.append(ch)
+        i += 1
+    return ''.join(result)
