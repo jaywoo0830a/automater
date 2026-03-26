@@ -185,10 +185,9 @@ class SmartEditorOne(BlogEditor):
         self._page.keyboard.type(text)
 
         # Editor DOM lags behind keyboard.type() on long text.
-        # Without this wait, the next Enter / move_cursor / insert_text
-        # fires before the editor finishes rendering, breaking the flow.
-        if len(text) >= 500:
-            settle = min(10, max(2, len(text) // 500))
+        # ~1 second per 100 chars, minimum 2s, cap 60s.
+        if len(text) >= 100:
+            settle = min(60, max(2, len(text) // 100))
             time.sleep(settle)
 
         for _ in range(max(newlines, 1)):
