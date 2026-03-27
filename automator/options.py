@@ -282,7 +282,7 @@ class Section:
 # PublishOption
 # ---------------------------------------------------------------------------
 
-ScheduleMode  = Literal["immediate", "scheduled"]
+ScheduleMode  = Literal["immediate", "scheduled", "sequential"]
 TagStyle      = Literal["dynamic", "education", "region", "subject", "learning_type"]
 Visibility    = Literal["public", "private", "draft"]
 
@@ -296,10 +296,14 @@ class PublishOption:
     --------
     mode="immediate"   즉시 발행 (기본값).
     mode="scheduled"   at 시각에 예약. at 은 항상 미래, timezone-aware.
+    mode="sequential"  순차 예약. interval_lo~interval_hi 초 간격으로 발행.
+                       at 은 executor 가 런타임에 계산.
     """
     # ── Schedule ──────────────────────────────────────────────────────────────
     mode:           ScheduleMode    = "immediate"
     at:             datetime | None = None
+    interval_lo:    int             = 0   # sequential interval lower bound (sec)
+    interval_hi:    int             = 0   # sequential interval upper bound (sec, 0=same as lo)
 
     # ── Tags ──────────────────────────────────────────────────────────────────
     tags:                list[str]  = field(default_factory=list)

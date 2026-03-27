@@ -387,11 +387,23 @@ _OFFSET_RE = re.compile(
     r"now\s*\+\s*(\d+)\s*([smhd])",
     re.IGNORECASE,
 )
+# ++ 15m ~ 30m  (sequential range)
+_SEQ_RANGE_RE = re.compile(
+    r"\+\+\s*(\d+)\s*([smhd])\s*~\s*(\d+)\s*([smhd])",
+    re.IGNORECASE,
+)
+# ++ 15m  (sequential fixed)
+_SEQ_FIXED_RE = re.compile(
+    r"\+\+\s*(\d+)\s*([smhd])",
+    re.IGNORECASE,
+)
+
+_DEFAULT_SEQ_INTERVAL = 900  # 15 minutes
 
 
 def parse_schedule(raw: Any) -> dict[str, Any]:
     """
-    Parse schedule string → {mode, at}.
+    Parse schedule string → {mode, at, ...}.
 
     Formats:
         'now'              → immediate
@@ -401,7 +413,9 @@ def parse_schedule(raw: Any) -> dict[str, Any]:
         'now + 1h'         → scheduled, at = now + 1 hour
         'now + 1d'         → scheduled, at = now + 1 day
         'now + 15m ~ 30m'  → scheduled, at = now + random(15min, 30min)
-        'now + 30s ~ 2m'   → scheduled, at = now + random(30sec, 120sec)
+        '++'               → sequential, default 15m interval
+        '++ 15m'           → sequential, fixed 15m interval
+        '++ 15m ~ 30m'     → sequential, random 15m~30m interval per post
     """
     if not raw:
         return {"mode": "immediate", "at": None}
@@ -410,6 +424,10 @@ def parse_schedule(raw: Any) -> dict[str, Any]:
 
     if s.lower() in ("now", "immediate", ""):
         return {"mode": "immediate", "at": None}
+
+    # ++ sequential modes
+    if s.startswith("++"):
+        return _parse_sequential(s)
 
     now = datetime.now(tz=_KST)
 
@@ -435,6 +453,35 @@ def parse_schedule(raw: Any) -> dict[str, Any]:
     return {"mode": "immediate", "at": None}
 
 
+def _parse_sequential(s: str) -> dict[str, Any]:
+    """Parse '++', '++ 15m', '++ 15m ~ 30m' → sequential schedule dict."""
+    # ++ 15m ~ 30m (range)
+    m = _SEQ_RANGE_RE.match(s)
+    if m:
+        lo = int(m.group(1)) * _UNIT_MAP[m.group(2).lower()]
+        hi = int(m.group(3)) * _UNIT_MAP[m.group(4).lower()]
+        return {
+            "mode": "sequential", "at": None,
+            "interval_lo": min(lo, hi), "interval_hi": max(lo, hi),
+        }
+
+    # ++ 15m (fixed)
+    m = _SEQ_FIXED_RE.match(s)
+    if m:
+        sec = int(m.group(1)) * _UNIT_MAP[m.group(2).lower()]
+        return {
+            "mode": "sequential", "at": None,
+            "interval_lo": sec, "interval_hi": sec,
+        }
+
+    # bare ++ (default 15m)
+    return {
+        "mode": "sequential", "at": None,
+        "interval_lo": _DEFAULT_SEQ_INTERVAL,
+        "interval_hi": _DEFAULT_SEQ_INTERVAL,
+    }
+
+
 def _build_publish(publish_config: dict[str, Any]) -> PublishOption:
     if not publish_config:
         return PublishOption(mode="immediate")
@@ -443,6 +490,8 @@ def _build_publish(publish_config: dict[str, Any]) -> PublishOption:
     return PublishOption(
         mode=schedule["mode"],
         at=schedule.get("at"),
+        interval_lo=schedule.get("interval_lo", 0),
+        interval_hi=schedule.get("interval_hi", 0),
         tags=list(publish_config.get("tags", [])),
         visibility=publish_config.get("visibility", "public"),
     )

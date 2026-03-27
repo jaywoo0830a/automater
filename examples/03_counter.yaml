@@ -27,7 +27,7 @@ post:
 images: ./asset/images
 
 publish:
-  schedule: 'now'
+  schedule: '++ 15m'
   tags: [교육, 과외]
 
 run:

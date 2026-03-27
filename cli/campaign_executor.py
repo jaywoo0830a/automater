@@ -9,8 +9,10 @@ CampaignExecutor — orchestrates the full CLI pipeline.
 from __future__ import annotations
 
 import logging
+import random
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, TypeVar
 
 from automator.contracts import PostingSpec
@@ -24,6 +26,7 @@ from cli.spec_builder import build_spec, merge_account_run
 logger = logging.getLogger(__name__)
 
 _T = TypeVar("_T")
+_KST = timezone(timedelta(hours=9))
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +104,7 @@ class CampaignExecutor:
     ) -> None:
         self._runner = runner
         self._editor_factory = editor_factory
+        self._seq_next_at: datetime | None = None
 
     def preview(
         self,
@@ -212,9 +216,13 @@ class CampaignExecutor:
             try:
                 spec = build_spec(combo, config, account_idx)
 
+                # Sequential mode: compute at for each post progressively
+                spec = self._resolve_sequential(spec, i)
+
                 if dry_run:
                     title = generate_title(spec.title)
-                    logger.info("[DRY-RUN] %s | %s", username, title)
+                    at_label = spec.publish.at.strftime("%H:%M") if spec.publish.at else "-"
+                    logger.info("[DRY-RUN] %s | %s (at=%s)", username, title, at_label)
                     result.total_succeeded += 1
                     continue
 
@@ -235,6 +243,29 @@ class CampaignExecutor:
         if editor is None:
             raise RuntimeError("editor not initialized")
         self._runner.run(spec, editor)
+
+    def _resolve_sequential(self, spec: PostingSpec, index: int) -> PostingSpec:
+        """
+        For sequential mode, compute and assign schedule_at progressively.
+
+        First post: now + interval.
+        Subsequent posts: previous post's at + interval.
+        Returns the spec unchanged for non-sequential modes.
+        """
+        pub = spec.publish
+        if pub.mode != "sequential":
+            return spec
+
+        lo, hi = pub.interval_lo, pub.interval_hi or pub.interval_lo
+        interval = random.randint(min(lo, hi), max(lo, hi))
+
+        if index == 0:
+            self._seq_next_at = datetime.now(tz=_KST) + timedelta(seconds=interval)
+        else:
+            self._seq_next_at = self._seq_next_at + timedelta(seconds=interval)
+
+        new_pub = replace(pub, mode="scheduled", at=self._seq_next_at)
+        return replace(spec, publish=new_pub)
 
     @staticmethod
     def _parse_interval(run_config: dict[str, Any]) -> int:

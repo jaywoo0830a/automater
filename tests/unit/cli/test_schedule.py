@@ -214,3 +214,50 @@ class TestAccountOverride:
         account = {"username": "u", "password": "p"}
         merged = merge_account_run(global_run, account)
         assert merged == global_run
+
+
+# ---------------------------------------------------------------------------
+# ++ sequential scheduling
+# ---------------------------------------------------------------------------
+
+class TestSequential:
+
+    def test_bare_plus_plus(self):
+        result = parse_schedule("++")
+        assert result["mode"] == "sequential"
+        assert result["interval_lo"] == 900  # default 15m
+
+    def test_plus_plus_fixed(self):
+        result = parse_schedule("++ 15m")
+        assert result["mode"] == "sequential"
+        assert result["interval_lo"] == 900
+        assert result["interval_hi"] == 900
+
+    def test_plus_plus_seconds(self):
+        result = parse_schedule("++ 30s")
+        assert result["interval_lo"] == 30
+
+    def test_plus_plus_hours(self):
+        result = parse_schedule("++ 2h")
+        assert result["interval_lo"] == 7200
+
+    def test_plus_plus_range(self):
+        result = parse_schedule("++ 15m ~ 30m")
+        assert result["mode"] == "sequential"
+        assert result["interval_lo"] == 900
+        assert result["interval_hi"] == 1800
+
+    def test_plus_plus_range_mixed_units(self):
+        result = parse_schedule("++ 30s ~ 2m")
+        assert result["interval_lo"] == 30
+        assert result["interval_hi"] == 120
+
+    def test_plus_plus_at_is_none(self):
+        """Sequential mode has no pre-computed at."""
+        result = parse_schedule("++")
+        assert result["at"] is None
+
+    def test_plus_plus_no_spaces(self):
+        result = parse_schedule("++15m")
+        assert result["mode"] == "sequential"
+        assert result["interval_lo"] == 900

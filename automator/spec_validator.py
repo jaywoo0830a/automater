@@ -59,6 +59,8 @@ class SpecValidator:
         mode = pub.mode
         if mode == "immediate":
             return
+        if mode == "sequential":
+            return  # at is computed at runtime by CampaignExecutor
 
         # All non-immediate modes require a future, timezone-aware `at`
         if pub.at is None:

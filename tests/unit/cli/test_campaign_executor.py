@@ -154,3 +154,78 @@ class TestLiveExecute:
         )
         result = executor.execute(_config(n_keywords=10), dry_run=False, limit=3)
         assert mock_runner.run.call_count == 3
+
+
+# ---------------------------------------------------------------------------
+# Sequential scheduling — ++ mode
+# ---------------------------------------------------------------------------
+
+def _seq_config(n_keywords=5, schedule="++ 15m"):
+    c = _config(n_accounts=1, n_keywords=n_keywords)
+    c["publish"] = {"schedule": schedule}
+    return c
+
+
+class TestSequentialSchedule:
+
+    def test_dry_run_all_succeed(self):
+        executor = CampaignExecutor()
+        result = executor.execute(_seq_config(), dry_run=True)
+        assert result.total_succeeded == 5
+        assert result.total_failed == 0
+
+    def test_specs_get_progressive_times(self):
+        """Each spec's publish.at is later than the previous."""
+        captured_specs = []
+        mock_runner = MagicMock()
+        mock_runner.run.side_effect = lambda spec, editor: captured_specs.append(spec)
+        mock_editor = MagicMock()
+
+        executor = CampaignExecutor(
+            runner=mock_runner,
+            editor_factory=lambda acc: mock_editor,
+        )
+        executor.execute(_seq_config(n_keywords=4, schedule="++ 10m"), dry_run=False)
+
+        assert len(captured_specs) == 4
+        times = [s.publish.at for s in captured_specs]
+        for i in range(1, len(times)):
+            assert times[i] > times[i - 1], f"post {i} not after post {i-1}"
+
+    def test_range_produces_varying_intervals(self):
+        """Range schedule produces different intervals between posts."""
+        captured_specs = []
+        mock_runner = MagicMock()
+        mock_runner.run.side_effect = lambda spec, editor: captured_specs.append(spec)
+        mock_editor = MagicMock()
+
+        executor = CampaignExecutor(
+            runner=mock_runner,
+            editor_factory=lambda acc: mock_editor,
+        )
+        executor.execute(
+            _seq_config(n_keywords=10, schedule="++ 1m ~ 30m"),
+            dry_run=False,
+        )
+
+        times = [s.publish.at for s in captured_specs]
+        gaps = [(times[i] - times[i - 1]).total_seconds() for i in range(1, len(times))]
+        # With 1m~30m range over 9 gaps, not all should be identical
+        assert len(set(gaps)) > 1, f"All gaps identical: {gaps}"
+
+    def test_mode_becomes_scheduled(self):
+        """Sequential specs are converted to scheduled mode with at."""
+        captured_specs = []
+        mock_runner = MagicMock()
+        mock_runner.run.side_effect = lambda spec, editor: captured_specs.append(spec)
+        mock_editor = MagicMock()
+
+        executor = CampaignExecutor(
+            runner=mock_runner,
+            editor_factory=lambda acc: mock_editor,
+        )
+        executor.execute(_seq_config(n_keywords=2), dry_run=False)
+
+        for spec in captured_specs:
+            assert spec.publish.mode == "scheduled"
+            assert spec.publish.at is not None
