@@ -2,6 +2,8 @@
 chcp 65001 >nul 2>&1
 cd /d "%~dp0\.."
 
+set PYTHON=.venv\Scripts\python.exe
+
 echo ========================================
 echo   automator - initial setup
 echo ========================================
@@ -17,18 +19,15 @@ if exist .venv (
     echo         done
 )
 
-call .venv\Scripts\activate.bat
-if errorlevel 1 goto :fail
-
 echo   [2/3] installing packages...
-python -m pip install --quiet --upgrade pip
+%PYTHON% -m pip install --upgrade pip
 if errorlevel 1 goto :fail
-python -m pip install --quiet -r requirements.txt
+%PYTHON% -m pip install -r requirements.txt
 if errorlevel 1 goto :fail
 echo         done
 
 echo   [3/3] installing Playwright Chromium...
-python -m playwright install chromium
+%PYTHON% -m playwright install chromium
 if errorlevel 1 goto :fail
 echo         done
 
