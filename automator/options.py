@@ -49,12 +49,21 @@ class AccountOption:
     Attributes:
         username:     Login username / ID.
         password:     Login password.
+        weight:       Distribution weight. Higher = more posts assigned.
+                      Default 1. Ratio-based: weight 1 vs 3 → 25% vs 75%.
+        min_posts:    Minimum guaranteed posts for this account. 0 = no minimum.
+                      Allocated first, before weight distribution.
+        max_posts:    Hard cap on posts for this account. 0 = unlimited.
+                      Applied after weight distribution.
         proxies:      "ip:port" list to cycle through.
         session_path: Playwright storage-state JSON path.
                       Defaults to "<username>_session.json".
     """
     username:     str
     password:     str
+    weight:       int       = 1
+    min_posts:    int       = 0
+    max_posts:    int       = 0
     proxies:      list[str] = field(default_factory=list)
     session_path: str       = ""
 

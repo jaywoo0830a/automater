@@ -13,7 +13,7 @@ import pytest
 from cli.campaign_executor import (
     CampaignExecutor,
     ExecutionPlan,
-    assign_round_robin,
+    assign_weighted,
 )
 
 
@@ -24,7 +24,7 @@ from cli.campaign_executor import (
 def _config(n_accounts=2, n_keywords=3):
     return {
         "accounts": [
-            {"username": f"user{i}", "password": f"pw{i}", "blog_id": f"blog{i}"}
+            {"username": f"user{i}", "password": f"pw{i}"}
             for i in range(n_accounts)
         ],
         "titles": ["{keyword:region} 과외"],
@@ -38,28 +38,110 @@ def _config(n_accounts=2, n_keywords=3):
 
 
 # ---------------------------------------------------------------------------
-# Round-robin
+# Weighted assignment
 # ---------------------------------------------------------------------------
 
-class TestRoundRobin:
+class TestAssignWeighted:
 
-    def test_even(self):
-        result = assign_round_robin(["a", "b", "c", "d"], ["X", "Y"])
-        assert result == [("X", ["a", "c"]), ("Y", ["b", "d"])]
+    def test_equal_weight_splits_evenly(self):
+        a = {"username": "A", "weight": 1}
+        b = {"username": "B", "weight": 1}
+        result = assign_weighted(["a", "b", "c", "d"], [a, b])
+        assert result[0] == (a, ["a", "b"])
+        assert result[1] == (b, ["c", "d"])
 
-    def test_uneven(self):
-        result = assign_round_robin(["a", "b", "c"], ["X", "Y"])
-        assert result[0] == ("X", ["a", "c"])
-        assert result[1] == ("Y", ["b"])
+    def test_unequal_weight(self):
+        a = {"username": "A", "weight": 1}
+        b = {"username": "B", "weight": 3}
+        result = assign_weighted(list(range(80)), [a, b])
+        a_items = result[0][1]
+        b_items = result[1][1]
+        assert len(a_items) == 20
+        assert len(b_items) == 60
 
-    def test_more_buckets_than_items(self):
-        result = assign_round_robin(["a"], ["X", "Y", "Z"])
+    def test_default_weight_is_one(self):
+        a = {"username": "A"}
+        b = {"username": "B"}
+        result = assign_weighted(["a", "b", "c", "d"], [a, b])
+        assert len(result[0][1]) == 2
+        assert len(result[1][1]) == 2
+
+    def test_single_bucket_gets_all(self):
+        a = {"username": "A", "weight": 1}
+        result = assign_weighted(["a", "b", "c"], [a])
+        assert result == [(a, ["a", "b", "c"])]
+
+    def test_remainder_distributed(self):
+        a = {"username": "A", "weight": 1}
+        b = {"username": "B", "weight": 1}
+        result = assign_weighted(["a", "b", "c"], [a, b])
+        counts = [len(r[1]) for r in result]
+        assert sorted(counts) == [1, 2]
+        assert sum(counts) == 3
+
+    def test_empty_buckets_excluded(self):
+        a = {"username": "A", "weight": 1}
+        b = {"username": "B", "weight": 99}
+        result = assign_weighted(["x"], [a, b])
+        # Only one item, most weight goes to B
         assert len(result) == 1
-        assert result[0] == ("X", ["a"])
+        assert result[0][0] == b
 
-    def test_single_bucket(self):
-        result = assign_round_robin(["a", "b"], ["X"])
-        assert result == [("X", ["a", "b"])]
+    def test_max_posts_caps_account(self):
+        a = {"username": "A", "weight": 1, "max_posts": 20}
+        b = {"username": "B", "weight": 1}
+        result = assign_weighted(list(range(80)), [a, b])
+        a_count = len(result[0][1])
+        b_count = len(result[1][1])
+        assert a_count == 20
+        assert b_count == 60  # overflow redistributed
+
+    def test_max_posts_zero_means_unlimited(self):
+        a = {"username": "A", "weight": 1, "max_posts": 0}
+        b = {"username": "B", "weight": 1, "max_posts": 0}
+        result = assign_weighted(list(range(10)), [a, b])
+        assert len(result[0][1]) == 5
+        assert len(result[1][1]) == 5
+
+    def test_max_posts_with_weight(self):
+        """weight 1:3 but A capped at 10 out of 80 → A=10, B=70."""
+        a = {"username": "A", "weight": 1, "max_posts": 10}
+        b = {"username": "B", "weight": 3}
+        result = assign_weighted(list(range(80)), [a, b])
+        assert len(result[0][1]) == 10
+        assert len(result[1][1]) == 70
+
+    def test_all_capped_drops_excess(self):
+        """Both capped below total → excess items dropped."""
+        a = {"username": "A", "max_posts": 5}
+        b = {"username": "B", "max_posts": 5}
+        result = assign_weighted(list(range(20)), [a, b])
+        total = sum(len(r[1]) for r in result)
+        assert total == 10
+
+    def test_min_posts_guaranteed(self):
+        """min_posts ensures minimum allocation even with low weight."""
+        a = {"username": "A", "weight": 1, "min_posts": 30}
+        b = {"username": "B", "weight": 9}
+        result = assign_weighted(list(range(80)), [a, b])
+        a_count = len(result[0][1])
+        assert a_count >= 30
+
+    def test_min_posts_with_small_total(self):
+        """min_posts can't exceed total items."""
+        a = {"username": "A", "min_posts": 50}
+        b = {"username": "B", "min_posts": 50}
+        result = assign_weighted(list(range(10)), [a, b])
+        total = sum(len(r[1]) for r in result)
+        assert total == 10
+
+    def test_min_and_max_together(self):
+        """min_posts=10, max_posts=20 → gets between 10 and 20."""
+        a = {"username": "A", "min_posts": 10, "max_posts": 20}
+        b = {"username": "B", "weight": 1}
+        result = assign_weighted(list(range(80)), [a, b])
+        a_count = len(result[0][1])
+        assert 10 <= a_count <= 20
 
 
 # ---------------------------------------------------------------------------

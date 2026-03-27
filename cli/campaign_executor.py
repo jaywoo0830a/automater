@@ -62,23 +62,128 @@ class ExecutionResult:
 # Round-robin (pure function)
 # ---------------------------------------------------------------------------
 
-def assign_round_robin(
+def assign_weighted(
     items: list[_T],
     buckets: list[Any],
 ) -> list[tuple[Any, list[_T]]]:
     """
-    Distribute items across buckets in round-robin order.
+    Distribute items across buckets by weight, respecting min/max caps.
+
+    Each bucket (account dict) may have:
+        "weight"    — distribution ratio (default 1)
+        "min_posts" — guaranteed minimum, 0 = none (default 0)
+        "max_posts" — hard cap, 0 = unlimited (default 0)
+
+    Algorithm:
+        1. Allocate min_posts guarantees first.
+        2. Distribute remainder by weight ratio.
+        3. Apply max_posts caps — overflow is redistributed.
 
     Empty buckets excluded from result.
     """
-    assignment: dict[int, list[_T]] = {i: [] for i in range(len(buckets))}
-    for idx, item in enumerate(items):
-        assignment[idx % len(buckets)].append(item)
-    return [
-        (buckets[i], assigned)
-        for i, assigned in assignment.items()
-        if assigned
-    ]
+    n = len(items)
+    if not buckets or n == 0:
+        return []
+
+    def _get(b, key, default):
+        return b.get(key, default) if isinstance(b, dict) else default
+
+    weights = [int(_get(b, "weight", 1)) for b in buckets]
+    floors = [int(_get(b, "min_posts", 0)) for b in buckets]
+    caps = [int(_get(b, "max_posts", 0)) for b in buckets]
+
+    # 1. Allocate min_posts guarantees
+    counts = [min(f, n) for f in floors]
+    remaining = max(0, n - sum(counts))
+
+    # 2. Distribute remainder by weight
+    if remaining > 0:
+        extra = _distribute_by_weight(remaining, weights)
+        counts = [c + e for c, e in zip(counts, extra)]
+
+    # 3. Apply max_posts caps
+    counts = _apply_caps(counts, caps, weights)
+
+    # Slice items by counts
+    result: list[tuple[Any, list[_T]]] = []
+    offset = 0
+    for i, bucket in enumerate(buckets):
+        assigned = items[offset:offset + counts[i]]
+        offset += counts[i]
+        if assigned:
+            result.append((bucket, assigned))
+
+    return result
+
+
+def _distribute_by_weight(n: int, weights: list[int]) -> list[int]:
+    """Split n items proportionally by weights."""
+    total_weight = sum(weights)
+    counts = [n * w // total_weight for w in weights]
+    remainder = n - sum(counts)
+
+    fractions = [(n * w / total_weight) - (n * w // total_weight) for w in weights]
+    for idx in sorted(range(len(weights)), key=lambda i: fractions[i], reverse=True):
+        if remainder <= 0:
+            break
+        counts[idx] += 1
+        remainder -= 1
+
+    return counts
+
+
+def _apply_caps(
+    counts: list[int],
+    caps: list[int],
+    weights: list[int],
+) -> list[int]:
+    """
+    Enforce max_posts caps. Overflow is redistributed to uncapped buckets
+    proportionally by weight. Repeats until stable.
+    """
+    result = list(counts)
+
+    for _ in range(len(counts)):  # max iterations = number of buckets
+        overflow = 0
+        uncapped_weight = 0
+
+        for i, cap in enumerate(caps):
+            if cap > 0 and result[i] > cap:
+                overflow += result[i] - cap
+                result[i] = cap
+            elif cap == 0 or result[i] < cap:
+                uncapped_weight += weights[i]
+
+        if overflow == 0:
+            break
+
+        # Redistribute overflow to uncapped buckets by weight
+        if uncapped_weight == 0:
+            break  # all buckets capped, drop remainder
+
+        distributed = 0
+        for i, cap in enumerate(caps):
+            if (cap == 0 or result[i] < cap) and uncapped_weight > 0:
+                share = overflow * weights[i] // uncapped_weight
+                room = (cap - result[i]) if cap > 0 else overflow
+                added = min(share, room)
+                result[i] += added
+                distributed += added
+
+        # Remainder from integer division — give one each to largest uncapped
+        leftover = overflow - distributed
+        for i in sorted(
+            range(len(counts)),
+            key=lambda i: weights[i],
+            reverse=True,
+        ):
+            if leftover <= 0:
+                break
+            if caps[i] == 0 or result[i] < caps[i]:
+                result[i] += 1
+                leftover -= 1
+
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +218,7 @@ class CampaignExecutor:
     ) -> ExecutionPlan:
         """Build an execution plan without running anything."""
         combos = self._build_combos(config, limit)
-        assignments = assign_round_robin(combos, config["accounts"])
+        assignments = assign_weighted(combos, config["accounts"])
 
         sample_titles = []
         for combo in combos[:5]:
@@ -151,7 +256,7 @@ class CampaignExecutor:
             limit:   Max combos to process.
         """
         combos = self._build_combos(config, limit)
-        assignments = assign_round_robin(combos, config["accounts"])
+        assignments = assign_weighted(combos, config["accounts"])
         result = ExecutionResult()
 
         global_run = config.get("run", {})

@@ -85,6 +85,9 @@ def _build_account(acc: dict[str, Any]) -> AccountOption:
     return AccountOption(
         username=str(acc.get("username", "")),
         password=str(acc.get("password", "")),
+        weight=int(acc.get("weight", 1)),
+        min_posts=int(acc.get("min_posts", 0)),
+        max_posts=int(acc.get("max_posts", 0)),
         proxies=[acc["proxy"]] if "proxy" in acc else list(acc.get("proxies", [])),
         session_path=str(acc.get("session", "")),
     )

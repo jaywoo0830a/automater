@@ -1,4 +1,6 @@
 # ── 다중 계정 캠페인 ────────────────────────────────────
+# 계정별 분배: weight(비율), min_posts(최소 보장), max_posts(상한)
+# 적용 순서: min_posts 보장 → 나머지를 weight로 분배 → max_posts 캡
 
 platform: naver
 naver:
@@ -9,9 +11,14 @@ accounts:
     password: pw1
     session: main_session.json
     proxy: 1.2.3.4:8080
+    weight: 3             # 나머지를 3배 비율로
+    max_posts: 60         # 최대 60개
 
   - username: sub_account
     password: pw2
+    weight: 1
+    min_posts: 10         # 최소 10개 보장 (웜업)
+    max_posts: 25         # 최대 25개
 
 titles:
   - "{keyword:region} {keyword:subject} 과외 {pool:cta}"
