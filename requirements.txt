@@ -14,3 +14,5 @@ openpyxl>=3.1.0
 PyYAML>=6.0
 # Session store — Redis backend (optional)
 redis>=5.0
+# GUI
+PySide6>=6.7.0
