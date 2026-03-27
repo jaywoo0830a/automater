@@ -13,4 +13,4 @@ openpyxl>=3.1.0
 # YAML config support (CLI)
 PyYAML>=6.0
 # Session store — Redis backend (optional)
-# redis>=5.0
+redis>=5.0
