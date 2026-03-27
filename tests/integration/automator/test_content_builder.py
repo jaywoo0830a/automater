@@ -20,7 +20,7 @@ from automator.editor import (
 )
 from automator.stubs import StubTextGenerator, NoopImageProcessor
 from automator.options import (
-    AccountOption, TitleOption, PublishOption,
+    AccountOption, PublishOption,
     ParagraphBlock, ImageBlock, FeaturedImageBlock,
     HeadingBlock, ListBlock, QuoteBlock, DividerBlock,
     Section,
@@ -28,13 +28,13 @@ from automator.options import (
 
 
 def _account():
-    return AccountOption(username="id", password="pw", meta={"blog_id": "b"})
+    return AccountOption(username="id", password="pw")
 
 
 def _spec(*blocks):
     return PostingSpec(
         account=_account(),
-        title=TitleOption(fixed_title="T"),
+        title="T",
         body=(Section(blocks=tuple(blocks)),) if blocks else (),
     )
 
@@ -107,7 +107,7 @@ def test_image_block_with_file(builder, tmp_path):
     assert len(post.tmp_files) == 1
 
 
-def test_featured_image_marks_representative(builder, tmp_path):
+def test_featured_image_produces_featured_step(builder, tmp_path):
     img = tmp_path / "feat.jpg"
     from PIL import Image
     buf = io.BytesIO()
@@ -117,7 +117,6 @@ def test_featured_image_marks_representative(builder, tmp_path):
     post = builder.build(_spec(FeaturedImageBlock(path=str(img))))
     feat_steps = [s for s in post.steps if isinstance(s, FeaturedImageStep)]
     assert len(feat_steps) == 1
-    assert feat_steps[0].marks_representative is True
 
 
 # ---------------------------------------------------------------------------

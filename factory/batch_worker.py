@@ -206,7 +206,6 @@ class BatchWorker:
         return AccountOption(
             username=account.username,
             password=account.password_enc,
-            meta=account.extra or {},
             session_path=f"{account.username}_session.json",
         )
 

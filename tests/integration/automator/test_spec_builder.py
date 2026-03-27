@@ -12,14 +12,14 @@ from dataclasses import FrozenInstanceError
 
 from automator.contracts import PostingSpec
 from automator.options import (
-    AccountOption, TitleOption,
+    AccountOption,
     ParagraphBlock, ImageBlock, FeaturedImageBlock, Section,
     PublishOption, RunSetting,
 )
 
 
 def _account():
-    return AccountOption(username="id", password="pw", meta={"blog_id": "blog"})
+    return AccountOption(username="id", password="pw")
 
 
 def test_spec_requires_account():
@@ -56,6 +56,6 @@ def test_spec_with_full_body():
 
 def test_two_specs_independent():
     """Two specs from same data are independent objects."""
-    a = PostingSpec(account=_account(), title=TitleOption(fixed_title="A"))
-    b = PostingSpec(account=_account(), title=TitleOption(fixed_title="B"))
-    assert a.title.fixed_title != b.title.fixed_title
+    a = PostingSpec(account=_account(), title="A")
+    b = PostingSpec(account=_account(), title="B")
+    assert a.title != b.title

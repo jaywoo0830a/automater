@@ -36,14 +36,14 @@ class TestPreviewPost:
         assert result.sample_title == "강남 수학"
 
     def test_generates_sample_title_with_fixed_title(self):
-        title = TitleOption(fixed_title="고정 제목")
+        title = "고정 제목"
         sections = (Section(blocks=(ParagraphBlock(),)),)
         result = preview_post(title, sections)
 
         assert result.sample_title == "고정 제목"
 
     def test_paragraph_block_shows_keyword_placeholder(self):
-        title = TitleOption(fixed_title="제목")
+        title = "제목"
         sections = (Section(blocks=(
             ParagraphBlock(keyword="강남 수학", tone="informational"),
         )),)
@@ -55,7 +55,7 @@ class TestPreviewPost:
         assert "informational" in result.blocks[0].placeholder
 
     def test_paragraph_block_with_prompt_shows_prompt(self):
-        title = TitleOption(fixed_title="제목")
+        title = "제목"
         sections = (Section(blocks=(
             ParagraphBlock(prompt="Write about SEO benefits"),
         )),)
@@ -64,7 +64,7 @@ class TestPreviewPost:
         assert "SEO benefits" in result.blocks[0].placeholder
 
     def test_paragraph_block_empty_shows_generic(self):
-        title = TitleOption(fixed_title="제목")
+        title = "제목"
         sections = (Section(blocks=(ParagraphBlock(),)),)
         result = preview_post(title, sections)
 
@@ -72,7 +72,7 @@ class TestPreviewPost:
         assert result.blocks[0].placeholder  # not empty
 
     def test_heading_block_shows_text(self):
-        title = TitleOption(fixed_title="제목")
+        title = "제목"
         sections = (Section(blocks=(HeadingBlock(level=2, text="소제목"),)),)
         result = preview_post(title, sections)
 
@@ -80,7 +80,7 @@ class TestPreviewPost:
         assert "소제목" in result.blocks[0].placeholder
 
     def test_image_block_shows_path(self):
-        title = TitleOption(fixed_title="제목")
+        title = "제목"
         sections = (Section(blocks=(
             ImageBlock(path="/images/sample.jpg"),
         )),)
@@ -90,7 +90,7 @@ class TestPreviewPost:
         assert "sample.jpg" in result.blocks[0].placeholder
 
     def test_featured_image_block(self):
-        title = TitleOption(fixed_title="제목")
+        title = "제목"
         sections = (Section(blocks=(
             FeaturedImageBlock(path="/images/thumb.jpg", overlay_text="강남 수학"),
         )),)
@@ -100,7 +100,7 @@ class TestPreviewPost:
         assert "thumb.jpg" in result.blocks[0].placeholder
 
     def test_list_block(self):
-        title = TitleOption(fixed_title="제목")
+        title = "제목"
         sections = (Section(blocks=(
             ListBlock(items=("항목1", "항목2", "항목3"), ordered=True),
         )),)
@@ -110,7 +110,7 @@ class TestPreviewPost:
         assert "3 items" in result.blocks[0].placeholder
 
     def test_quote_block(self):
-        title = TitleOption(fixed_title="제목")
+        title = "제목"
         sections = (Section(blocks=(
             QuoteBlock(text="인용문 텍스트", attribution="출처"),
         )),)
@@ -120,14 +120,14 @@ class TestPreviewPost:
         assert "출처" in result.blocks[0].placeholder
 
     def test_divider_block(self):
-        title = TitleOption(fixed_title="제목")
+        title = "제목"
         sections = (Section(blocks=(DividerBlock(),)),)
         result = preview_post(title, sections)
 
         assert result.blocks[0].block_type == "divider"
 
     def test_multiple_sections_flattened(self):
-        title = TitleOption(fixed_title="제목")
+        title = "제목"
         sections = (
             Section(blocks=(
                 HeadingBlock(level=2, text="서론"),
@@ -145,14 +145,14 @@ class TestPreviewPost:
         assert types == ["heading", "paragraph", "paragraph", "image"]
 
     def test_empty_sections_returns_empty_blocks(self):
-        title = TitleOption(fixed_title="제목")
+        title = "제목"
         result = preview_post(title, ())
 
         assert result.sample_title == "제목"
         assert result.blocks == []
 
     def test_block_order_matches_section_order(self):
-        title = TitleOption(fixed_title="제목")
+        title = "제목"
         sections = (Section(blocks=(
             HeadingBlock(level=2, text="H2"),
             ParagraphBlock(keyword="KW"),

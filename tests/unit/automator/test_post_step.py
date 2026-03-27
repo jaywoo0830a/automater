@@ -2,7 +2,7 @@
 tests/test_post_step.py
 ------------------------
 PostStep.execute() — each step calls the correct BlogEditor primitive.
-PostStep properties — needs_upload_delay, marks_representative.
+PostStep properties — needs_upload_delay.
 """
 
 import pytest
@@ -36,10 +36,29 @@ def test_image_step_calls_upload_file(mock_editor):
     mock_editor.upload_file.assert_called_once_with("/some/image.jpg")
 
 
+def test_image_step_calls_insert_link_when_link_set(mock_editor):
+    step = ImageStep(path="/some/image.jpg", link="https://example.com")
+    step.execute(mock_editor)
+    mock_editor.upload_file.assert_called_once_with("/some/image.jpg")
+    mock_editor.insert_link.assert_called_once_with("https://example.com")
+
+
+def test_image_step_skips_insert_link_when_empty(mock_editor):
+    step = ImageStep(path="/some/image.jpg")
+    step.execute(mock_editor)
+    mock_editor.insert_link.assert_not_called()
+
+
 def test_featured_image_step_calls_upload_file(mock_editor):
     step = FeaturedImageStep(path="/some/thumb.jpg")
     step.execute(mock_editor)
     mock_editor.upload_file.assert_called_once_with("/some/thumb.jpg")
+
+
+def test_featured_image_step_calls_insert_link_when_link_set(mock_editor):
+    step = FeaturedImageStep(path="/some/thumb.jpg", link="https://example.com")
+    step.execute(mock_editor)
+    mock_editor.insert_link.assert_called_once_with("https://example.com")
 
 
 def test_heading_step_calls_insert_heading(mock_editor):
@@ -66,6 +85,12 @@ def test_quote_step_calls_insert_quote(mock_editor):
     mock_editor.insert_quote.assert_called_once_with("wise words")
 
 
+def test_divider_step_calls_insert_divider(mock_editor):
+    step = DividerStep()
+    step.execute(mock_editor)
+    mock_editor.insert_divider.assert_called_once()
+
+
 # ---------------------------------------------------------------------------
 # Orchestration properties
 # ---------------------------------------------------------------------------
@@ -82,35 +107,9 @@ def test_featured_image_step_needs_upload_delay():
     assert FeaturedImageStep(path="x").needs_upload_delay
 
 
-def test_paragraph_step_not_representative():
-    assert not ParagraphStep(text="x").marks_representative
-
-
-def test_image_step_not_representative():
-    assert not ImageStep(path="x").marks_representative
-
-
-def test_featured_image_step_marks_representative():
-    assert FeaturedImageStep(path="x").marks_representative
-
-
 def test_heading_step_no_upload_delay():
     assert not HeadingStep(level=1, text="x").needs_upload_delay
 
 
-def test_heading_step_not_representative():
-    assert not HeadingStep(level=1, text="x").marks_representative
-
-
-def test_divider_step_calls_insert_divider(mock_editor):
-    step = DividerStep()
-    step.execute(mock_editor)
-    mock_editor.insert_divider.assert_called_once()
-
-
 def test_divider_step_no_upload_delay():
     assert not DividerStep().needs_upload_delay
-
-
-def test_divider_step_not_representative():
-    assert not DividerStep().marks_representative

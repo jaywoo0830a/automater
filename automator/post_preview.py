@@ -53,20 +53,20 @@ class PostPreview:
 # ---------------------------------------------------------------------------
 
 def preview_post(
-    title_option: TitleOption,
+    title_option: TitleOption | str,
     sections: tuple[Section, ...],
 ) -> PostPreview:
     """
     Generate a dry-run preview of a post.
 
     Args:
-        title_option: TitleOption for generating the sample title.
+        title_option: TitleOption for template-based generation, or a plain str.
         sections:     Tuple of Sections defining the post body layout.
 
     Returns:
         PostPreview with sample title and block-level placeholders.
     """
-    sample_title = generate_title(title_option)
+    sample_title = title_option if isinstance(title_option, str) else generate_title(title_option)
 
     blocks: list[BlockPreview] = []
     for section in sections:

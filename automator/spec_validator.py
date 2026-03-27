@@ -14,7 +14,7 @@ from datetime import datetime
 from automator.contracts import PostingSpec
 from automator.layout import validate_sections
 from automator.title_generator import validate_template
-from automator.options import KST
+from automator.options import TitleOption, KST
 
 
 class SpecValidator:
@@ -42,9 +42,8 @@ class SpecValidator:
 
     @staticmethod
     def _validate_title(spec: PostingSpec) -> None:
-        if spec.title and not spec.title.fixed_title:
-            if spec.title.template:
-                validate_template(spec.title.template)
+        if isinstance(spec.title, TitleOption) and spec.title.template:
+            validate_template(spec.title.template)
 
     @staticmethod
     def _validate_publish(spec: PostingSpec) -> None:

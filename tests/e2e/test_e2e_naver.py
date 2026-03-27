@@ -92,7 +92,7 @@ def _schedule(hours_ahead: int = 2) -> datetime:
 # ---------------------------------------------------------------------------
 
 def test_editor_iframe_is_visible(page: Page, account: AccountOption):
-    page.goto(f"https://blog.naver.com/{account.meta['blog_id']}?Redirect=Write&")
+    page.goto(f"https://blog.naver.com/{NAVER_BLOG_ID}?Redirect=Write&")
     page.frame_locator(_MAIN_FRAME) \
         .locator(_EDITOR_BODY) \
         .wait_for(state="visible", timeout=15_000)
@@ -107,7 +107,7 @@ def test_pipeline_text_only(editor: SmartEditorOne, account: AccountOption):
     """텍스트 블록만 있는 포스트 — 이미지 불필요."""
     spec = PostingSpec(
         account=account,
-        title=TitleOption(fixed_title="텍스트 전용 테스트"),
+        title="텍스트 전용 테스트",
         body=(Section(blocks=(
             ParagraphBlock(prompt="강남 수학 과외 홍보 블로그"),
             ParagraphBlock(prompt="후기 형식 마무리"),
@@ -129,7 +129,7 @@ def test_pipeline_heading_level(editor: SmartEditorOne, account: AccountOption, 
     """H1~H6 각 레벨별 소제목 삽입 — 서식 적용 + 일반 단락 복귀."""
     spec = PostingSpec(
         account=account,
-        title=TitleOption(fixed_title=f"H{level} 소제목 테스트 (size {size})"),
+        title=f"H{level} 소제목 테스트 (size {size})",
         body=(Section(blocks=(
             HeadingBlock(level=level, text=f"H{level} 소제목 — 크기 {size}"),
             ParagraphBlock(prompt=f"H{level} 아래 일반 본문"),
@@ -144,7 +144,7 @@ def test_pipeline_heading_mixed_levels(editor: SmartEditorOne, account: AccountO
     """H1 + H3 + H5 혼합 — 서로 다른 크기가 순서대로 적용되는지 확인."""
     spec = PostingSpec(
         account=account,
-        title=TitleOption(fixed_title="혼합 소제목 테스트"),
+        title="혼합 소제목 테스트",
         body=(Section(blocks=(
             HeadingBlock(level=1, text="대제목 (H1, 38)"),
             ParagraphBlock(prompt="대제목 아래 본문"),
@@ -171,7 +171,7 @@ def test_pipeline_heading_with_image(editor: SmartEditorOne, account: AccountOpt
 
     spec = PostingSpec(
         account=account,
-        title=TitleOption(fixed_title="소제목 + 이미지 테스트"),
+        title="소제목 + 이미지 테스트",
         body=(Section(blocks=tuple(blocks)),),
         publish=PublishOption(mode="immediate"),
     )
@@ -187,7 +187,7 @@ def test_pipeline_quote_only(editor: SmartEditorOne, account: AccountOption):
     """인용구만 삽입 — 인용구 서식 적용 + 다음 단락으로 빠져나오는지 확인."""
     spec = PostingSpec(
         account=account,
-        title=TitleOption(fixed_title="인용구 테스트"),
+        title="인용구 테스트",
         body=(Section(blocks=(
             QuoteBlock(text="교육의 목적은 시험이 아니다"),
             ParagraphBlock(prompt="인용구 아래 일반 본문"),
@@ -202,7 +202,7 @@ def test_pipeline_quote_with_heading(editor: SmartEditorOne, account: AccountOpt
     """소제목 + 본문 + 인용구 + 본문 — 혼합 레이아웃."""
     spec = PostingSpec(
         account=account,
-        title=TitleOption(fixed_title="소제목 + 인용구 혼합 테스트"),
+        title="소제목 + 인용구 혼합 테스트",
         body=(Section(blocks=(
             HeadingBlock(level=2, text="명언 모음"),
             ParagraphBlock(prompt="명언을 소개하는 도입부"),
@@ -219,7 +219,7 @@ def test_pipeline_multiple_quotes(editor: SmartEditorOne, account: AccountOption
     """인용구 2개 연속 — 각각 독립적으로 서식이 적용되는지 확인."""
     spec = PostingSpec(
         account=account,
-        title=TitleOption(fixed_title="연속 인용구 테스트"),
+        title="연속 인용구 테스트",
         body=(Section(blocks=(
             QuoteBlock(text="첫 번째 인용구"),
             QuoteBlock(text="두 번째 인용구"),
@@ -239,7 +239,7 @@ def test_pipeline_divider_between_paragraphs(editor: SmartEditorOne, account: Ac
     """본문 + 구분선 + 본문 — 구분선이 삽입되고 다음 단락이 정상 입력되는지 확인."""
     spec = PostingSpec(
         account=account,
-        title=TitleOption(fixed_title="구분선 테스트"),
+        title="구분선 테스트",
         body=(Section(blocks=(
             ParagraphBlock(prompt="구분선 위 본문"),
             DividerBlock(),
@@ -255,7 +255,7 @@ def test_pipeline_divider_with_heading_and_quote(editor: SmartEditorOne, account
     """소제목 + 본문 + 구분선 + 인용구 — 전체 레이아웃 혼합."""
     spec = PostingSpec(
         account=account,
-        title=TitleOption(fixed_title="혼합 레이아웃 테스트"),
+        title="혼합 레이아웃 테스트",
         body=(Section(blocks=(
             HeadingBlock(level=2, text="첫 번째 섹션"),
             ParagraphBlock(prompt="첫 번째 본문"),
@@ -347,7 +347,7 @@ def test_pipeline_real_publish(page: Page, account: AccountOption, real_run: boo
             overlay_text="강남 수학 과외",
         ))
 
-    write_url = f"https://blog.naver.com/{account.meta['blog_id']}?Redirect=Write&"
+    write_url = f"https://blog.naver.com/{NAVER_BLOG_ID}?Redirect=Write&"
     editor    = SmartEditorOne(page, write_url, dry_run=False)
 
     spec = PostingSpec(
@@ -396,7 +396,7 @@ def test_pipeline_dsl_full_blocks(editor: SmartEditorOne, account: AccountOption
 
     spec = PostingSpec(
         account=account,
-        title=TitleOption(fixed_title="DSL 풀블록 E2E 테스트"),
+        title="DSL 풀블록 E2E 테스트",
         body=(Section(blocks=tuple(blocks)),),
         publish=PublishOption(mode="scheduled", at=_schedule()),
     )
@@ -432,7 +432,7 @@ def test_pipeline_consecutive_scheduled(editor: SmartEditorOne, account: Account
 
         spec = PostingSpec(
             account=account,
-            title=TitleOption(fixed_title=f"연속 발행 E2E #{i+1}"),
+            title=f"연속 발행 E2E #{i+1}",
             body=(Section(blocks=tuple(blocks)),),
             publish=PublishOption(mode="scheduled", at=schedule),
         )
@@ -458,7 +458,7 @@ def test_pipeline_consecutive_real_publish(
     thumb = _asset("thumbnails", 0)
     schedule = _schedule()
 
-    write_url = f"https://blog.naver.com/{account.meta['blog_id']}?Redirect=Write&"
+    write_url = f"https://blog.naver.com/{NAVER_BLOG_ID}?Redirect=Write&"
     editor    = SmartEditorOne(page, write_url, dry_run=False)
 
     for i in range(2):
@@ -475,7 +475,7 @@ def test_pipeline_consecutive_real_publish(
 
         spec = PostingSpec(
             account=account,
-            title=TitleOption(fixed_title=f"연속 실발행 E2E #{i+1}"),
+            title=f"연속 실발행 E2E #{i+1}",
             body=(Section(blocks=tuple(blocks)),),
             publish=PublishOption(mode="scheduled", at=schedule),
         )
@@ -522,12 +522,12 @@ def test_pipeline_long_paragraph_real_gemini(
         ),
     ))
 
-    write_url = f"https://blog.naver.com/{account.meta['blog_id']}?Redirect=Write&"
+    write_url = f"https://blog.naver.com/{NAVER_BLOG_ID}?Redirect=Write&"
     editor    = SmartEditorOne(page, write_url, dry_run=False)
 
     spec = PostingSpec(
         account=account,
-        title=TitleOption(fixed_title="Gemini 장문 E2E 실발행"),
+        title="Gemini 장문 E2E 실발행",
         body=(Section(blocks=tuple(blocks)),),
         publish=PublishOption(mode="scheduled", at=_schedule()),
     )
@@ -552,7 +552,7 @@ def test_pipeline_image_with_link(editor: SmartEditorOne, account: AccountOption
 
     spec = PostingSpec(
         account=account,
-        title=TitleOption(fixed_title="이미지 링크 E2E 테스트"),
+        title="이미지 링크 E2E 테스트",
         body=(Section(blocks=(
             ImageBlock(path=image, link="tel:01012345678"),
             ParagraphBlock(prompt="이미지 링크 삽입 후 본문"),
@@ -576,7 +576,7 @@ def test_pipeline_thumbnail_with_link(editor: SmartEditorOne, account: AccountOp
 
     spec = PostingSpec(
         account=account,
-        title=TitleOption(fixed_title="썸네일 링크 E2E 테스트"),
+        title="썸네일 링크 E2E 테스트",
         body=(Section(blocks=(
             FeaturedImageBlock(path=thumb, link="https://example.com"),
             ParagraphBlock(prompt="썸네일 링크 삽입 후 본문"),
@@ -603,7 +603,7 @@ def test_pipeline_mixed_links_and_no_links(
 
     spec = PostingSpec(
         account=account,
-        title=TitleOption(fixed_title="혼합 링크 E2E 테스트"),
+        title="혼합 링크 E2E 테스트",
         body=(Section(blocks=(
             ImageBlock(path=image, link="tel:01012345678"),
             DividerBlock(),

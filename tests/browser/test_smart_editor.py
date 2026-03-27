@@ -89,7 +89,7 @@ def test_set_rep_image_raises_for_negative_index(editor):
 def test_publish_dry_run_opens_popover_but_skips_confirm(editor, mock_page):
     with patch.object(editor, "_click_publish_trigger"), \
          patch.object(editor, "_click_publish_confirm") as mock_confirm:
-        editor.publish(schedule_at=None)
+        editor.publish()
     mock_confirm.assert_not_called()
 
 

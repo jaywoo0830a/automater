@@ -77,19 +77,6 @@ def test_invalid_template_raises_on_generation():
 
 
 # ---------------------------------------------------------------------------
-# fixed_title
-# ---------------------------------------------------------------------------
-
-def test_fixed_title_bypasses_template():
-    assert generate_title(TitleOption(fixed_title="강남 수학 과외")) == "강남 수학 과외"
-
-
-def test_fixed_title_is_deterministic():
-    opt = TitleOption(fixed_title="강남 수학 과외")
-    assert generate_title(opt) == generate_title(opt)
-
-
-# ---------------------------------------------------------------------------
 # keyword substitution
 # ---------------------------------------------------------------------------
 

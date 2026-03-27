@@ -88,8 +88,6 @@ def _build_account(acc: dict[str, Any]) -> AccountOption:
     return AccountOption(
         username=str(acc.get("username", "")),
         password=str(acc.get("password", "")),
-        meta={k: v for k, v in acc.items()
-              if k not in ("username", "password", "proxies", "session", "proxy")},
         proxies=[acc["proxy"]] if "proxy" in acc else list(acc.get("proxies", [])),
         session_path=str(acc.get("session", "")),
     )

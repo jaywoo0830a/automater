@@ -19,7 +19,7 @@ from automator.options import (
 
 
 def _account(**kw):
-    defaults = {"username": "id", "password": "pw", "meta": {"blog_id": "b"}}
+    defaults = {"username": "id", "password": "pw"}
     defaults.update(kw)
     return AccountOption(**defaults)
 
@@ -115,6 +115,6 @@ def test_zero_max_daily_posts_rejected(v):
 def test_valid_spec_passes(v):
     """A fully valid spec does not raise."""
     v.validate(_spec(
-        title=TitleOption(fixed_title="T"),
+        title="T",
         body=(Section(blocks=(ParagraphBlock(),)),),
     ))

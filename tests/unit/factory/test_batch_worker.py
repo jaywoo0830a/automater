@@ -29,7 +29,8 @@ from factory.batch_worker import BatchWorker, ItemResult
 # ---------------------------------------------------------------------------
 
 class RecordingEditor(BlogEditor):
-    def __init__(self):
+    def __init__(self, dry_run=True):
+        super().__init__(dry_run=dry_run)
         self.calls: list[tuple] = []
 
     def open(self):
@@ -53,14 +54,14 @@ class RecordingEditor(BlogEditor):
     def upload_file(self, path):
         self.calls.append(("upload_file", path))
 
+    def insert_link(self, url):
+        self.calls.append(("insert_link", url))
+
     def move_cursor(self, position="end"):
         self.calls.append(("cursor", position))
 
-    def set_representative_media(self, index):
-        self.calls.append(("representative", index))
-
-    def publish(self, schedule_at=None):
-        self.calls.append(("publish", schedule_at))
+    def publish(self):
+        self.calls.append(("publish",))
 
 
 # ---------------------------------------------------------------------------

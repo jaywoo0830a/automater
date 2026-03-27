@@ -89,7 +89,6 @@ def account() -> AccountOption:
     return AccountOption(
         username=NAVER_ID,
         password=NAVER_PW,
-        meta={"blog_id": NAVER_BLOG_ID},
         session_path=SESSION_PATH,
     )
 
@@ -135,7 +134,7 @@ def page(auth_context: BrowserContext) -> Page:
 def editor(page: Page, account: AccountOption) -> SmartEditorOne:
     return SmartEditorOne(
         page,
-        f"https://blog.naver.com/{account.meta['blog_id']}?Redirect=Write&",
+        f"https://blog.naver.com/{NAVER_BLOG_ID}?Redirect=Write&",
         dry_run=True,
     )
 

@@ -32,7 +32,7 @@ class PostingSpec:
     automator.runner.JobRunner executes it against a BlogEditor.
     """
     account: AccountOption
-    title:   TitleOption     = field(default_factory=TitleOption)
+    title:   TitleOption | str  = ""
     body:    tuple[Section, ...] = ()
     publish: PublishOption   = field(default_factory=PublishOption)
     setting: RunSetting      = field(default_factory=RunSetting)

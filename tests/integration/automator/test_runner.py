@@ -19,7 +19,7 @@ from automator.content_builder import ContentBuilder
 from automator.runner import JobRunner
 from automator.stubs import StubTextGenerator, NoopImageProcessor
 from automator.options import (
-    AccountOption, TitleOption,
+    AccountOption,
     ParagraphBlock, ImageBlock, HeadingBlock, Section,
     PublishOption, KST,
 )
@@ -31,7 +31,8 @@ _CONTENT_ACTIONS = frozenset({"insert_text", "upload_file"})
 class _RecordingEditor(BlogEditor):
     """Captures all primitive calls in order."""
 
-    def __init__(self):
+    def __init__(self, dry_run=True):
+        super().__init__(dry_run=dry_run)
         self.calls: list[tuple] = []
 
     def open(self):
@@ -55,23 +56,23 @@ class _RecordingEditor(BlogEditor):
     def upload_file(self, path):
         self.calls.append(("upload_file", path))
 
+    def insert_link(self, url):
+        self.calls.append(("insert_link", url))
+
     def move_cursor(self, position="end"):
         self.calls.append(("cursor", position))
 
-    def set_representative_media(self, index):
-        self.calls.append(("representative", index))
-
-    def publish(self, schedule_at=None):
-        self.calls.append(("publish", schedule_at))
+    def publish(self):
+        self.calls.append(("publish",))
 
 
 def _account():
-    return AccountOption(username="id", password="pw", meta={"blog_id": "b"})
+    return AccountOption(username="id", password="pw")
 
 
 def _spec(**kw):
     kw.setdefault("account", _account())
-    kw.setdefault("title", TitleOption(fixed_title="T"))
+    kw.setdefault("title", "T")
     return PostingSpec(**kw)
 
 
@@ -134,13 +135,24 @@ def test_cursor_between_steps(runner, rec):
     assert len(cursors) >= 1
 
 
-def test_publish_schedule_at(runner, rec):
-    """Fixed schedule passes datetime to editor.publish()."""
+def test_publish_schedule_at(runner):
+    """Fixed schedule calls editor.schedule() before publish()."""
+
+    class _SchedulingEditor(_RecordingEditor):
+        def schedule(self, at):
+            self.calls.append(("schedule", at))
+
+    editor = _SchedulingEditor()
     future = datetime.now(tz=KST) + timedelta(hours=2)
     spec = _spec(publish=PublishOption(mode="scheduled", at=future))
-    runner.run(spec, rec)
-    pub_call = [c for c in rec.calls if c[0] == "publish"][0]
-    assert pub_call[1] == future
+    runner.run(spec, editor)
+
+    actions = [c[0] for c in editor.calls]
+    assert "schedule" in actions
+    assert actions.index("schedule") < actions.index("publish")
+
+    sched_call = [c for c in editor.calls if c[0] == "schedule"][0]
+    assert sched_call[1] == future
 
 
 def test_empty_body_gets_stub_paragraph(runner, rec):

@@ -24,8 +24,8 @@ Public interface
 Usage
 -----
     spec = PostingSpec(
-        account=AccountOption(username="id", password="pw"),
-        title=TitleOption(fixed_title="title"),
+        account=AccountOption(username="id", password="pw"),  # platform config goes to editor
+        title="my title",  # or TitleOption(template=...)
         body=(Section(blocks=(ParagraphBlock(),)),),
     )
     runner = JobRunner(SpecValidator(), ContentBuilder(text_gen, img_proc))

@@ -9,9 +9,9 @@ BlogEditor primitives
     write_title(title)              — title field
     insert_text(text, newlines)     — any text at cursor
     upload_file(path)               — any file via chooser
+    insert_link(url)                — attach link to last element
     move_cursor(position)           — reposition cursor
-    set_representative_media(index) — mark thumbnail
-    publish(schedule_at)            — publish or schedule
+    publish()                       — confirm and publish
 
 PostStep hierarchy (internal)
 -----------------------------
@@ -19,7 +19,7 @@ Each step carries data + execute(editor).  No isinstance anywhere.
 
     ParagraphStep       -> insert_text
     ImageStep           -> upload_file
-    FeaturedImageStep   -> upload_file  (marks_representative=True)
+    FeaturedImageStep   -> upload_file + insert_link
     HeadingStep         -> insert_text
     ListStep            -> insert_text
     QuoteStep           -> insert_text
@@ -51,7 +51,19 @@ class BlogEditor(ABC):
     insert_text covers paragraphs, headings, quotes, lists.
     upload_file covers images, videos, attachments.
     New block types never require new methods here.
+
+    Args:
+        dry_run: If True (default), publish() prepares everything but
+                 skips the final confirm — the post is never actually published.
     """
+
+    def __init__(self, *, dry_run: bool = True) -> None:
+        self._dry_run = dry_run
+
+    @property
+    def dry_run(self) -> bool:
+        """Whether this editor is in dry-run mode."""
+        return self._dry_run
 
     @abstractmethod
     def open(self) -> None:
@@ -93,22 +105,16 @@ class BlogEditor(ABC):
         """Upload a file via the file chooser dialog."""
 
     @abstractmethod
+    def insert_link(self, url: str) -> None:
+        """Attach a hyperlink to the last inserted element (image, text, etc.)."""
+
+    @abstractmethod
     def move_cursor(self, position: CursorPosition = "end") -> None:
         """Reposition the cursor."""
 
     @abstractmethod
-    def set_representative_media(self, index: int) -> None:
-        """
-        Set the index-th (0-based) uploaded image as representative.
-
-        Raises:
-            ValueError:   index is negative.
-            RuntimeError: editor cannot confirm the selection.
-        """
-
-    @abstractmethod
-    def publish(self, schedule_at: datetime | None = None) -> None:
-        """Publish the post, or schedule it at the given KST datetime."""
+    def publish(self) -> None:
+        """Confirm and publish the post."""
 
 
 # ---------------------------------------------------------------------------
@@ -120,8 +126,7 @@ class PostStep(ABC):
     Abstract command that knows how to execute itself on a BlogEditor.
 
     Orchestration properties:
-        needs_upload_delay   — True for file uploads
-        marks_representative — True for featured image uploads
+        needs_upload_delay — True for file uploads
     """
 
     @abstractmethod
@@ -130,10 +135,6 @@ class PostStep(ABC):
 
     @property
     def needs_upload_delay(self) -> bool:
-        return False
-
-    @property
-    def marks_representative(self) -> bool:
         return False
 
 
@@ -153,12 +154,14 @@ class ParagraphStep(PostStep):
 
 @dataclass(frozen=True)
 class ImageStep(PostStep):
-    """Upload a body image."""
+    """Upload a body image, optionally attaching a link."""
     path: str
     link: str = ""
 
     def execute(self, editor: BlogEditor) -> None:
         editor.upload_file(self.path)
+        if self.link:
+            editor.insert_link(self.link)
 
     @property
     def needs_upload_delay(self) -> bool:
@@ -167,19 +170,17 @@ class ImageStep(PostStep):
 
 @dataclass(frozen=True)
 class FeaturedImageStep(PostStep):
-    """Upload a featured image (marked as representative)."""
+    """Upload a featured image, optionally attaching a link."""
     path: str
     link: str = ""
 
     def execute(self, editor: BlogEditor) -> None:
         editor.upload_file(self.path)
+        if self.link:
+            editor.insert_link(self.link)
 
     @property
     def needs_upload_delay(self) -> bool:
-        return True
-
-    @property
-    def marks_representative(self) -> bool:
         return True
 
 

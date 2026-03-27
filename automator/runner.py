@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 
 from automator.contracts import PostingSpec
-from automator.editor import BlogEditor, _PostContent
+from automator.editor import BlogEditor, FeaturedImageStep, _PostContent
 from automator.spec_validator import SpecValidator
 from automator.content_builder import ContentBuilder
 
@@ -72,18 +72,12 @@ class JobRunner:
 
                 step.execute(editor)
 
-                if step.marks_representative:
-                    rep_index = image_upload_count
-
                 if step.needs_upload_delay:
+                    if isinstance(step, FeaturedImageStep):
+                        rep_index = image_upload_count
                     image_upload_count += 1
                     if upload_delay_ms > 0:
                         time.sleep(upload_delay_ms / 1000)
-
-                # Insert link to image if step carries one
-                step_link = getattr(step, "link", "")
-                if step_link and hasattr(editor, "_insert_link_to_image"):
-                    editor._insert_link_to_image(step_link)
 
         finally:
             for path in post.tmp_files:
@@ -92,7 +86,12 @@ class JobRunner:
                 except OSError:
                     pass
 
-        if rep_index is not None:
+        # Platform-specific: set representative image if supported
+        if rep_index is not None and hasattr(editor, "set_representative_media"):
             editor.set_representative_media(rep_index)
 
-        editor.publish(schedule_at=post.schedule_at)
+        # Platform-specific: schedule if supported and requested
+        if post.schedule_at is not None and hasattr(editor, "schedule"):
+            editor.schedule(post.schedule_at)
+
+        editor.publish()

@@ -102,7 +102,7 @@ def _combo(
 
 
 def _account():
-    return AccountOption(username="id", password="pw", meta={"blog_id": "blog"})
+    return AccountOption(username="id", password="pw")
 
 
 # ---------------------------------------------------------------------------

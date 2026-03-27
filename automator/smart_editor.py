@@ -3,9 +3,12 @@ automator/smart_editor.py
 --------------------------
 SmartEditorOne — Naver Smart Editor implementation of BlogEditor.
 
-Implements the 7 BlogEditor primitives:
-    open, write_title, insert_text, upload_file,
-    move_cursor, set_representative_media, publish
+Implements the BlogEditor primitives:
+    open, write_title, insert_text, upload_file, insert_link,
+    move_cursor, publish
+
+Platform-specific:
+    set_representative_media — Naver thumbnail selection
 
 Dependencies:
     SelectorLoader  — selectors/naver/editor.yaml
@@ -52,7 +55,7 @@ class SmartEditorOne(BlogEditor):
 
     Args:
         page:       An authenticated Playwright Page.
-        write_url:  Blog write page URL (e.g. from account.meta['blog_id']).
+        write_url:  Blog write page URL (e.g. "https://blog.naver.com/{blog_id}?Redirect=Write&").
         dry_run:    If True (default), publish() is a no-op.
         sel_source: Optional SelectorSource for dependency injection.
                     When None, loads selectors/naver/editor.yaml directly.
@@ -65,9 +68,9 @@ class SmartEditorOne(BlogEditor):
         dry_run: bool = True,
         sel_source: SelectorSource | None = None,
     ) -> None:
+        super().__init__(dry_run=dry_run)
         self._page       = page
         self._write_url  = write_url
-        self._dry_run    = dry_run
         self._sel_source = sel_source
         self._sel_cache: SelectorLoader | None = None
 
@@ -361,7 +364,7 @@ class SmartEditorOne(BlogEditor):
             state="visible", timeout=10_000
         )
 
-    def _insert_link_to_image(self, link: str) -> None:
+    def insert_link(self, url: str) -> None:
         """
         Attach a hyperlink to the last uploaded image.
 
@@ -371,10 +374,8 @@ class SmartEditorOne(BlogEditor):
             3. Fill URL input
             4. Click confirm
             5. Click body to restore cursor
-
-        Not exposed on BlogEditor ABC — SmartEditorOne-specific.
         """
-        if not link:
+        if not url:
             return
 
         frame = self._frame()
@@ -394,7 +395,7 @@ class SmartEditorOne(BlogEditor):
         # Step 3: fill URL
         link_input = sel.locator(frame, "editor_link_input")
         link_input.wait_for(state="visible", timeout=3_000)
-        link_input.fill(link)
+        link_input.fill(url)
 
         # Step 4: confirm
         confirm_btn = sel.locator(frame, "editor_link_confirm")
@@ -472,34 +473,35 @@ class SmartEditorOne(BlogEditor):
             container.last.click()
             self._page.keyboard.press("Control+End")
 
-    def publish(self, schedule_at: datetime | None = None) -> None:
+    def schedule(self, at: datetime) -> None:
         """
-        Open the publish popover, configure options, and confirm.
+        Configure Naver's reservation UI for scheduled publish.
+
+        Must be called before publish(). Opens the publish popover and
+        sets the "예약" radio with hour/minute.
+
+        Args:
+            at: KST-aware datetime whose hour/minute are used.
+        """
+        self._click_publish_trigger()
+        self._wait_for_popover_ready()
+        self._set_scheduled_publish(at)
+
+    def publish(self) -> None:
+        """
+        Open the publish popover (if not already open) and confirm.
 
         dry_run=True behaviour
         ----------------------
-        The popover is opened and schedule options are set normally so the
-        result can be inspected visually. Only the final "발행하기" confirm
-        button is skipped — the post is never actually published.
-
-        Args:
-            schedule_at: KST-aware datetime for reserved publish, or None for
-                         immediate publish. When set, clicks the "예약" radio
-                         and sets hour/minute before confirming.
+        The popover is opened normally so the result can be inspected
+        visually. Only the final confirm button is skipped.
         """
-        # Step 1: open popover — always, even in dry_run
+        # Open popover if not already opened by schedule()
         self._click_publish_trigger()
 
-        # Step 2: configure reservation UI if needed — always, even in dry_run
-        if schedule_at is not None:
-            self._wait_for_popover_ready()
-            self._set_scheduled_publish(schedule_at)
-
-        # Step 3: confirm — skipped in dry_run
         if self._dry_run:
-            label = schedule_at.isoformat() if schedule_at else "immediate"
             print(
-                f"[SmartEditorOne] DRY RUN — confirm skipped (schedule_at={label}). "
+                f"[SmartEditorOne] DRY RUN — confirm skipped. "
                 f"팝오버를 수동으로 닫거나 그냥 두면 됩니다.",
                 file=sys.stderr,
             )

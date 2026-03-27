@@ -40,7 +40,7 @@ class ContentBuilder:
 
     def build(self, spec: PostingSpec) -> _PostContent:
         """Convert spec into _PostContent with title, steps, tags, schedule."""
-        title = generate_title(spec.title)
+        title = spec.title if isinstance(spec.title, str) else generate_title(spec.title)
         flat_blocks = all_blocks(list(spec.body))
         para_count = paragraph_block_count(list(spec.body))
 

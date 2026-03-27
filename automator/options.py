@@ -49,16 +49,12 @@ class AccountOption:
     Attributes:
         username:     Login username / ID.
         password:     Login password.
-        meta:         Platform-specific extras.
-                      Naver    → {"blog_id": "rlawjddn"}
-                      WordPress → {"api_url": "https://...", "api_key": "..."}
         proxies:      "ip:port" list to cycle through.
         session_path: Playwright storage-state JSON path.
                       Defaults to "<username>_session.json".
     """
     username:     str
     password:     str
-    meta:         dict      = field(default_factory=dict)
     proxies:      list[str] = field(default_factory=list)
     session_path: str       = ""
 
@@ -80,7 +76,7 @@ class AccountOption:
 @dataclass(frozen=True)
 class TitleOption:
     """
-    Rules for generating a post title.
+    Rules for generating a post title via template DSL.
 
     Template DSL
     ------------
@@ -88,8 +84,8 @@ class TitleOption:
     {pool:slug}     — random choice from ``pools[slug]``.
     plain text      — kept as-is.  Spacing is what you type.
 
-    Pools data is supplied directly — no file I/O.
-    Loaded from CampaignPalette rows before constructing this option.
+    For a fixed title without template processing, pass a plain str
+    as PostingSpec.title instead of a TitleOption.
 
     Examples::
 
@@ -101,16 +97,11 @@ class TitleOption:
                 "salt_suffix": ("강력 추천", "즉시 가능"),
             },
         )
-        TitleOption(fixed_title="강남 수학 과외 추천")
     """
-    template:         str              = ""
-    values:           dict             = field(default_factory=dict)
-    pools:            dict[str, tuple[str, ...]] = field(default_factory=dict)
-    fixed_title:      str              = ""
-    add_affix:        bool             = False
-    randomize_chars:  bool             = False
-    ai_preset_prompt: str              = ""
-    seed:             int | None       = None
+    template: str                          = ""
+    values:   dict                         = field(default_factory=dict)
+    pools:    dict[str, tuple[str, ...]]   = field(default_factory=dict)
+    seed:     int | None                   = None
 
 
 BlockRole = Literal["intro", "body", "supporting", "cta", "closing"]

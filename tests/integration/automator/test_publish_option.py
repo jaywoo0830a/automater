@@ -15,17 +15,17 @@ from automator.contracts import PostingSpec
 from automator.content_builder import ContentBuilder
 from automator.stubs import StubTextGenerator, NoopImageProcessor
 from automator.options import (
-    AccountOption, TitleOption, PublishOption, KST,
+    AccountOption, PublishOption, KST,
 )
 
 
 def _account():
-    return AccountOption(username="id", password="pw", meta={"blog_id": "b"})
+    return AccountOption(username="id", password="pw")
 
 
 def _spec(**kw):
     kw.setdefault("account", _account())
-    kw.setdefault("title", TitleOption(fixed_title="T"))
+    kw.setdefault("title", "T")
     return PostingSpec(**kw)
 
 

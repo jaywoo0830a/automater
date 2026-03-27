@@ -116,8 +116,7 @@ def generate_title(
     """
     Generate a post title from a TitleOption.
 
-    fixed_title → return as-is.
-    Otherwise substitute {keyword:slug} and {pool:slug} tokens.
+    Substitutes {keyword:slug} and {pool:slug} tokens in the template.
 
     Args:
         option: TitleOption with template, values, and optional pools.
@@ -130,14 +129,11 @@ def generate_title(
         ValueError: Template syntax invalid.
         KeyError:   Referenced slug not found in values or pools.
     """
-    if option.fixed_title:
-        return option.fixed_title
-
     if not option.template or not option.template.strip():
         if option.pools:
             raise ValueError(
                 "template must not be empty when pools are provided. "
-                "Use fixed_title for a literal title, or provide a template."
+                "Pass a plain str as PostingSpec.title for a literal title."
             )
         return ""
 
