@@ -2,10 +2,13 @@
 # 지역별로 다른 이미지/링크를 매핑하는 경우.
 # 맵 파일은 순수 키:값 YAML — 누구나 편집 가능.
 
+platform: naver
+naver:
+  blog_id: mapblog
+
 accounts:
   - username: map_blog
     password: pw1
-    blog_id: mapblog
 
 titles:
   - "{keyword:region} {keyword:subject} 과외 추천"

@@ -1,21 +1,17 @@
-# ── 계정별 오버라이드 ────────────────────────────────────
+# ── 다중 계정 캠페인 ────────────────────────────────────
 
-# Redis로 세션 관리 (여러 머신에서 공유)
-# session_store: redis://localhost:6379
+platform: naver
+naver:
+  blog_id: mainblog
 
 accounts:
   - username: main_account
     password: pw1
-    blog_id: mainblog
-    session: main_session.json    # 명시 경로 우선 (file 모드)
+    session: main_session.json
     proxy: 1.2.3.4:8080
 
   - username: sub_account
     password: pw2
-    blog_id: subblog
-    # session 없으면 → store.save("sub_account", ...) 자동
-    headless: false
-    interval: 120s
 
 titles:
   - "{keyword:region} {keyword:subject} 과외 {pool:cta}"
