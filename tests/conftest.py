@@ -42,7 +42,7 @@ NAVER_PW      = os.getenv("NAVER_PW",      "")
 NAVER_BLOG_ID = os.getenv("NAVER_BLOG_ID", "")
 SESSION_PATH  = os.getenv("SESSION_PATH",  "session_state.json")
 
-_LOGIN_SEL = SelectorLoader.load("selectors/naver/login.json")
+_LOGIN_SEL = SelectorLoader.load("selectors/naver/login.yaml")
 
 
 # ---------------------------------------------------------------------------

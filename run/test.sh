@@ -157,11 +157,11 @@ case "${MODE}" in
 
   ── tests/unit/automator/            Automator 순수 단위 테스트
       test_title_generator.py         generate_title + validate_template
-      test_paragraph_generator.py     generate_paragraphs stubs
+      test_paragraph_generator.py     generate_paragraph stubs
       test_seo_prompt.py              build_prompt
       test_layout.py                  Section/Block validation
       test_post_step.py               PostStep.execute dispatch
-      test_image_processor.py         process_image / process_featured
+      test_image_processor.py         process_image (ImageBlock + FeaturedImageBlock)
       test_ports.py                   Port ABCs + test doubles
       test_block_factory.py           block_type → Block + media_id resolution
       test_preset_loader.py           JSON config → frozen dataclass

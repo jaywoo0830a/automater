@@ -3,7 +3,7 @@ automator/paragraph_generator.py
 ----------------------------------
 Paragraph generation functions.
 
-    generate_paragraphs(prompt, count)  -> list[str]
+    generate_paragraph(prompt)  -> str
 
 ENV=production  -> calls Gemini API
 ENV=dev | test  -> returns stub paragraphs (no dependencies)
@@ -70,35 +70,30 @@ _USER_TEMPLATE = """\
 # Public API
 # ---------------------------------------------------------------------------
 
-def generate_paragraphs(
+def generate_paragraph(
     prompt: str,
-    count: int,
     api_key: str = "",
     model: str = "",
-) -> list[str]:
+) -> str:
     """
-    Generate ``count`` paragraphs from ``prompt``.
+    Generate a single paragraph from ``prompt``.
 
     ENV=production  -> calls Gemini API; errors propagate.
-    ENV=dev | test  -> returns stub paragraphs, no API call.
+    ENV=dev | test  -> returns a stub paragraph, no API call.
 
     Args:
         prompt:  Content instruction (e.g. "대치동 수학 과외 홍보").
-        count:   Number of paragraphs to generate.
         api_key: Gemini API key. Defaults to GEMINI_API_KEY env var.
         model:   Gemini model name. Defaults to GEMINI_MODEL.
 
     Returns:
-        List of ``count`` paragraph strings.
+        A single paragraph string.
 
     Raises:
         RateLimitError: API returns 429 RESOURCE_EXHAUSTED.
     """
-    if count <= 0:
-        return []
-
     if not is_production():
-        return _stub_generate(count)
+        return _stub_generate(1)[0]
 
     resolved_key = api_key or os.getenv("GEMINI_API_KEY", "")
     resolved_model = model or os.getenv("GEMINI_MODEL", GEMINI_MODEL)
@@ -109,8 +104,8 @@ def generate_paragraphs(
             "Set GEMINI_API_KEY in .env or pass api_key= explicitly."
         )
 
-    raw = _call_api(prompt, count, resolved_key, resolved_model)
-    return _parse(raw, count)
+    raw = _call_api(prompt, 1, resolved_key, resolved_model)
+    return _parse(raw, 1)[0]
 
 
 # ---------------------------------------------------------------------------

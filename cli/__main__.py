@@ -200,7 +200,7 @@ def _auto_login(ctx, account: dict[str, Any]) -> None:
     log = logging.getLogger("cli")
     log.info("No session found — logging in as %s", account["username"])
 
-    login_sel = SelectorLoader.load("selectors/naver/login.json")
+    login_sel = SelectorLoader.load("selectors/naver/login.yaml")
     page = ctx.new_page()
     page.goto("https://nid.naver.com/nidlogin.login")
 

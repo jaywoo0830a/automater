@@ -3,7 +3,7 @@ automator/browser.py
 --------------------
 Browser context creation and frame detection utilities.
 
-Selector strings have moved to selectors/naver/editor.json.
+Selector strings have moved to selectors/naver/editor.yaml.
 This module only owns structural constants (iframe paths) and
 infrastructure helpers that are not selector-dependent.
 """

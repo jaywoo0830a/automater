@@ -134,7 +134,7 @@ class ParagraphBlock:
     텍스트 단락 하나.
 
     AI 프롬프트는 prompt → keyword → (빈 값) 순으로 우선한다.
-    keyword 가 있으면 generate_paragraphs() 가 SEO 최적화 프롬프트를 자동 생성한다.
+    keyword 가 있으면 generate_paragraph() 가 SEO 최적화 프롬프트를 자동 생성한다.
 
     Attributes:
         prompt:    Gemini 에 직접 전달할 프롬프트.

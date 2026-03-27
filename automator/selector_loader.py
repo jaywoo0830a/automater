@@ -1,44 +1,40 @@
 """
 automator/selector_loader.py
 -----------------------------
-Loads automator-format selector JSON files and resolves Playwright locators.
+Loads automator-format selector files (YAML or JSON) and resolves
+Playwright locators.
 
 Format
 ------
-Each entry is a key → object with a ``locators`` list ordered from most
+Each entry is a key -> object with a ``locators`` list ordered from most
 stable to least stable.  SelectorLoader tries them in order and returns the
 first one that resolves successfully.
 
-    {
-      "_comment": "optional human notes",
-      "key_name": {
-        "description": "human-readable label (optional)",
-        "locators": [
-          {"type": "testid", "value": "seOnePublishBtn"},
-          {"type": "role",   "value": "button", "name": "발행"},
-          {"type": "label",  "value": "아이디 또는 전화번호"},
-          {"type": "text",   "value": "제목"},
-          {"type": "css",    "value": "#id"},
-          {"type": "xpath",  "value": "//input[@id='id']"}
-        ]
-      }
-    }
+    # YAML example
+    key_name:
+      description: human-readable label (optional)
+      locators:
+        - type: testid
+          value: seOnePublishBtn
+        - type: role
+          value: button
+          name: 발행
 
 Supported locator types and their Playwright equivalents
 ---------------------------------------------------------
-  testid  → ctx.get_by_test_id(value)
-  role    → ctx.get_by_role(value, name=name)     # name field optional
-  label   → ctx.get_by_label(value)
-  text    → ctx.get_by_text(value, exact=True)
-  css     → ctx.locator(value)
-  xpath   → ctx.locator("xpath=<value>")
+  testid  -> ctx.get_by_test_id(value)
+  role    -> ctx.get_by_role(value, name=name)     # name field optional
+  label   -> ctx.get_by_label(value)
+  text    -> ctx.get_by_text(value, exact=True)
+  css     -> ctx.locator(value)
+  xpath   -> ctx.locator("xpath=<value>")
 
 Usage
 -----
     from automator.selector_loader import SelectorLoader
 
-    login  = SelectorLoader.load("selectors/naver/login.json")
-    editor = SelectorLoader.load("selectors/naver/editor.json")
+    login  = SelectorLoader.load("selectors/naver/login.yaml")
+    editor = SelectorLoader.load("selectors/naver/editor.yaml")
 
     # page context (outside iframe)
     login.locator(page, "naver_login_id").fill(naver_id)
@@ -54,9 +50,11 @@ import json
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 
 # ---------------------------------------------------------------------------
-# Internal: resolve one locator entry → Playwright locator
+# Internal: resolve one locator entry -> Playwright locator
 # ---------------------------------------------------------------------------
 
 def _resolve_one(ctx: Any, entry: dict) -> Any:
@@ -96,8 +94,8 @@ def _resolve_one(ctx: Any, entry: dict) -> Any:
 
 class SelectorLoader:
     """
-    Wraps an automator-format selector JSON file and resolves Playwright
-    locators from it.
+    Wraps an automator-format selector file (YAML or JSON) and resolves
+    Playwright locators from it.
     """
 
     def __init__(self, data: dict[str, Any], path: Path) -> None:
@@ -107,25 +105,35 @@ class SelectorLoader:
     @classmethod
     def load(cls, path: str | Path) -> "SelectorLoader":
         """
-        Load an automator selector JSON file.
+        Load an automator selector file (YAML or JSON).
 
         Raises:
             FileNotFoundError: If the file does not exist.
-            ValueError:        If the file is not valid JSON.
+            ValueError:        If the file cannot be parsed.
         """
         p = Path(path)
         if not p.exists():
             raise FileNotFoundError(f"Selector file not found: {p}")
-        try:
-            raw = json.loads(p.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON in {p}: {e}") from e
+
+        text = p.read_text(encoding="utf-8")
+
+        if p.suffix in (".yaml", ".yml"):
+            try:
+                raw = yaml.safe_load(text) or {}
+            except yaml.YAMLError as e:
+                raise ValueError(f"Invalid YAML in {p}: {e}") from e
+        else:
+            try:
+                raw = json.loads(text)
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Invalid JSON in {p}: {e}") from e
+
         # Strip comment/metadata keys
         data = {k: v for k, v in raw.items() if not k.startswith("_")}
         return cls(data, p)
 
     def keys(self) -> list[str]:
-        """Return all selector key names defined in the JSON."""
+        """Return all selector key names defined in the file."""
         return list(self._data.keys())
 
     def description(self, key: str) -> str:
@@ -140,7 +148,7 @@ class SelectorLoader:
         Used when a raw CSS string is needed (e.g. inside JS evaluate()).
 
         Raises:
-            KeyError: If ``key`` is not defined in the JSON.
+            KeyError: If ``key`` is not defined in the file.
         """
         self._require(key)
         for entry in self._data[key].get("locators", []):
@@ -156,7 +164,7 @@ class SelectorLoader:
         Returns the first one that resolves without raising ValueError.
 
         Raises:
-            KeyError:   If ``key`` is not defined in the JSON.
+            KeyError:   If ``key`` is not defined in the file.
             ValueError: If the entry has no usable locators.
         """
         self._require(key)

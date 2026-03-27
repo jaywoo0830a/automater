@@ -91,9 +91,27 @@ class ParagraphHandler(BlockHandler):
             paragraph_index=ctx.paragraph_index,
             total_paragraphs=ctx.total_paragraphs,
         )
-        text = ctx.text_gen.generate(prompt, 1)[0]
+        text = ctx.text_gen.generate(prompt)
         ctx.paragraph_index += 1
         return [ParagraphStep(text=text, newlines=block.newlines)]
+
+
+def _build_filename(role: str, keyword: str) -> str:
+    """Build an upload filename from role and keyword."""
+    if keyword:
+        return f"{keyword}-{role}.jpg"
+    return f"{role}.jpg"
+
+
+def _save_temp(data: bytes, name: str, ctx: ContentContext) -> str:
+    """Write data to a temp file and register it for cleanup."""
+    tmp = tempfile.NamedTemporaryFile(
+        suffix=".jpg", prefix=name.replace(".jpg", "_"), delete=False,
+    )
+    tmp.write(data)
+    tmp.close()
+    ctx.tmp_files.append(tmp.name)
+    return tmp.name
 
 
 class ImageHandler(BlockHandler):
@@ -102,20 +120,11 @@ class ImageHandler(BlockHandler):
     def to_steps(self, block: ImageBlock, ctx: ContentContext) -> list[PostStep]:
         path = block.path
         if Path(path).exists():
-            path = self._process(block, ctx)
+            raw = Path(block.path).read_bytes()
+            processed = ctx.img_proc.process(raw, block)
+            name = _build_filename("preview", block.filename_keyword)
+            path = _save_temp(processed, name, ctx)
         return [ImageStep(path=path, link=block.link)]
-
-    def _process(self, block: ImageBlock, ctx: ContentContext) -> str:
-        raw = Path(block.path).read_bytes()
-        processed = ctx.img_proc.process_body(raw, block)
-        fname = ctx.img_proc.build_filename("preview", 1, block.filename_keyword)
-        tmp = tempfile.NamedTemporaryFile(
-            suffix=".jpg", prefix=fname.replace(".jpg", "_"), delete=False,
-        )
-        tmp.write(processed)
-        tmp.close()
-        ctx.tmp_files.append(tmp.name)
-        return tmp.name
 
 
 class FeaturedImageHandler(BlockHandler):
@@ -124,20 +133,11 @@ class FeaturedImageHandler(BlockHandler):
     def to_steps(self, block: FeaturedImageBlock, ctx: ContentContext) -> list[PostStep]:
         path = block.path
         if Path(path).exists():
-            path = self._process(block, ctx)
+            raw = Path(block.path).read_bytes()
+            processed = ctx.img_proc.process(raw, block)
+            name = _build_filename("featured", block.filename_keyword)
+            path = _save_temp(processed, name, ctx)
         return [FeaturedImageStep(path=path, link=block.link)]
-
-    def _process(self, block: FeaturedImageBlock, ctx: ContentContext) -> str:
-        raw = Path(block.path).read_bytes()
-        processed = ctx.img_proc.process_featured(raw, block)
-        fname = ctx.img_proc.build_filename("featured", 1, block.filename_keyword)
-        tmp = tempfile.NamedTemporaryFile(
-            suffix=".jpg", prefix=fname.replace(".jpg", "_"), delete=False,
-        )
-        tmp.write(processed)
-        tmp.close()
-        ctx.tmp_files.append(tmp.name)
-        return tmp.name
 
 
 class HeadingHandler(BlockHandler):

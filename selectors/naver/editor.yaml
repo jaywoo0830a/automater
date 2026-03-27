@@ -1,0 +1,334 @@
+overlay_draft_cancel:
+  description: '초안 복구 팝업 — 취소 버튼 (CSS 1순위: role ''취소''가 중복 매칭됨)'
+  locators:
+  - type: css
+    value: button.se-popup-button.se-popup-button-cancel
+  - type: role
+    value: button
+    name: 취소
+overlay_draft_confirm:
+  description: 초안 복구 팝업 — 확인 버튼
+  locators:
+  - type: role
+    value: button
+    name: 확인
+  - type: css
+    value: button.se-popup-button.se-popup-button-confirm
+overlay_help_close:
+  description: 도움말 패널 — 닫기 버튼
+  locators:
+  - type: role
+    value: button
+    name: 닫기
+  - type: css
+    value: button.se-help-panel-close-button
+toolbar_image:
+  description: 툴바 — 사진 추가 버튼 (CSS 우선, 업로드 후 role 이름 변경 대응)
+  locators:
+  - type: css
+    value: button.se-image-toolbar-button.se-document-toolbar-basic-button.se-text-icon-toolbar-button.__se-sentry
+  - type: css
+    value: button.se-image-toolbar-button
+  - type: role
+    value: button
+    name: 사진
+toolbar_publish:
+  description: 툴바 — 발행 트리거 버튼 (CSS 우선, role은 3개 매칭 문제)
+  locators:
+  - type: css
+    value: button[data-click-area="tpb.publish"]
+  - type: role
+    value: button
+    name: 발행
+editor_title:
+  description: 에디터 — 제목 입력란
+  locators:
+  - type: text
+    value: 제목
+  - type: css
+    value: span.se-placeholder.__se_placeholder
+editor_body:
+  description: 에디터 — 본문 루트 contenteditable
+  locators:
+  - type: css
+    value: .se-content
+editor_paragraph:
+  description: 에디터 — 본문 텍스트 단락 (커서 이동 및 타이핑용)
+  locators:
+  - type: css
+    value: span.se-ff-nanumgothic.__se-node
+editor_image:
+  description: 에디터 — 업로드된 이미지 (nth로 순서 접근, 업로드 완료 대기용)
+  locators:
+  - type: css
+    value: img.se-image-resource
+editor_image_block:
+  description: 에디터 — 이미지 블록 wrapper div (nth 접근용)
+  locators:
+  - type: css
+    value: div.se-component.se-image
+editor_image_rep:
+  description: 에디터 — 대표이미지 설정 버튼 (JS dispatchEvent 전용)
+  locators:
+  - type: css
+    value: button.se-set-rep-image-button
+  - type: role
+    value: button
+    name: 대표
+editor_image_rep_selected:
+  description: 에디터 — 대표이미지 선택된 상태 버튼
+  locators:
+  - type: role
+    value: button
+    name: 대표
+  - type: css
+    value: button.se-set-rep-image-button.se-is-selected
+library_close:
+  description: 미디어 라이브러리 — 닫기 버튼
+  locators:
+  - type: role
+    value: button
+    name: 팝업 닫기
+  - type: css
+    value: button.se-sidebar-close-button
+publish_confirm:
+  description: 발행 팝오버 — 발행하기 버튼
+  locators:
+  - type: testid
+    value: seOnePublishBtn
+  - type: role
+    value: button
+    name: 발행하기
+publish_now:
+  description: 발행 팝오버 — 현재 발행 라디오 버튼 (mainFrame 내부)
+  locators:
+  - type: testid
+    value: nowTimeRadioBtn
+  - type: role
+    value: radio
+    name: 현재
+publish_scheduled:
+  description: 발행 팝오버 — 예약 발행 라디오 버튼 (mainFrame 내부)
+  locators:
+  - type: testid
+    value: preTimeRadioBtn
+  - type: role
+    value: radio
+    name: 예약
+publish_scheduled_hour:
+  description: 발행 팝오버 — 예약 시간 select (mainFrame 내부)
+  locators:
+  - type: css
+    value: select[class*=hour_option]
+publish_scheduled_min:
+  description: 발행 팝오버 — 예약 분 select (mainFrame 내부)
+  locators:
+  - type: css
+    value: select[class*=minute_option]
+editor_paragraph_container:
+  description: 에디터 — 텍스트 단락 wrapper p (move_cursor_to_end 전용, 이미지 iframe 밖 보장)
+  locators:
+  - type: css
+    value: p.se-text-paragraph
+heading_trigger:
+  description: '툴바 — 문단 서식 드롭다운 트리거 (기본 텍스트: ''본문'')'
+  locators:
+  - type: css
+    value: button.se-text-format-toolbar-button.se-property-toolbar-label-select-button.__se-sentry
+  - type: role
+    value: button
+    name: 본문
+heading_button:
+  description: 문단 서식 — 소제목 버튼
+  locators:
+  - type: css
+    value: button.__se-sentry.se-toolbar-option-text-button.se-toolbar-option-text-format-sectionTitle-button
+  - type: role
+    value: button
+    name: 소제목
+heading_container:
+  description: 소제목 placeholder span
+  locators:
+  - type: css
+    value: span.se-placeholder.__se_placeholder.se-placeholder-focused
+  - type: role
+    value: span
+    name: 소제목을 입력하세요.
+size_trigger:
+  description: 툴바 — 글꼴 크기 드롭다운 트리거
+  locators:
+  - type: css
+    value: button.se-font-size-code-toolbar-button.se-property-toolbar-label-select-button.__se-sentry
+size_38:
+  description: 글꼴 크기 — 38 옵션
+  locators:
+  - type: role
+    value: button
+    name: '38'
+  - type: css
+    value: button.__se-sentry.se-toolbar-option-text-button
+bold_button:
+  description: 툴바 — 굵게 버튼
+  locators:
+  - type: css
+    value: button.se-bold-toolbar-button.se-property-toolbar-toggle-button.__se-sentry
+  - type: role
+    value: button
+    name: 굵게
+size_19:
+  description: 글꼴 크기 — 19
+  locators:
+  - type: role
+    value: button
+    name: '19'
+size_24:
+  description: 글꼴 크기 — 24
+  locators:
+  - type: role
+    value: button
+    name: '24'
+size_28:
+  description: 글꼴 크기 — 28
+  locators:
+  - type: role
+    value: button
+    name: '28'
+size_30:
+  description: 글꼴 크기 — 30
+  locators:
+  - type: role
+    value: button
+    name: '30'
+size_34:
+  description: 글꼴 크기 — 34
+  locators:
+  - type: role
+    value: button
+    name: '34'
+quote_trigger:
+  description: 툴바 — 인용구 선택 드롭다운
+  locators:
+  - type: role
+    value: button
+    name: 인용구 선택
+  - type: css
+    value: button.se-document-toolbar-select-option-button.se-text-icon-toolbar-select-option-button.__se-sentry
+quote_1:
+  description: 인용구 — 인용구 1 스타일
+  locators:
+  - type: css
+    value: button.__se-sentry.se-toolbar-option-icon-button.se-toolbar-option-insert-quotation-default-button
+  - type: role
+    value: button
+    name: 인용구 1
+divider_trigger:
+  description: 툴바 — 구분선 선택 드롭다운
+  locators:
+  - type: role
+    value: button
+    name: 구분선 선택
+  - type: css
+    value: button.se-document-toolbar-select-option-button.se-text-icon-toolbar-select-option-button.__se-sentry
+divider_2:
+  description: 구분선 — 구분선 2 스타일
+  locators:
+  - type: role
+    value: button
+    name: 구분선 2
+  - type: css
+    value: button.__se-sentry.se-toolbar-option-icon-button.se-toolbar-option-insert-horizontal-line-line1-button
+quote_2:
+  description: 인용구 — 인용구 2 스타일
+  locators:
+  - type: role
+    value: button
+    name: 인용구 2
+quote_3:
+  description: 인용구 — 인용구 3 스타일
+  locators:
+  - type: role
+    value: button
+    name: 인용구 3
+quote_4:
+  description: 인용구 — 인용구 4 스타일
+  locators:
+  - type: role
+    value: button
+    name: 인용구 4
+quote_5:
+  description: 인용구 — 인용구 5 스타일
+  locators:
+  - type: role
+    value: button
+    name: 인용구 5
+quote_6:
+  description: 인용구 — 인용구 6 스타일
+  locators:
+  - type: role
+    value: button
+    name: 인용구 6
+divider_1:
+  description: 구분선 — 구분선 1 스타일
+  locators:
+  - type: role
+    value: button
+    name: 구분선 1
+divider_3:
+  description: 구분선 — 구분선 3 스타일
+  locators:
+  - type: role
+    value: button
+    name: 구분선 3
+divider_4:
+  description: 구분선 — 구분선 4 스타일
+  locators:
+  - type: role
+    value: button
+    name: 구분선 4
+divider_5:
+  description: 구분선 — 구분선 5 스타일
+  locators:
+  - type: role
+    value: button
+    name: 구분선 5
+divider_6:
+  description: 구분선 — 구분선 6 스타일
+  locators:
+  - type: role
+    value: button
+    name: 구분선 6
+divider_7:
+  description: 구분선 — 구분선 7 스타일
+  locators:
+  - type: role
+    value: button
+    name: 구분선 7
+divider_8:
+  description: 구분선 — 구분선 8 스타일
+  locators:
+  - type: role
+    value: button
+    name: 구분선 8
+editor_link_button:
+  description: 이미지 선택 후 — 링크 버튼 (CSS 우선)
+  locators:
+  - type: css
+    value: button.se-link-toolbar-button
+  - type: role
+    value: button
+    name: 링크
+editor_link_input:
+  description: 링크 팝오버 — URL 입력 필드 (CSS 우선)
+  locators:
+  - type: css
+    value: input.se-custom-layer-link-input
+  - type: placeholder
+    value: URL을 입력하세요.
+editor_link_confirm:
+  description: 링크 팝오버 — 링크 입력 확인 버튼 (CSS 우선)
+  locators:
+  - type: css
+    value: button.se-custom-layer-link-apply-button
+  - type: role
+    value: button
+    name: 링크 입력

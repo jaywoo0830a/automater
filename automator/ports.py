@@ -18,27 +18,19 @@ from typing import Any
 
 
 class TextGenerator(ABC):
-    """Generate text paragraphs from a prompt."""
+    """Generate a text paragraph from a prompt."""
 
     @abstractmethod
-    def generate(self, prompt: str, count: int) -> list[str]:
-        """Return ``count`` paragraphs for the given ``prompt``."""
+    def generate(self, prompt: str) -> str:
+        """Return a single paragraph for the given ``prompt``."""
 
 
 class ImageProcessor(ABC):
     """Process raw image bytes with block-level options."""
 
     @abstractmethod
-    def process_body(self, raw: bytes, block: Any) -> bytes:
-        """Apply body-image transformations. Returns JPEG bytes."""
-
-    @abstractmethod
-    def process_featured(self, raw: bytes, block: Any) -> bytes:
-        """Apply featured-image transformations. Returns JPEG bytes."""
-
-    @abstractmethod
-    def build_filename(self, prefix: str, index: int, keyword: str) -> str:
-        """Build a deterministic upload filename."""
+    def process(self, raw: bytes, block: Any) -> bytes:
+        """Apply transformations described by *block*. Returns JPEG bytes."""
 
 
 class SelectorSource(ABC):

@@ -14,9 +14,9 @@ def test_stub_text_gen_is_text_generator():
     assert isinstance(StubTextGenerator(), TextGenerator)
 
 
-def test_stub_text_gen_returns_count():
+def test_stub_text_gen_returns_string():
     gen = StubTextGenerator(["a", "b"])
-    assert len(gen.generate("prompt", 3)) == 3
+    assert gen.generate("prompt") == "a"
 
 
 def test_noop_img_proc_is_image_processor():
@@ -26,13 +26,7 @@ def test_noop_img_proc_is_image_processor():
 def test_noop_returns_input_unchanged():
     proc = NoopImageProcessor()
     data = b"jpeg bytes"
-    assert proc.process_body(data, None) is data
-    assert proc.process_featured(data, None) is data
-
-
-def test_noop_build_filename():
-    proc = NoopImageProcessor()
-    assert proc.build_filename("preview", 1, "test") == "preview_001_test.jpg"
+    assert proc.process(data, None) is data
 
 
 def test_dict_selector_source_is_selector_source():

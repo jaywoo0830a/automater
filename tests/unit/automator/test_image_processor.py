@@ -1,7 +1,7 @@
 """
 tests/test_image_processor.py
 -------------------------------
-process_image() / process_featured() / build_filename() 단위 테스트.
+process_image() 단위 테스트.
 
 Pillow + exif 패키지를 사용해 이미지를 변형하는 로직을 검증한다.
 실제 파일 I/O 는 tmp_path fixture 로 격리한다.
@@ -11,7 +11,7 @@ import io
 import pytest
 from PIL import Image
 
-from automator.image_processor import process_image, process_featured, build_filename
+from automator.image_processor import process_image
 from automator.options import ImageBlock, FeaturedImageBlock
 
 
@@ -150,14 +150,14 @@ class TestProcessImage:
 
 
 # ---------------------------------------------------------------------------
-# process_featured
+# process_image with FeaturedImageBlock
 # ---------------------------------------------------------------------------
 
 class TestProcessFeatured:
 
     def test_returns_jpeg_bytes(self):
         block  = FeaturedImageBlock(pixel_jitter=False, size_jitter_px=0)
-        result = process_featured(_jpeg(), block)
+        result = process_image(_jpeg(), block)
         assert result[:2] == b"\xff\xd8"
 
     def test_overlay_text_applied(self):
@@ -165,15 +165,15 @@ class TestProcessFeatured:
         base    = FeaturedImageBlock(pixel_jitter=False, size_jitter_px=0)
         overlay = FeaturedImageBlock(pixel_jitter=False, size_jitter_px=0,
                                      overlay_text="강남 수학")
-        size_base    = len(process_featured(_jpeg(200, 200), base))
-        size_overlay = len(process_featured(_jpeg(200, 200), overlay))
+        size_base    = len(process_image(_jpeg(200, 200), base))
+        size_overlay = len(process_image(_jpeg(200, 200), overlay))
         # 텍스트 오버레이가 적용된 이미지와 아닌 이미지는 크기가 다를 수 있다
         # (같을 수도 있으므로 단순히 유효한 JPEG 인지만 확인)
         assert size_overlay > 0
 
     def test_list_overlay_text(self):
         block  = FeaturedImageBlock(overlay_text=["강남", "수학 과외"])
-        result = process_featured(_jpeg(200, 200), block)
+        result = process_image(_jpeg(200, 200), block)
         assert result[:2] == b"\xff\xd8"
 
     def test_background_banner_changes_output(self):
@@ -187,8 +187,8 @@ class TestProcessFeatured:
             overlay_text="테스트", overlay_background=0.6,
         )
         img = _jpeg(200, 200, color=(255, 255, 255))
-        result_no  = process_featured(img, no_bg)
-        result_yes = process_featured(img, with_bg)
+        result_no  = process_image(img, no_bg)
+        result_yes = process_image(img, with_bg)
         assert result_no != result_yes
 
     def test_position_bottom(self):
@@ -196,7 +196,7 @@ class TestProcessFeatured:
             pixel_jitter=False, size_jitter_px=0,
             overlay_text="하단 텍스트", overlay_position="bottom",
         )
-        result = process_featured(_jpeg(200, 200), block)
+        result = process_image(_jpeg(200, 200), block)
         assert result[:2] == b"\xff\xd8"
 
     def test_position_top(self):
@@ -204,7 +204,7 @@ class TestProcessFeatured:
             pixel_jitter=False, size_jitter_px=0,
             overlay_text="상단 텍스트", overlay_position="top",
         )
-        result = process_featured(_jpeg(200, 200), block)
+        result = process_image(_jpeg(200, 200), block)
         assert result[:2] == b"\xff\xd8"
 
     def test_hue_shift_changes_colors(self):
@@ -218,8 +218,8 @@ class TestProcessFeatured:
             hue_shift=0.5, brightness_shift=0.0,
         )
         img = _jpeg(100, 100, color=(200, 100, 50))
-        result_no  = process_featured(img, no_hue)
-        result_yes = process_featured(img, with_hue)
+        result_no  = process_image(img, no_hue)
+        result_yes = process_image(img, with_hue)
         assert result_no != result_yes
 
     def test_hue_shift_zero_preserves(self):
@@ -228,8 +228,8 @@ class TestProcessFeatured:
             hue_shift=0.0, brightness_shift=0.0, exif_optimization=False,
         )
         img = _jpeg(100, 100)
-        r1 = process_featured(img, block)
-        r2 = process_featured(img, block)
+        r1 = process_image(img, block)
+        r2 = process_image(img, block)
         assert r1 == r2
 
     def test_brightness_shift_changes_output(self):
@@ -242,25 +242,6 @@ class TestProcessFeatured:
             hue_shift=0.0, brightness_shift=0.5,
         )
         img = _jpeg(100, 100, color=(150, 150, 150))
-        result_no  = process_featured(img, no_br)
-        result_yes = process_featured(img, with_br)
+        result_no  = process_image(img, no_br)
+        result_yes = process_image(img, with_br)
         assert result_no != result_yes
-
-
-# ---------------------------------------------------------------------------
-# build_filename
-# ---------------------------------------------------------------------------
-
-class TestBuildFilename:
-
-    def test_with_keyword(self):
-        assert build_filename("preview", 1, keyword="강남-수학") == "강남-수학-preview-01.jpg"
-
-    def test_without_keyword(self):
-        assert build_filename("featured", 2) == "featured-02.jpg"
-
-    def test_index_zero_padded(self):
-        assert build_filename("preview", 5) == "preview-05.jpg"
-
-    def test_index_double_digit(self):
-        assert build_filename("preview", 10) == "preview-10.jpg"

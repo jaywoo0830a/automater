@@ -1,7 +1,7 @@
 """
 tests/test_paragraph_generator.py
 -----------------------------------
-Unit tests for generate_paragraphs().
+Unit tests for generate_paragraph().
 
 ENV=dev | test -> stub paragraphs (UDHR Korean)
 ENV=production -> Gemini API (mocked in tests)
@@ -11,7 +11,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 from automator.paragraph_generator import (
-    generate_paragraphs,
+    generate_paragraph,
     _stub_generate,
     _parse,
     RateLimitError,
@@ -26,66 +26,48 @@ from automator.paragraph_generator import (
 def test_dev_env_does_not_require_api_key(monkeypatch):
     monkeypatch.setenv("ENV", "dev")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    result = generate_paragraphs("p", 1)
-    assert len(result) == 1
+    result = generate_paragraph("p")
+    assert isinstance(result, str)
+    assert len(result) > 0
 
 
 def test_test_env_does_not_require_api_key(monkeypatch):
     monkeypatch.setenv("ENV", "test")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    result = generate_paragraphs("p", 1)
-    assert len(result) == 1
+    result = generate_paragraph("p")
+    assert isinstance(result, str)
+    assert len(result) > 0
 
 
 def test_production_env_requires_api_key(monkeypatch):
     monkeypatch.setenv("ENV", "production")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     with pytest.raises(ValueError, match="API key"):
-        generate_paragraphs("p", 1)
+        generate_paragraph("p")
 
 
 def test_explicit_key_overrides_env(monkeypatch):
     monkeypatch.setenv("ENV", "production")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     with patch("automator.paragraph_generator._call_api", return_value='["text"]'):
-        result = generate_paragraphs("p", 1, api_key="explicit-key")
-    assert len(result) == 1
+        result = generate_paragraph("p", api_key="explicit-key")
+    assert result == "text"
 
 
 # ===========================================================================
 # Stub generation (non-production)
 # ===========================================================================
 
-def test_generate_returns_correct_count_dev(monkeypatch):
-    monkeypatch.setenv("ENV", "dev")
-    assert len(generate_paragraphs("p", 3)) == 3
-
-
-def test_generate_zero_returns_empty():
-    assert generate_paragraphs("p", 0) == []
-
-
-def test_generate_negative_returns_empty():
-    assert generate_paragraphs("p", -1) == []
-
-
 def test_generate_uses_stub_in_dev(monkeypatch):
     monkeypatch.setenv("ENV", "dev")
-    result = generate_paragraphs("any prompt", 2)
-    assert result[0] == _STUB_PARAGRAPHS[0]
-    assert result[1] == _STUB_PARAGRAPHS[1]
-
-
-def test_stub_cycles_beyond_paragraph_count(monkeypatch):
-    monkeypatch.setenv("ENV", "dev")
-    result = generate_paragraphs("p", len(_STUB_PARAGRAPHS) + 1)
-    assert result[-1] == _STUB_PARAGRAPHS[0]
+    result = generate_paragraph("any prompt")
+    assert result == _STUB_PARAGRAPHS[0]
 
 
 def test_generate_does_not_call_api_in_dev():
     with patch("automator.paragraph_generator.is_production", return_value=False), \
          patch("automator.paragraph_generator._call_api") as mock_api:
-        generate_paragraphs("p", 1)
+        generate_paragraph("p")
     mock_api.assert_not_called()
 
 
@@ -200,7 +182,7 @@ def test_call_api_converts_429_to_rate_limit_error(monkeypatch):
     with patch("automator.paragraph_generator._call_api",
                side_effect=RateLimitError("429")):
         with pytest.raises(RateLimitError):
-            generate_paragraphs("p", 1)
+            generate_paragraph("p")
 
 
 def test_non_429_errors_propagate(monkeypatch):
@@ -210,7 +192,7 @@ def test_non_429_errors_propagate(monkeypatch):
     with patch("automator.paragraph_generator._call_api",
                side_effect=RuntimeError("connection failed")):
         with pytest.raises(RuntimeError, match="connection"):
-            generate_paragraphs("p", 1)
+            generate_paragraph("p")
 
 
 # PostingJob integration tests removed — now covered by

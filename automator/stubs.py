@@ -25,12 +25,12 @@ class StubTextGenerator(TextGenerator):
 
     def __init__(self, paragraphs: list[str] | None = None) -> None:
         self._paragraphs = paragraphs or list(_STUB_PARAGRAPHS)
+        self._index = 0
 
-    def generate(self, prompt: str, count: int) -> list[str]:
-        return [
-            self._paragraphs[i % len(self._paragraphs)]
-            for i in range(count)
-        ]
+    def generate(self, prompt: str) -> str:
+        text = self._paragraphs[self._index % len(self._paragraphs)]
+        self._index += 1
+        return text
 
 
 # ---------------------------------------------------------------------------
@@ -40,15 +40,8 @@ class StubTextGenerator(TextGenerator):
 class NoopImageProcessor(ImageProcessor):
     """Return bytes unchanged.  For dry-run and unit tests."""
 
-    def process_body(self, raw: bytes, block: Any) -> bytes:
+    def process(self, raw: bytes, block: Any) -> bytes:
         return raw
-
-    def process_featured(self, raw: bytes, block: Any) -> bytes:
-        return raw
-
-    def build_filename(self, prefix: str, index: int, keyword: str) -> str:
-        safe = keyword.replace(" ", "-") if keyword else "image"
-        return f"{prefix}_{index:03d}_{safe}.jpg"
 
 
 # ---------------------------------------------------------------------------

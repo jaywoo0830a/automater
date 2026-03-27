@@ -4,12 +4,9 @@ automator/image_processor.py
 이미지 변환 파이프라인. ImageBlock / FeaturedImageBlock 을 직접 받는다.
 
 Usage:
-    from automator.options import ImageBlock, FeaturedImageBlock
-    from automator.image_processor import process_image, process_featured
+    from automator.image_processor import process_image
 
-    preview_bytes   = process_image(raw_bytes, block)
-    thumbnail_bytes = process_featured(raw_bytes, block)
-    filename        = build_filename("preview", index=1, keyword="강남-수학")
+    processed_bytes = process_image(raw_bytes, block)
 """
 
 from __future__ import annotations
@@ -39,16 +36,30 @@ def _to_jpeg(img: Image.Image, quality: int = 92) -> bytes:
 # Public API
 # ---------------------------------------------------------------------------
 
-def process_image(src: bytes, block: ImageBlock) -> bytes:
+def process_image(src: bytes, block: ImageBlock | FeaturedImageBlock) -> bytes:
     """
-    본문 이미지 변환 파이프라인.
+    이미지 변환 파이프라인. block 타입에 따라 적용할 변환이 결정된다.
 
-    size_jitter → pixel_jitter → saturation_jitter → exif optimization
+    공통:      size_jitter → pixel_jitter → saturation → exif
+    Featured:  + hue → brightness → overlay
     """
     img = Image.open(io.BytesIO(src)).convert("RGB")
     img = _apply_size_jitter(img, block.size_jitter_px)
     img = _apply_pixel_jitter(img, block.pixel_jitter)
-    img = _apply_saturation(img, block.saturation_jitter)
+
+    if isinstance(block, FeaturedImageBlock):
+        img = _apply_saturation(img, block.saturation_shift)
+        img = _apply_hue_shift(img, block.hue_shift)
+        img = _apply_brightness(img, block.brightness_shift)
+        img = _apply_text_overlay(
+            img,
+            text=block.overlay_text,
+            color=block.overlay_color,
+            background=block.overlay_background,
+            position=block.overlay_position,
+        )
+    else:
+        img = _apply_saturation(img, block.saturation_jitter)
 
     jpeg_bytes = _to_jpeg(img)
     return optimize_exif(
@@ -58,49 +69,6 @@ def process_image(src: bytes, block: ImageBlock) -> bytes:
         gps_lat=block.exif_gps_lat,
         gps_lng=block.exif_gps_lng,
     )
-
-
-def process_featured(src: bytes, block: FeaturedImageBlock) -> bytes:
-    """
-    대표 이미지 변환 파이프라인.
-
-    size_jitter → pixel_jitter → saturation → hue → brightness → overlay → exif
-    """
-    img = Image.open(io.BytesIO(src)).convert("RGB")
-    img = _apply_size_jitter(img, block.size_jitter_px)
-    img = _apply_pixel_jitter(img, block.pixel_jitter)
-    img = _apply_saturation(img, block.saturation_shift)
-    img = _apply_hue_shift(img, block.hue_shift)
-    img = _apply_brightness(img, block.brightness_shift)
-    img = _apply_text_overlay(
-        img,
-        text=block.overlay_text,
-        color=block.overlay_color,
-        background=block.overlay_background,
-        position=block.overlay_position,
-    )
-
-    jpeg_bytes = _to_jpeg(img)
-    return optimize_exif(
-        jpeg_bytes,
-        enabled=block.exif_optimization,
-        description=block.exif_description,
-        gps_lat=block.exif_gps_lat,
-        gps_lng=block.exif_gps_lng,
-    )
-
-
-def build_filename(role: str, index: int, keyword: str = "") -> str:
-    """
-    키워드가 포함된 업로드 파일명 생성.
-
-    Returns:
-        e.g. "강남-수학-과외-preview-01.jpg"
-    """
-    num = f"{index:02d}"
-    if keyword:
-        return f"{keyword}-{role}-{num}.jpg"
-    return f"{role}-{num}.jpg"
 
 
 # ---------------------------------------------------------------------------

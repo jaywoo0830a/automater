@@ -8,7 +8,7 @@ Implements the 7 BlogEditor primitives:
     move_cursor, set_representative_media, publish
 
 Dependencies:
-    SelectorLoader  — selectors/naver/editor.json
+    SelectorLoader  — selectors/naver/editor.yaml
     browser_actions — pure DOM functions
 """
 
@@ -37,7 +37,7 @@ from automator.browser_actions import (
     wait_until_attached,
 )
 
-_EDITOR_JSON = Path("selectors/naver/editor.json")
+_EDITOR_JSON = Path("selectors/naver/editor.yaml")
 _MAIN_FRAME  = "#mainFrame"
 _EDITOR_BODY = ".se-content"
 
@@ -47,7 +47,7 @@ class SmartEditorOne(BlogEditor):
     Naver Smart Editor One implementation of BlogEditor.
 
     Resolves selectors via an injected SelectorSource (or falls back to
-    loading editor.json directly). Delegates all DOM work to
+    loading editor.yaml directly). Delegates all DOM work to
     browser_actions functions. No selector strings are hardcoded here.
 
     Args:
@@ -55,7 +55,7 @@ class SmartEditorOne(BlogEditor):
         write_url:  Blog write page URL (e.g. from account.meta['blog_id']).
         dry_run:    If True (default), publish() is a no-op.
         sel_source: Optional SelectorSource for dependency injection.
-                    When None, loads selectors/naver/editor.json directly.
+                    When None, loads selectors/naver/editor.yaml directly.
     """
 
     def __init__(

@@ -45,7 +45,7 @@ class ContentBuilder:
         para_count = paragraph_block_count(list(spec.body))
 
         if not flat_blocks:
-            stub = self._text_gen.generate("", 1)[0]
+            stub = self._text_gen.generate("")
             return _PostContent(
                 title=title,
                 steps=[ParagraphStep(text=stub, newlines=2)],

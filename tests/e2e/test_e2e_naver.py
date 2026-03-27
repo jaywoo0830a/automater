@@ -46,8 +46,8 @@ SESSION_PATH  = os.getenv("SESSION_PATH", "session_state.json")
 _MAIN_FRAME  = "#mainFrame"
 _EDITOR_BODY = ".se-content"
 
-_LOGIN_SEL  = SelectorLoader.load("selectors/naver/login.json")
-_EDITOR_SEL = SelectorLoader.load("selectors/naver/editor.json")
+_LOGIN_SEL  = SelectorLoader.load("selectors/naver/login.yaml")
+_EDITOR_SEL = SelectorLoader.load("selectors/naver/editor.yaml")
 
 
 # ---------------------------------------------------------------------------

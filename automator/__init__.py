@@ -48,6 +48,7 @@ from automator.stubs import StubTextGenerator, NoopImageProcessor, DictSelectorS
 from automator.gemini_generator import GeminiGenerator
 from automator.local_processor import LocalImageProcessor
 from automator.json_selector_source import JsonSelectorSource
+from automator.yaml_selector_source import YamlSelectorSource
 from automator.spec_validator import SpecValidator
 from automator.content_builder import ContentBuilder
 from automator.runner import JobRunner
@@ -60,7 +61,7 @@ __all__ = [
     "BlogEditor", "SmartEditorOne",
     "JobRunner", "SpecValidator", "ContentBuilder",
     "TextGenerator", "ImageProcessor", "SelectorSource",
-    "GeminiGenerator", "LocalImageProcessor", "JsonSelectorSource",
+    "GeminiGenerator", "LocalImageProcessor", "JsonSelectorSource", "YamlSelectorSource",
     "StubTextGenerator", "NoopImageProcessor", "DictSelectorSource",
     "generate_title", "validate_template", "RateLimitError",
     "BlockHandler", "ContentContext", "get_handler", "HANDLERS",

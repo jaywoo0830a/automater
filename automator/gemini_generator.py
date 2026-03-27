@@ -9,12 +9,12 @@ In non-production environments, returns stub paragraphs (no API call).
 from __future__ import annotations
 
 from automator.ports import TextGenerator
-from automator.paragraph_generator import generate_paragraphs
+from automator.paragraph_generator import generate_paragraph
 
 
 class GeminiGenerator(TextGenerator):
     """
-    Delegates to generate_paragraphs() which handles ENV switching internally.
+    Delegates to generate_paragraph() which handles ENV switching internally.
 
     Args:
         api_key: Gemini API key (defaults to GEMINI_API_KEY env var).
@@ -25,7 +25,7 @@ class GeminiGenerator(TextGenerator):
         self._api_key = api_key
         self._model = model
 
-    def generate(self, prompt: str, count: int) -> list[str]:
-        return generate_paragraphs(
-            prompt, count, api_key=self._api_key, model=self._model,
+    def generate(self, prompt: str) -> str:
+        return generate_paragraph(
+            prompt, api_key=self._api_key, model=self._model,
         )
