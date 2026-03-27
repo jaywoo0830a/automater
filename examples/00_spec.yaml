@@ -16,8 +16,6 @@
 # ═══════════════════════════════════════════════════════════
 #
 # platform: naver
-# naver:
-#   blog_id: myblog
 
 # ═══════════════════════════════════════════════════════════
 # accounts (필수) — 인증 정보 + 분배 설정. 최소 1개
@@ -26,6 +24,7 @@
 # accounts:
 #   - username: id
 #     password: pw
+#     blog_id: myblog              # 블로그 ID
 #     session: my_session.json    # 명시 경로 (선택)
 #     weight: 3                   # 분배 비율 (기본 1)
 #     min_posts: 10               # 최소 보장 (기본 0)

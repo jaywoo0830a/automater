@@ -2,12 +2,11 @@
 # 조합마다 다른 이미지를 매핑하는 경우.
 
 platform: naver
-naver:
-  blog_id: edublog
 
 accounts:
   - username: edu_blog
     password: pw1
+    blog_id: edublog
 
 titles:
   - "{keyword:region} {keyword:subject} 과외 #{i}"

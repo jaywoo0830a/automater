@@ -1,16 +1,16 @@
 # ── 풀 캠페인 ───────────────────────────────────────────
 
 platform: naver
-naver:
-  blog_id: myblog1
 
 accounts:
   - username: naver_id_1
     password: pw1
+    blog_id: myblog1
     session: naver_id_1_session.json
 
   - username: naver_id_2
     password: pw2
+    blog_id: myblog2
 
 titles:
   - "{pool:prefix} {keyword:region} {keyword:subject} 과외 {pool:suffix}"

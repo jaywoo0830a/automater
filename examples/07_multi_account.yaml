@@ -3,22 +3,22 @@
 # 적용 순서: min_posts 보장 → 나머지를 weight로 분배 → max_posts 캡
 
 platform: naver
-naver:
-  blog_id: mainblog
 
 accounts:
   - username: main_account
     password: pw1
+    blog_id: mainblog
     session: main_session.json
     proxy: 1.2.3.4:8080
-    weight: 3             # 나머지를 3배 비율로
-    max_posts: 60         # 최대 60개
+    weight: 3
+    max_posts: 60
 
   - username: sub_account
     password: pw2
+    blog_id: subblog
     weight: 1
-    min_posts: 10         # 최소 10개 보장 (웜업)
-    max_posts: 25         # 최대 25개
+    min_posts: 10
+    max_posts: 25
 
 titles:
   - "{keyword:region} {keyword:subject} 과외 {pool:cta}"

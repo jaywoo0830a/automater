@@ -1,12 +1,11 @@
 # ── 텍스트 전용 캠페인 ───────────────────────────────────
 
 platform: naver
-naver:
-  blog_id: textblog
 
 accounts:
   - username: writer1
     password: pw1
+    blog_id: textblog
 
 titles:
   - "{keyword:city} {keyword:topic} 완벽 가이드"

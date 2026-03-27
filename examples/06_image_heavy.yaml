@@ -1,12 +1,11 @@
 # ── 이미지 중심 캠페인 ───────────────────────────────────
 
 platform: naver
-naver:
-  blog_id: photoblog
 
 accounts:
   - username: photo_blog
     password: pw1
+    blog_id: photoblog
 
 titles:
   - "{pool:hook} {keyword:region} {keyword:category} 베스트 {pool:count}"

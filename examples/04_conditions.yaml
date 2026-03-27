@@ -2,12 +2,11 @@
 # 지역에 따라 다른 이미지와 문구를 쓰는 경우.
 
 platform: naver
-naver:
-  blog_id: localblog
 
 accounts:
   - username: local_blog
     password: pw1
+    blog_id: localblog
 
 titles:
   - "{keyword:region} {keyword:subject} 과외 추천"
