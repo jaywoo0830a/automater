@@ -21,14 +21,14 @@ call .venv\Scripts\activate.bat
 if errorlevel 1 goto :fail
 
 echo   [2/3] installing packages...
-pip install --quiet --upgrade pip
+python -m pip install --quiet --upgrade pip
 if errorlevel 1 goto :fail
-pip install --quiet -r requirements.txt
+python -m pip install --quiet -r requirements.txt
 if errorlevel 1 goto :fail
 echo         done
 
 echo   [3/3] installing Playwright Chromium...
-playwright install chromium
+python -m playwright install chromium
 if errorlevel 1 goto :fail
 echo         done
 
