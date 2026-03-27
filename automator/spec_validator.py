@@ -31,7 +31,7 @@ class SpecValidator:
         self._validate_title(spec)
         validate_sections(list(spec.body))
         self._validate_publish(spec)
-        self._validate_setting(spec)
+        self._validate_schedule(spec)
 
     @staticmethod
     def _validate_account(spec: PostingSpec) -> None:
@@ -55,33 +55,20 @@ class SpecValidator:
         if not (0 <= pub.internal_link_ratio <= 100):
             raise ValueError("PublishOption.internal_link_ratio must be 0-100")
 
-        mode = pub.mode
-        if mode == "immediate":
+    @staticmethod
+    def _validate_schedule(spec: PostingSpec) -> None:
+        at = spec.schedule_at
+        if at is None:
             return
-        if mode == "sequential":
-            return  # at is computed at runtime by CampaignExecutor
-
-        # All non-immediate modes require a future, timezone-aware `at`
-        if pub.at is None:
+        if at.tzinfo is None:
             raise ValueError(
-                f"PublishOption.at 은 mode='{mode}'일 때 필수입니다."
-            )
-        if pub.at.tzinfo is None:
-            raise ValueError(
-                "PublishOption.at 은 timezone-aware datetime 이어야 합니다. "
+                "schedule_at 은 timezone-aware datetime 이어야 합니다. "
                 "예: datetime(2025, 6, 1, 9, 0, tzinfo=KST)"
             )
         now = datetime.now(tz=KST)
-        if pub.at <= now:
+        if at <= now:
             raise ValueError(
-                "PublishOption.at 은 현재 시각보다 미래여야 합니다. "
-                f"(at={pub.at.isoformat()}, now={now.isoformat()})"
+                "schedule_at 은 현재 시각보다 미래여야 합니다. "
+                f"(at={at.isoformat()}, now={now.isoformat()})"
             )
 
-    @staticmethod
-    def _validate_setting(spec: PostingSpec) -> None:
-        setting = spec.setting
-        if setting.post_interval < 0:
-            raise ValueError("RunSetting.post_interval must be >= 0")
-        if setting.max_daily_posts < 1:
-            raise ValueError("RunSetting.max_daily_posts must be >= 1")

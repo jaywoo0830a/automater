@@ -281,21 +281,10 @@ Visibility    = Literal["public", "private", "draft"]
 @dataclass(frozen=True)
 class PublishOption:
     """
-    발행에 관한 모든 결정을 담는다.
+    발행 메타데이터 — 태그, 공개 범위.
 
-    Schedule
-    --------
-    mode="immediate"   즉시 발행 (기본값).
-    mode="scheduled"   at 시각에 예약. at 은 항상 미래, timezone-aware.
-    mode="sequential"  순차 예약. interval_lo~interval_hi 초 간격으로 발행.
-                       at 은 executor 가 런타임에 계산.
+    스케줄(언제 발행할지)은 PostingSpec.schedule_at 으로 분리되었다.
     """
-    # ── Schedule ──────────────────────────────────────────────────────────────
-    mode:           ScheduleMode    = "immediate"
-    at:             datetime | None = None
-    interval_lo:    int             = 0   # sequential interval lower bound (sec)
-    interval_hi:    int             = 0   # sequential interval upper bound (sec, 0=same as lo)
-
     # ── Tags ──────────────────────────────────────────────────────────────────
     tags:                list[str]  = field(default_factory=list)
     min_tags:            int        = 12

@@ -24,7 +24,6 @@ from automator.options import (
     AccountOption, TitleOption, KST,
     HeadingBlock, ParagraphBlock, ImageBlock, FeaturedImageBlock,
     QuoteBlock, DividerBlock, Section,
-    PublishOption,
 )
 from automator.selector_loader import SelectorLoader
 from automator.smart_editor import SmartEditorOne
@@ -112,7 +111,6 @@ def test_pipeline_text_only(editor: SmartEditorOne, account: AccountOption):
             ParagraphBlock(prompt="강남 수학 과외 홍보 블로그"),
             ParagraphBlock(prompt="후기 형식 마무리"),
         )),),
-        publish=PublishOption(mode="immediate"),
     )
     _run_spec(spec, editor)
 
@@ -134,7 +132,6 @@ def test_pipeline_heading_level(editor: SmartEditorOne, account: AccountOption, 
             HeadingBlock(level=level, text=f"H{level} 소제목 — 크기 {size}"),
             ParagraphBlock(prompt=f"H{level} 아래 일반 본문"),
         )),),
-        publish=PublishOption(mode="immediate"),
     )
     _run_spec(spec, editor)
 
@@ -153,7 +150,6 @@ def test_pipeline_heading_mixed_levels(editor: SmartEditorOne, account: AccountO
             HeadingBlock(level=5, text="작은 제목 (H5, 24)"),
             ParagraphBlock(prompt="작은 제목 아래 본문"),
         )),),
-        publish=PublishOption(mode="immediate"),
     )
     _run_spec(spec, editor)
 
@@ -173,7 +169,6 @@ def test_pipeline_heading_with_image(editor: SmartEditorOne, account: AccountOpt
         account=account,
         title="소제목 + 이미지 테스트",
         body=(Section(blocks=tuple(blocks)),),
-        publish=PublishOption(mode="immediate"),
     )
     _run_spec(spec, editor)
 
@@ -192,7 +187,6 @@ def test_pipeline_quote_only(editor: SmartEditorOne, account: AccountOption):
             QuoteBlock(text="교육의 목적은 시험이 아니다"),
             ParagraphBlock(prompt="인용구 아래 일반 본문"),
         )),),
-        publish=PublishOption(mode="immediate"),
     )
     _run_spec(spec, editor)
 
@@ -209,7 +203,6 @@ def test_pipeline_quote_with_heading(editor: SmartEditorOne, account: AccountOpt
             QuoteBlock(text="여행은 살아있는 교육이다"),
             ParagraphBlock(prompt="명언에 대한 감상을 작성해줘"),
         )),),
-        publish=PublishOption(mode="immediate"),
     )
     _run_spec(spec, editor)
 
@@ -225,7 +218,6 @@ def test_pipeline_multiple_quotes(editor: SmartEditorOne, account: AccountOption
             QuoteBlock(text="두 번째 인용구"),
             ParagraphBlock(prompt="인용구 아래 마무리 본문"),
         )),),
-        publish=PublishOption(mode="immediate"),
     )
     _run_spec(spec, editor)
 
@@ -245,7 +237,6 @@ def test_pipeline_divider_between_paragraphs(editor: SmartEditorOne, account: Ac
             DividerBlock(),
             ParagraphBlock(prompt="구분선 아래 본문"),
         )),),
-        publish=PublishOption(mode="immediate"),
     )
     _run_spec(spec, editor)
 
@@ -265,7 +256,6 @@ def test_pipeline_divider_with_heading_and_quote(editor: SmartEditorOne, account
             HeadingBlock(level=3, text="두 번째 섹션"),
             ParagraphBlock(prompt="두 번째 본문"),
         )),),
-        publish=PublishOption(mode="immediate"),
     )
     _run_spec(spec, editor)
 
@@ -308,7 +298,7 @@ def test_pipeline_all_options(editor: SmartEditorOne, account: AccountOption):
             pools={"salt_suffix": ("강력 추천", "즉시 가능")},
         ),
         body=(Section(blocks=tuple(blocks)),),
-        publish=PublishOption(mode="scheduled", at=_schedule()),
+        schedule_at=_schedule(),
     )
     _run_spec(spec, editor)
 
@@ -358,7 +348,7 @@ def test_pipeline_real_publish(page: Page, account: AccountOption, real_run: boo
             pools={"salt_suffix": ("강력 추천", "즉시 가능")},
         ),
         body=(Section(blocks=tuple(blocks)),),
-        publish=PublishOption(mode="scheduled", at=_schedule()),
+        schedule_at=_schedule(),
     )
     _run_spec(spec, editor, real=True)
 
@@ -398,7 +388,7 @@ def test_pipeline_dsl_full_blocks(editor: SmartEditorOne, account: AccountOption
         account=account,
         title="DSL 풀블록 E2E 테스트",
         body=(Section(blocks=tuple(blocks)),),
-        publish=PublishOption(mode="scheduled", at=_schedule()),
+        schedule_at=_schedule(),
     )
     _run_spec(spec, editor)
 
@@ -434,7 +424,7 @@ def test_pipeline_consecutive_scheduled(editor: SmartEditorOne, account: Account
             account=account,
             title=f"연속 발행 E2E #{i+1}",
             body=(Section(blocks=tuple(blocks)),),
-            publish=PublishOption(mode="scheduled", at=schedule),
+            schedule_at=schedule,
         )
         _run_spec(spec, editor)
 
@@ -477,7 +467,7 @@ def test_pipeline_consecutive_real_publish(
             account=account,
             title=f"연속 실발행 E2E #{i+1}",
             body=(Section(blocks=tuple(blocks)),),
-            publish=PublishOption(mode="scheduled", at=schedule),
+            schedule_at=schedule,
         )
         _run_spec(spec, editor, real=True)
 
@@ -529,7 +519,7 @@ def test_pipeline_long_paragraph_real_gemini(
         account=account,
         title="Gemini 장문 E2E 실발행",
         body=(Section(blocks=tuple(blocks)),),
-        publish=PublishOption(mode="scheduled", at=_schedule()),
+        schedule_at=_schedule(),
     )
     _run_spec(spec, editor, real=True)
 
@@ -557,7 +547,7 @@ def test_pipeline_image_with_link(editor: SmartEditorOne, account: AccountOption
             ImageBlock(path=image, link="tel:01012345678"),
             ParagraphBlock(prompt="이미지 링크 삽입 후 본문"),
         )),),
-        publish=PublishOption(mode="scheduled", at=_schedule()),
+        schedule_at=_schedule(),
     )
     _run_spec(spec, editor)
 
@@ -581,7 +571,7 @@ def test_pipeline_thumbnail_with_link(editor: SmartEditorOne, account: AccountOp
             FeaturedImageBlock(path=thumb, link="https://example.com"),
             ParagraphBlock(prompt="썸네일 링크 삽입 후 본문"),
         )),),
-        publish=PublishOption(mode="scheduled", at=_schedule()),
+        schedule_at=_schedule(),
     )
     _run_spec(spec, editor)
 
@@ -611,6 +601,6 @@ def test_pipeline_mixed_links_and_no_links(
             FeaturedImageBlock(path=thumb, link="https://example.com"),
             ParagraphBlock(prompt="혼합 링크 테스트 본문"),
         )),),
-        publish=PublishOption(mode="scheduled", at=_schedule()),
+        schedule_at=_schedule(),
     )
     _run_spec(spec, editor)

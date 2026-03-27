@@ -21,7 +21,7 @@ from automator.stubs import StubTextGenerator, NoopImageProcessor
 from automator.options import (
     AccountOption,
     ParagraphBlock, ImageBlock, HeadingBlock, Section,
-    PublishOption, KST,
+    KST,
 )
 
 
@@ -144,7 +144,7 @@ def test_publish_schedule_at(runner):
 
     editor = _SchedulingEditor()
     future = datetime.now(tz=KST) + timedelta(hours=2)
-    spec = _spec(publish=PublishOption(mode="scheduled", at=future))
+    spec = _spec(schedule_at=future)
     runner.run(spec, editor)
 
     actions = [c[0] for c in editor.calls]

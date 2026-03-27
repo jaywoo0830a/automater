@@ -188,7 +188,7 @@ class TestSequentialSchedule:
         executor.execute(_seq_config(n_keywords=4, schedule="++ 10m"), dry_run=False)
 
         assert len(captured_specs) == 4
-        times = [s.publish.at for s in captured_specs]
+        times = [s.schedule_at for s in captured_specs]
         for i in range(1, len(times)):
             assert times[i] > times[i - 1], f"post {i} not after post {i-1}"
 
@@ -208,7 +208,7 @@ class TestSequentialSchedule:
             dry_run=False,
         )
 
-        times = [s.publish.at for s in captured_specs]
+        times = [s.schedule_at for s in captured_specs]
         gaps = [(times[i] - times[i - 1]).total_seconds() for i in range(1, len(times))]
         # With 1m~30m range over 9 gaps, not all should be identical
         assert len(set(gaps)) > 1, f"All gaps identical: {gaps}"
@@ -227,5 +227,4 @@ class TestSequentialSchedule:
         executor.execute(_seq_config(n_keywords=2), dry_run=False)
 
         for spec in captured_specs:
-            assert spec.publish.mode == "scheduled"
-            assert spec.publish.at is not None
+            assert spec.schedule_at is not None

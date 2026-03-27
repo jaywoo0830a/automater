@@ -7,20 +7,17 @@ Forward compatible: unknown keys in config are silently ignored.
 Backward compatible: missing keys fall back to dataclass defaults.
 
 Usage:
-    from automator.options import PublishOption, RunSetting
-    from automator.preset_loader import load_publish, load_setting
+    from automator.preset_loader import load_publish
 
-    publish_opt = load_publish(preset_config_dict, scheduled_at)
-    run_setting = load_setting(preset_config_dict)
+    publish_opt = load_publish(preset_config_dict)
 """
 
 from __future__ import annotations
 
 from dataclasses import fields as dc_fields
-from datetime import datetime
 from typing import Any
 
-from automator.options import PublishOption, RunSetting
+from automator.options import PublishOption
 
 
 def _deserialize(cls: type, config: dict[str, Any]) -> Any:
@@ -37,28 +34,12 @@ def _deserialize(cls: type, config: dict[str, Any]) -> Any:
 
 def load_publish(
     config: dict[str, Any] | None,
-    scheduled_at: datetime,
 ) -> PublishOption:
     """
     Build a PublishOption from preset config JSON.
 
-    If config is None (no preset), returns a fixed-schedule default.
-    The 'at' field is always overridden by scheduled_at from dispatch.
+    If config is None (no preset), returns PublishOption() with all defaults.
     """
     if config is None:
-        return PublishOption(mode="scheduled", at=scheduled_at)
-
-    merged = dict(config)
-    merged["at"] = scheduled_at
-    return _deserialize(PublishOption, merged)
-
-
-def load_setting(config: dict[str, Any] | None) -> RunSetting:
-    """
-    Build a RunSetting from preset config JSON.
-
-    If config is None (no preset), returns RunSetting() with all defaults.
-    """
-    if config is None:
-        return RunSetting()
-    return _deserialize(RunSetting, config)
+        return PublishOption()
+    return _deserialize(PublishOption, config)

@@ -66,17 +66,14 @@ def build_spec(
 
     loaded_maps = load_maps(config.get("maps"), base_dir=config.get("_base_dir", "."))
     body = _build_body(combo, config, loaded_maps)
-    publish_opt = _build_publish(config.get("publish", {}))
-
-    run_config = merge_account_run(config.get("run", {}), account_dict)
-    run_setting = _build_run(run_config)
+    publish_opt, schedule_at = _build_publish(config.get("publish", {}))
 
     return PostingSpec(
         account=account_opt,
         title=title_opt,
         body=tuple(body),
         publish=publish_opt,
-        setting=run_setting,
+        schedule_at=schedule_at,
     )
 
 
@@ -501,19 +498,18 @@ def _parse_sequential(s: str) -> dict[str, Any]:
     }
 
 
-def _build_publish(publish_config: dict[str, Any]) -> PublishOption:
+def _build_publish(publish_config: dict[str, Any]) -> tuple[PublishOption, datetime | None]:
     if not publish_config:
-        return PublishOption(mode="immediate")
+        return PublishOption(), None
 
     schedule = parse_schedule(publish_config.get("schedule"))
-    return PublishOption(
-        mode=schedule["mode"],
-        at=schedule.get("at"),
-        interval_lo=schedule.get("interval_lo", 0),
-        interval_hi=schedule.get("interval_hi", 0),
+    schedule_at = schedule.get("at")
+
+    opt = PublishOption(
         tags=list(publish_config.get("tags", [])),
         visibility=publish_config.get("visibility", "public"),
     )
+    return opt, schedule_at
 
 
 # ---------------------------------------------------------------------------

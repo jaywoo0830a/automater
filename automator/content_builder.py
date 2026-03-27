@@ -18,7 +18,6 @@ from automator.block_handlers import ContentContext, get_handler
 from automator.layout import all_blocks, paragraph_block_count
 from automator.ports import TextGenerator, ImageProcessor
 from automator.title_generator import generate_title
-from automator.options import PublishOption
 
 
 class ContentBuilder:
@@ -50,7 +49,7 @@ class ContentBuilder:
                 title=title,
                 steps=[ParagraphStep(text=stub, newlines=2)],
                 tags=spec.publish.tags,
-                schedule_at=self._resolve_schedule(spec.publish),
+                schedule_at=spec.schedule_at,
             )
 
         ctx = ContentContext(
@@ -69,13 +68,6 @@ class ContentBuilder:
             title=title,
             steps=steps_out,
             tags=spec.publish.tags,
-            schedule_at=self._resolve_schedule(spec.publish),
+            schedule_at=spec.schedule_at,
             tmp_files=ctx.tmp_files,
         )
-
-    @staticmethod
-    def _resolve_schedule(publish: PublishOption) -> datetime | None:
-        """Compute the actual publish datetime from publish options."""
-        if publish.mode == "immediate":
-            return None
-        return publish.at

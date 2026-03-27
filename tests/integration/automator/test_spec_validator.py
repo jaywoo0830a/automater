@@ -14,7 +14,7 @@ from automator.spec_validator import SpecValidator
 from automator.options import (
     AccountOption, TitleOption,
     FeaturedImageBlock, ParagraphBlock, Section,
-    PublishOption, RunSetting, KST,
+    PublishOption, KST,
 )
 
 
@@ -75,41 +75,19 @@ def test_two_featured_images_rejected(v):
 # Publish validation
 # ---------------------------------------------------------------------------
 
-def test_fixed_schedule_without_at_rejected(v):
-    with pytest.raises(ValueError, match="at"):
-        v.validate(_spec(publish=PublishOption(mode="scheduled")))
-
-
-def test_fixed_schedule_naive_datetime_rejected(v):
+def test_schedule_naive_datetime_rejected(v):
     with pytest.raises(ValueError, match="timezone"):
-        v.validate(_spec(publish=PublishOption(
-            mode="scheduled",
-            at=datetime(2099, 1, 1, 9, 0),
-        )))
+        v.validate(_spec(schedule_at=datetime(2099, 1, 1, 9, 0)))
 
 
-def test_valid_fixed_schedule_passes(v):
+def test_valid_schedule_passes(v):
     future = datetime.now(tz=KST) + timedelta(hours=2)
-    v.validate(_spec(publish=PublishOption(mode="scheduled", at=future)))
+    v.validate(_spec(schedule_at=future))
 
 
 def test_tags_min_greater_than_max_rejected(v):
     with pytest.raises(ValueError, match="min_tags"):
         v.validate(_spec(publish=PublishOption(min_tags=25, max_tags=10)))
-
-
-# ---------------------------------------------------------------------------
-# RunSetting validation
-# ---------------------------------------------------------------------------
-
-def test_negative_post_interval_rejected(v):
-    with pytest.raises(ValueError, match="post_interval"):
-        v.validate(_spec(setting=RunSetting(post_interval=-1)))
-
-
-def test_zero_max_daily_posts_rejected(v):
-    with pytest.raises(ValueError, match="max_daily_posts"):
-        v.validate(_spec(setting=RunSetting(max_daily_posts=0)))
 
 
 def test_valid_spec_passes(v):

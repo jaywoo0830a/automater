@@ -216,12 +216,12 @@ class CampaignExecutor:
             try:
                 spec = build_spec(combo, config, account_idx)
 
-                # Sequential mode: compute at for each post progressively
-                spec = self._resolve_sequential(spec, i)
+                # Sequential mode: compute schedule_at for each post progressively
+                spec = self._resolve_sequential(spec, i, config)
 
                 if dry_run:
                     title = generate_title(spec.title)
-                    at_label = spec.publish.at.strftime("%H:%M") if spec.publish.at else "-"
+                    at_label = spec.schedule_at.strftime("%H:%M") if spec.schedule_at else "-"
                     logger.info("[DRY-RUN] %s | %s (at=%s)", username, title, at_label)
                     result.total_succeeded += 1
                     continue
@@ -244,19 +244,22 @@ class CampaignExecutor:
             raise RuntimeError("editor not initialized")
         self._runner.run(spec, editor)
 
-    def _resolve_sequential(self, spec: PostingSpec, index: int) -> PostingSpec:
+    def _resolve_sequential(self, spec: PostingSpec, index: int, config: dict[str, Any]) -> PostingSpec:
         """
-        For sequential mode, compute and assign schedule_at progressively.
+        For sequential schedule, compute schedule_at progressively.
 
-        First post: now + interval.
-        Subsequent posts: previous post's at + interval.
-        Returns the spec unchanged for non-sequential modes.
+        Reads interval_lo/interval_hi from config publish.schedule.
+        Returns the spec unchanged if schedule is not sequential.
         """
-        pub = spec.publish
-        if pub.mode != "sequential":
+        publish_config = config.get("publish", {})
+        schedule_raw = publish_config.get("schedule", "")
+        if not isinstance(schedule_raw, str) or "++" not in schedule_raw:
             return spec
 
-        lo, hi = pub.interval_lo, pub.interval_hi or pub.interval_lo
+        from cli.spec_builder import parse_schedule
+        parsed = parse_schedule(schedule_raw)
+        lo = parsed.get("interval_lo", 0)
+        hi = parsed.get("interval_hi", 0) or lo
         interval = random.randint(min(lo, hi), max(lo, hi))
 
         if index == 0:
@@ -264,8 +267,7 @@ class CampaignExecutor:
         else:
             self._seq_next_at = self._seq_next_at + timedelta(seconds=interval)
 
-        new_pub = replace(pub, mode="scheduled", at=self._seq_next_at)
-        return replace(spec, publish=new_pub)
+        return replace(spec, schedule_at=self._seq_next_at)
 
     @staticmethod
     def _parse_interval(run_config: dict[str, Any]) -> int:

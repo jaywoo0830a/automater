@@ -13,13 +13,13 @@ factory builds PostingSpec → runner executes PostingSpec.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from automator.options import (
     AccountOption,
     TitleOption,
     Section,
     PublishOption,
-    RunSetting,
 )
 
 
@@ -30,9 +30,11 @@ class PostingSpec:
 
     factory creates this from a Combination row.
     automator.runner.JobRunner executes it against a BlogEditor.
+
+    schedule_at: None = immediate publish, datetime = scheduled publish.
     """
-    account: AccountOption
-    title:   TitleOption | str  = ""
-    body:    tuple[Section, ...] = ()
-    publish: PublishOption   = field(default_factory=PublishOption)
-    setting: RunSetting      = field(default_factory=RunSetting)
+    account:     AccountOption
+    title:       TitleOption | str      = ""
+    body:        tuple[Section, ...]    = ()
+    publish:     PublishOption          = field(default_factory=PublishOption)
+    schedule_at: datetime | None       = None

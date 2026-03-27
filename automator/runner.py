@@ -49,19 +49,18 @@ class JobRunner:
         """
         self._validator.validate(spec)
         post = self._builder.build(spec)
-        self._execute(editor, post, spec)
+        self._execute(editor, post)
 
     @staticmethod
     def _execute(
         editor: BlogEditor,
         post: _PostContent,
-        spec: PostingSpec,
     ) -> None:
         """Drive the editor to publish the post."""
         editor.open()
         editor.write_title(post.title)
 
-        upload_delay_ms = spec.setting.upload_delay_ms
+        upload_delay_ms = editor.upload_delay_ms
         image_upload_count = 0
         rep_index: int | None = None
 

@@ -10,7 +10,7 @@ Public interface
     BlogEditor          — abstract editor with 7 primitives
     SmartEditorOne      — Naver Smart Editor implementation
 
-    AccountOption, TitleOption, PublishOption, RunSetting — config
+    AccountOption, TitleOption, PublishOption — config
     Section, Block types (7)    — post body structure
     BlockHandler, HANDLERS      — extension point for new block types
 
@@ -36,7 +36,7 @@ from automator.options import (
     AccountOption, TitleOption, Section, Block,
     HeadingBlock, ParagraphBlock, ImageBlock, FeaturedImageBlock,
     ListBlock, QuoteBlock, DividerBlock,
-    PublishOption, RunSetting,
+    PublishOption,
 )
 from automator.contracts import PostingSpec
 from automator.editor import BlogEditor
@@ -57,7 +57,7 @@ from automator.smart_editor import SmartEditorOne
 __all__ = [
     "PostingSpec", "AccountOption", "TitleOption", "Section", "Block",
     "HeadingBlock", "ParagraphBlock", "ImageBlock", "FeaturedImageBlock",
-    "ListBlock", "QuoteBlock", "DividerBlock", "PublishOption", "RunSetting",
+    "ListBlock", "QuoteBlock", "DividerBlock", "PublishOption",
     "BlogEditor", "SmartEditorOne",
     "JobRunner", "SpecValidator", "ContentBuilder",
     "TextGenerator", "ImageProcessor", "SelectorSource",

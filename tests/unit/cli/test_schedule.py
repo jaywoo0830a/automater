@@ -153,29 +153,28 @@ class TestValidatorCompat:
         assert result["at"] > now
 
     def test_immediate_passes_validator(self):
-        """Immediate mode has no at — validator should not check."""
+        """Immediate mode has no schedule_at — validator should not check."""
         from automator.contracts import PostingSpec
-        from automator.options import AccountOption, PublishOption
+        from automator.options import AccountOption
         from automator.spec_validator import SpecValidator
 
         spec = PostingSpec(
             account=AccountOption(username="u", password="p"),
             title="t",
-            publish=PublishOption(mode="immediate"),
         )
         SpecValidator().validate(spec)  # should not raise
 
     def test_scheduled_passes_validator(self):
         """Scheduled mode with future at — validator passes."""
         from automator.contracts import PostingSpec
-        from automator.options import AccountOption, PublishOption
+        from automator.options import AccountOption
         from automator.spec_validator import SpecValidator
 
         result = parse_schedule("now + 15m")
         spec = PostingSpec(
             account=AccountOption(username="u", password="p"),
             title="t",
-            publish=PublishOption(mode="scheduled", at=result["at"]),
+            schedule_at=result["at"],
         )
         SpecValidator().validate(spec)  # should not raise
 

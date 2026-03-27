@@ -14,7 +14,7 @@ from automator.contracts import PostingSpec
 from automator.options import (
     AccountOption,
     ParagraphBlock, ImageBlock, FeaturedImageBlock, Section,
-    PublishOption, RunSetting,
+    PublishOption,
 )
 
 
@@ -32,8 +32,7 @@ def test_spec_defaults():
     """Omitted fields get sensible defaults."""
     spec = PostingSpec(account=_account())
     assert spec.body == ()
-    assert spec.publish.mode == "immediate"
-    assert spec.setting.headless is True
+    assert spec.schedule_at is None
 
 
 def test_spec_is_frozen():

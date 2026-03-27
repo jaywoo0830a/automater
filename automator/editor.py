@@ -53,17 +53,25 @@ class BlogEditor(ABC):
     New block types never require new methods here.
 
     Args:
-        dry_run: If True (default), publish() prepares everything but
-                 skips the final confirm — the post is never actually published.
+        dry_run:         If True (default), publish() prepares everything but
+                         skips the final confirm — the post is never actually published.
+        upload_delay_ms: Delay in ms between consecutive file uploads.
+                         Platform-specific default; 0 = no delay.
     """
 
-    def __init__(self, *, dry_run: bool = True) -> None:
+    def __init__(self, *, dry_run: bool = True, upload_delay_ms: int = 0) -> None:
         self._dry_run = dry_run
+        self._upload_delay_ms = upload_delay_ms
 
     @property
     def dry_run(self) -> bool:
         """Whether this editor is in dry-run mode."""
         return self._dry_run
+
+    @property
+    def upload_delay_ms(self) -> int:
+        """Delay in ms between consecutive file uploads."""
+        return self._upload_delay_ms
 
     @abstractmethod
     def open(self) -> None:
