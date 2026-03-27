@@ -1,47 +1,41 @@
 @echo off
-REM run\init.bat — 처음 한 번만 실행 (Windows)
+chcp 65001 >nul 2>&1
 cd /d "%~dp0\.."
 
 echo ========================================
-echo   automator — 초기 환경 설정
+echo   automator - initial setup
 echo ========================================
-echo   프로젝트 루트 : %cd%
+echo   project root : %cd%
 echo.
 
-REM 1. 가상환경
 if exist .venv (
-    echo   [1/4] .venv 이미 존재 — 건너뜀
+    echo   [1/3] .venv exists - skip
 ) else (
-    echo   [1/4] 가상환경 생성 중...
+    echo   [1/3] creating venv...
     python -m venv .venv
-    echo         완료
+    echo         done
 )
 
-REM 2. 활성화
 call .venv\Scripts\activate.bat
 
-REM 3. 패키지 설치
-echo   [2/4] 패키지 설치 중...
+echo   [2/3] installing packages...
 pip install --quiet --upgrade pip
 pip install --quiet -r requirements.txt
-echo         완료
+echo         done
 
-REM 4. Playwright Chromium
-echo   [3/4] Playwright Chromium 설치 중...
+echo   [3/3] installing Playwright Chromium...
 playwright install chromium
-echo         완료
+echo         done
 
-REM 5. 로그 디렉토리
 if not exist logs mkdir logs
 
 echo.
 echo ========================================
-echo   설정 완료
+echo   setup complete
 echo ========================================
 echo.
-echo   다음 단계:
-echo     copy .env.example .env            # 환경 파일 설정
-echo     run\gui.bat                       # 캠페인 빌더 GUI 실행
-echo     run\test.bat                      # 테스트 (선택)
+echo   next:
+echo     copy .env.example .env
+echo     run\gui.bat
 echo.
 pause
