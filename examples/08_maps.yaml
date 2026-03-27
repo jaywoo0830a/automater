@@ -1,0 +1,54 @@
+# ── 외부 맵 파일 활용 ────────────────────────────────────
+# 지역별로 다른 이미지/링크를 매핑하는 경우.
+# 맵 파일은 순수 키:값 YAML — 누구나 편집 가능.
+
+accounts:
+  - username: map_blog
+    password: pw1
+    blog_id: mapblog
+
+titles:
+  - "{keyword:region} {keyword:subject} 과외 추천"
+
+keywords:
+  region: [강남, 서초, 잠실, 송파, 강동]
+  subject: [수학, 영어]
+
+maps:
+  photo:
+    file: maps/region_photo.yaml
+    by: "{keyword:region}"
+  thumb:
+    file: maps/region_thumb.yaml
+    by: "{keyword:region}"
+  link:
+    file: maps/region_link.yaml
+    by: "{keyword:region}"
+
+post:
+  - image:
+      src: "{map:photo}"
+      link: "{map:link}"
+  - divider
+  - h2: "{keyword:region} {keyword:subject} 과외"
+  - paragraph: "{keyword:region} {keyword:subject} 과외를 자연스럽게 소개해줘"
+  - quote: "{keyword:region} {keyword:subject} 과외 즉시 가능"
+  - paragraph: "{keyword:region} {keyword:subject} 과외 후기를 학부모 관점에서 써줘"
+  - divider
+  - thumbnail:
+      src: "{map:thumb}"
+      link: "{map:link}"
+      overlay: "{keyword:region} {keyword:subject} 과외"
+      background: 0.5
+      position: bottom
+
+images: ./images
+
+publish:
+  schedule: '++ 15m ~ 30m'
+  tags: [교육, 과외]
+
+run:
+  interval: 60s
+  max_daily: 10
+  headless: true

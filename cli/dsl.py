@@ -47,16 +47,18 @@ def interpolate(
     pools: dict[str, list[str]],
     index: int = 0,
     rng: random.Random | None = None,
+    maps: dict[str, str] | None = None,
 ) -> str:
     """
     Expand DSL tokens in a template string.
 
     Args:
-        template: String with {keyword:slug}, {pool:slug}, {i} tokens.
+        template: String with {keyword:slug}, {pool:slug}, {map:slug}, {i} tokens.
         values:   slug → keyword value mapping.
         pools:    slug → pool value list.
         index:    1-based combo index for {i}.
         rng:      Optional RNG for deterministic pool selection.
+        maps:     slug → resolved map value (from map_loader.resolve_maps).
 
     Returns:
         Interpolated string.
@@ -68,6 +70,7 @@ def interpolate(
         return template
 
     rng = rng or random.Random()
+    maps = maps or {}
 
     def _replace(match: re.Match) -> str:
         raw = match.group(1)
@@ -98,6 +101,11 @@ def interpolate(
             pool = pools[slug]
             return rng.choice(pool) if pool else ""
 
+        if token_type == "map":
+            if slug in maps:
+                return maps[slug]
+            return match.group(0)  # unresolved, keep as-is
+
         return match.group(0)  # unknown type, keep as-is
 
     return _TOKEN_RE.sub(_replace, template)
@@ -109,6 +117,7 @@ def interpolate_deep(
     pools: dict[str, list[str]],
     index: int = 0,
     rng: random.Random | None = None,
+    maps: dict[str, str] | None = None,
 ) -> Any:
     """
     Recursively interpolate all string values in a dict/list/scalar.
@@ -116,11 +125,11 @@ def interpolate_deep(
     Non-string values pass through unchanged.
     """
     if isinstance(obj, str):
-        return interpolate(obj, values, pools, index, rng)
+        return interpolate(obj, values, pools, index, rng, maps)
     if isinstance(obj, dict):
-        return {k: interpolate_deep(v, values, pools, index, rng) for k, v in obj.items()}
+        return {k: interpolate_deep(v, values, pools, index, rng, maps) for k, v in obj.items()}
     if isinstance(obj, list):
-        return [interpolate_deep(item, values, pools, index, rng) for item in obj]
+        return [interpolate_deep(item, values, pools, index, rng, maps) for item in obj]
     return obj
 
 

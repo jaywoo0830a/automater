@@ -43,6 +43,28 @@
 # ═══════════════════════════════════════════════════════════
 
 # ═══════════════════════════════════════════════════════════
+# maps (선택) — 외부 YAML 파일 키:값 매핑
+# ═══════════════════════════════════════════════════════════
+#
+# 맵 파일 (순수 데이터, maps/region_photo.yaml):
+#   강남: gangnam.jpg
+#   서초: seocho.jpg
+#   _default: default.jpg
+#
+# 캠페인에서 참조:
+#   maps:
+#     photo:
+#       file: maps/region_photo.yaml
+#       by: "{keyword:region}"
+#     link:
+#       file: maps/region_link.yaml
+#       by: "{keyword:region}"
+#
+# 사용: {map:photo}, {map:link} — 어디서든 토큰으로 사용
+#   - image: {src: "{map:photo}", link: "{map:link}"}
+#   - thumbnail: {src: "{map:photo}", link: "{map:link}"}
+
+# ═══════════════════════════════════════════════════════════
 # post (선택) — 블록 리스트
 # ═══════════════════════════════════════════════════════════
 #

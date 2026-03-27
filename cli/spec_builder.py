@@ -36,6 +36,7 @@ from automator.options import (
 
 from cli.combo_builder import Combo
 from cli.dsl import evaluate_condition, interpolate, interpolate_deep
+from cli.map_loader import load_maps, resolve_maps
 
 _HEADING_RE = re.compile(r"^h([1-6])$")
 _DEFAULT_PARAGRAPH_COUNT = 3
@@ -63,7 +64,8 @@ def build_spec(
     title_template = combo.title_template.replace("{i}", str(combo.index))
     title_opt = _build_title(combo, config, title_template)
 
-    body = _build_body(combo, config)
+    loaded_maps = load_maps(config.get("maps"), base_dir=".")
+    body = _build_body(combo, config, loaded_maps)
     publish_opt = _build_publish(config.get("publish", {}))
 
     run_config = merge_account_run(config.get("run", {}), account_dict)
@@ -115,7 +117,11 @@ def _build_title(
 # Body
 # ---------------------------------------------------------------------------
 
-def _build_body(combo: Combo, config: dict[str, Any]) -> list[Section]:
+def _build_body(
+    combo: Combo,
+    config: dict[str, Any],
+    loaded_maps: dict[str, Any] | None = None,
+) -> list[Section]:
     post = config.get("post", [])
     if not post:
         return _build_default_body(combo)
@@ -125,10 +131,11 @@ def _build_body(combo: Combo, config: dict[str, Any]) -> list[Section]:
     images_dir = config.get("images", ".")
     exif_opt = config.get("exif_optimization", True)
     idx = combo.index
+    resolved = resolve_maps(loaded_maps or {}, values)
     blocks = []
 
     for entry in post:
-        block = _parse_block(entry, values, pools, images_dir, idx, exif_opt)
+        block = _parse_block(entry, values, pools, images_dir, idx, exif_opt, resolved)
         if block is not None:
             blocks.append(block)
 
@@ -157,8 +164,11 @@ def _parse_block(
     images_dir: str,
     index: int,
     exif_opt: bool = True,
+    maps: dict[str, str] | None = None,
 ) -> Any:
     """Parse one post block entry. Returns None if skipped (when=false or unknown)."""
+    maps = maps or {}
+
     # Bare string: "divider"
     if isinstance(entry, str):
         if entry == "divider":
@@ -189,23 +199,23 @@ def _parse_block(
     heading_match = _HEADING_RE.match(block_type)
     if heading_match:
         level = int(heading_match.group(1))
-        text = interpolate(str(value), values, pools, index)
+        text = interpolate(str(value), values, pools, index, maps=maps)
         return HeadingBlock(level=level, text=text)
 
     if block_type == "paragraph":
-        return _parse_paragraph(value, values, pools, index)
+        return _parse_paragraph(value, values, pools, index, maps)
 
     if block_type == "image":
-        return _parse_image(value, values, pools, images_dir, index, exif_opt)
+        return _parse_image(value, values, pools, images_dir, index, exif_opt, maps)
 
     if block_type == "thumbnail":
-        return _parse_thumbnail(value, values, pools, images_dir, index, exif_opt)
+        return _parse_thumbnail(value, values, pools, images_dir, index, exif_opt, maps)
 
     if block_type == "quote":
-        return _parse_quote(value, values, pools, index)
+        return _parse_quote(value, values, pools, index, maps)
 
     if block_type == "list":
-        return _parse_list(value, values, pools, index)
+        return _parse_list(value, values, pools, index, maps)
 
     if block_type == "divider":
         return DividerBlock()
@@ -222,8 +232,9 @@ def _parse_paragraph(
     values: dict[str, str],
     pools: dict[str, list[str]],
     index: int,
+    maps: dict[str, str] | None = None,
 ) -> ParagraphBlock:
-    prompt = interpolate(str(value), values, pools, index)
+    prompt = interpolate(str(value), values, pools, index, maps=maps)
     return ParagraphBlock(prompt=prompt)
 
 
@@ -234,14 +245,15 @@ def _parse_image(
     images_dir: str,
     index: int,
     exif_opt: bool = True,
+    maps: dict[str, str] | None = None,
 ) -> ImageBlock:
     if isinstance(value, str):
-        filename = interpolate(value, values, pools, index)
+        filename = interpolate(value, values, pools, index, maps=maps)
         path = _resolve_path(images_dir, filename)
         return ImageBlock(path=path, exif_optimization=exif_opt)
 
     if isinstance(value, dict):
-        cfg = interpolate_deep(dict(value), values, pools, index)
+        cfg = interpolate_deep(dict(value), values, pools, index, maps=maps)
         src = cfg.get("src", cfg.get("path", ""))
         path = _resolve_path(images_dir, src)
         return ImageBlock(
@@ -261,14 +273,15 @@ def _parse_thumbnail(
     images_dir: str,
     index: int,
     exif_opt: bool = True,
+    maps: dict[str, str] | None = None,
 ) -> FeaturedImageBlock:
     if isinstance(value, str):
-        filename = interpolate(value, values, pools, index)
+        filename = interpolate(value, values, pools, index, maps=maps)
         path = _resolve_path(images_dir, filename)
         return FeaturedImageBlock(path=path, exif_optimization=exif_opt)
 
     if isinstance(value, dict):
-        cfg = interpolate_deep(dict(value), values, pools, index)
+        cfg = interpolate_deep(dict(value), values, pools, index, maps=maps)
         src = cfg.get("src", cfg.get("path", ""))
         path = _resolve_path(images_dir, src)
 
@@ -301,13 +314,14 @@ def _parse_quote(
     values: dict[str, str],
     pools: dict[str, list[str]],
     index: int,
+    maps: dict[str, str] | None = None,
 ) -> QuoteBlock:
     if isinstance(value, str):
-        text = interpolate(value, values, pools, index)
+        text = interpolate(value, values, pools, index, maps=maps)
         return QuoteBlock(text=text)
 
     if isinstance(value, dict):
-        cfg = interpolate_deep(dict(value), values, pools, index)
+        cfg = interpolate_deep(dict(value), values, pools, index, maps=maps)
         return QuoteBlock(
             text=str(cfg.get("text", "")),
             attribution=str(cfg.get("by", cfg.get("attribution", ""))),
@@ -321,10 +335,11 @@ def _parse_list(
     values: dict[str, str],
     pools: dict[str, list[str]],
     index: int,
+    maps: dict[str, str] | None = None,
 ) -> ListBlock:
     if isinstance(value, list):
         items = tuple(
-            interpolate(str(item), values, pools, index) for item in value
+            interpolate(str(item), values, pools, index, maps=maps) for item in value
         )
         return ListBlock(items=items)
     return ListBlock()

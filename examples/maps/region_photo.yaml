@@ -1,0 +1,7 @@
+# maps/region_photo.yaml — 지역별 이미지 매핑
+강남: gangnam.jpg
+서초: seocho.jpg
+잠실: jamsil.jpg
+송파: songpa.jpg
+강동: gangdong.jpg
+_default: default.jpg

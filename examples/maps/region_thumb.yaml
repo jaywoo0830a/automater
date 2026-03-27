@@ -1,0 +1,5 @@
+# maps/region_thumb.yaml — 지역별 썸네일 매핑
+강남: gangnam_cover.jpg
+서초: seocho_cover.jpg
+잠실: jamsil_cover.jpg
+_default: default_cover.jpg

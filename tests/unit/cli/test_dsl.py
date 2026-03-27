@@ -202,3 +202,46 @@ class TestConditionEdgeCases:
     def test_unparseable_raises(self):
         with pytest.raises(ValueError, match="Unparseable"):
             evaluate_condition("gibberish", {"r": "v"})
+
+
+# ---------------------------------------------------------------------------
+# {map:slug} token
+# ---------------------------------------------------------------------------
+
+class TestMapToken:
+
+    def test_map_token_resolves(self):
+        result = interpolate(
+            "{map:photo}", {}, {}, maps={"photo": "gangnam.jpg"},
+        )
+        assert result == "gangnam.jpg"
+
+    def test_map_token_in_src(self):
+        result = interpolate(
+            "images/{map:photo}", {}, {}, maps={"photo": "gangnam.jpg"},
+        )
+        assert result == "images/gangnam.jpg"
+
+    def test_map_mixed_with_keyword(self):
+        result = interpolate(
+            "{keyword:region} {map:photo}",
+            {"region": "강남"}, {},
+            maps={"photo": "gangnam.jpg"},
+        )
+        assert result == "강남 gangnam.jpg"
+
+    def test_map_missing_slug_keeps_token(self):
+        result = interpolate("{map:missing}", {}, {}, maps={})
+        assert result == "{map:missing}"
+
+    def test_map_none_maps(self):
+        result = interpolate("{map:photo}", {}, {}, maps=None)
+        assert result == "{map:photo}"
+
+    def test_interpolate_deep_with_maps(self):
+        obj = {"src": "{map:photo}", "alt": "{keyword:region}"}
+        result = interpolate_deep(
+            obj, {"region": "강남"}, {},
+            maps={"photo": "gangnam.jpg"},
+        )
+        assert result == {"src": "gangnam.jpg", "alt": "강남"}
