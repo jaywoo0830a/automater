@@ -34,11 +34,11 @@ post:
   - paragraph: "{keyword:region} {keyword:subject} 과외를 추천하며 마무리해줘"
     when: "{keyword:region} != 강남"
 
-  - thumbnail:
-      src: thumb.jpg
-      overlay: "{keyword:region} {keyword:subject} 과외"
-      background: 0.6
-      position: bottom
+  - featured_image:
+      path: thumb.jpg
+      overlay_text: "{keyword:region} {keyword:subject} 과외"
+      overlay_background: 0.6
+      overlay_position: bottom
 
 images: ./images
 

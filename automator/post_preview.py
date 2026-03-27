@@ -108,9 +108,7 @@ def _register(block_type: type):
 
 @_register(ParagraphBlock)
 def _preview_paragraph(block: ParagraphBlock) -> BlockPreview:
-    if block.keyword:
-        desc = f"[AI paragraph about '{block.keyword}', {block.tone} tone]"
-    elif block.prompt:
+    if block.prompt:
         desc = f"[AI paragraph: {block.prompt}]"
     else:
         desc = "[AI-generated paragraph]"

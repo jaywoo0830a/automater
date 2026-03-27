@@ -52,11 +52,9 @@ if TYPE_CHECKING:
 @dataclass
 class ContentContext:
     """Mutable context shared across handlers during content generation."""
-    paragraph_index:  int        = 0
-    total_paragraphs: int        = 0
-    tmp_files:        list[str]  = field(default_factory=list)
-    text_gen:         Any        = None
-    img_proc:         Any        = None
+    tmp_files: list[str]  = field(default_factory=list)
+    text_gen:  Any        = None
+    img_proc:  Any        = None
 
 
 # ---------------------------------------------------------------------------
@@ -84,15 +82,7 @@ class ParagraphHandler(BlockHandler):
     """ParagraphBlock -> [ParagraphStep]"""
 
     def to_steps(self, block: ParagraphBlock, ctx: ContentContext) -> list[PostStep]:
-        from automator.seo_prompt import build_prompt
-
-        prompt = build_prompt(
-            block,
-            paragraph_index=ctx.paragraph_index,
-            total_paragraphs=ctx.total_paragraphs,
-        )
-        text = ctx.text_gen.generate(prompt)
-        ctx.paragraph_index += 1
+        text = ctx.text_gen.generate(block.prompt)
         return [ParagraphStep(text=text, newlines=block.newlines)]
 
 

@@ -8,7 +8,7 @@ from automator.options import (
     HeadingBlock, ListBlock, QuoteBlock, DividerBlock,
     Section,
 )
-from automator.layout import validate_sections, paragraph_block_count, all_blocks
+from automator.layout import validate_sections, all_blocks
 
 
 def _section(*blocks):
@@ -48,16 +48,6 @@ def test_two_featured_across_sections_raises():
         ])
 
 
-def test_paragraph_block_count():
-    sections = [
-        _section(ParagraphBlock(), ImageBlock(path="x.jpg")),
-        _section(ParagraphBlock(), FeaturedImageBlock(path="y.jpg")),
-    ]
-    assert paragraph_block_count(sections) == 2
-
-
-def test_paragraph_block_count_zero():
-    assert paragraph_block_count([_section(ImageBlock(path="a.jpg"))]) == 0
 
 
 def test_all_blocks_flattens_sections():

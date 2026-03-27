@@ -30,7 +30,7 @@ class TestPreviewPost:
             template="{keyword:region} {keyword:subject}",
             values={"region": "강남", "subject": "수학"},
         )
-        sections = (Section(blocks=(ParagraphBlock(keyword="강남 수학"),)),)
+        sections = (Section(blocks=(ParagraphBlock(prompt="강남 수학 과외를 소개해줘"),)),)
         result = preview_post(title, sections)
 
         assert result.sample_title == "강남 수학"
@@ -42,17 +42,16 @@ class TestPreviewPost:
 
         assert result.sample_title == "고정 제목"
 
-    def test_paragraph_block_shows_keyword_placeholder(self):
+    def test_paragraph_block_shows_prompt_placeholder(self):
         title = "제목"
         sections = (Section(blocks=(
-            ParagraphBlock(keyword="강남 수학", tone="informational"),
+            ParagraphBlock(prompt="강남 수학 과외 소개"),
         )),)
         result = preview_post(title, sections)
 
         assert len(result.blocks) == 1
         assert result.blocks[0].block_type == "paragraph"
-        assert "강남 수학" in result.blocks[0].placeholder
-        assert "informational" in result.blocks[0].placeholder
+        assert "강남 수학 과외 소개" in result.blocks[0].placeholder
 
     def test_paragraph_block_with_prompt_shows_prompt(self):
         title = "제목"
@@ -131,10 +130,10 @@ class TestPreviewPost:
         sections = (
             Section(blocks=(
                 HeadingBlock(level=2, text="서론"),
-                ParagraphBlock(keyword="강남"),
+                ParagraphBlock(prompt="강남 과외"),
             )),
             Section(blocks=(
-                ParagraphBlock(keyword="수학"),
+                ParagraphBlock(prompt="수학 과외"),
                 ImageBlock(path="/img/a.jpg"),
             )),
         )
@@ -155,7 +154,7 @@ class TestPreviewPost:
         title = "제목"
         sections = (Section(blocks=(
             HeadingBlock(level=2, text="H2"),
-            ParagraphBlock(keyword="KW"),
+            ParagraphBlock(prompt="KW 프롬프트"),
             ImageBlock(path="/x.jpg"),
             ParagraphBlock(prompt="P2"),
             FeaturedImageBlock(path="/thumb.jpg"),

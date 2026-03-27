@@ -15,7 +15,7 @@ from datetime import datetime
 from automator.contracts import PostingSpec
 from automator.editor import PostStep, ParagraphStep, _PostContent
 from automator.block_handlers import ContentContext, get_handler
-from automator.layout import all_blocks, paragraph_block_count
+from automator.layout import all_blocks
 from automator.ports import TextGenerator, ImageProcessor
 from automator.title_generator import generate_title
 
@@ -41,7 +41,6 @@ class ContentBuilder:
         """Convert spec into _PostContent with title, steps, tags, schedule."""
         title = spec.title if isinstance(spec.title, str) else generate_title(spec.title)
         flat_blocks = all_blocks(list(spec.body))
-        para_count = paragraph_block_count(list(spec.body))
 
         if not flat_blocks:
             stub = self._text_gen.generate("")
@@ -53,8 +52,6 @@ class ContentBuilder:
             )
 
         ctx = ContentContext(
-            paragraph_index=0,
-            total_paragraphs=para_count,
             text_gen=self._text_gen,
             img_proc=self._img_proc,
         )

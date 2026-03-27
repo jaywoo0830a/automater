@@ -27,7 +27,7 @@ maps:
 
 post:
   - image:
-      src: "{map:photo}"
+      path: "{map:photo}"
       link: "{map:link}"
   - divider
   - h2: "{keyword:region} {keyword:subject} 과외"
@@ -35,12 +35,12 @@ post:
   - quote: "{keyword:region} {keyword:subject} 과외 즉시 가능"
   - paragraph: "{keyword:region} {keyword:subject} 과외 후기를 학부모 관점에서 써줘"
   - divider
-  - thumbnail:
-      src: "{map:thumb}"
+  - featured_image:
+      path: "{map:thumb}"
       link: "{map:link}"
-      overlay: "{keyword:region} {keyword:subject} 과외"
-      background: 0.5
-      position: bottom
+      overlay_text: "{keyword:region} {keyword:subject} 과외"
+      overlay_background: 0.5
+      overlay_position: bottom
 
 images: ./images
 

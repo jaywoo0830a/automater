@@ -17,19 +17,19 @@ pools:
   count: [TOP 5, TOP 7, BEST 10]
 
 post:
-  - thumbnail:
-      src: cover.jpg
-      overlay: "{keyword:region} {keyword:category}"
+  - featured_image:
+      path: cover.jpg
+      overlay_text: "{keyword:region} {keyword:category}"
       link: "https://map.naver.com"
-      color: "#FFFFFF"
-      background: 0.6
-      position: bottom
+      overlay_color: "#FFFFFF"
+      overlay_background: 0.6
+      overlay_position: bottom
       gps: [37.517, 127.047]
   - h2: "{keyword:region} {keyword:category} 소개"
   - paragraph: "{keyword:region} {keyword:category}를 소개하는 글을 300자 이상 써줘"
-  - image: {src: photo_1.jpg, alt: "{keyword:region} {keyword:category} 외관"}
+  - image: {path: photo_1.jpg, alt: "{keyword:region} {keyword:category} 외관"}
   - paragraph: "{keyword:region} {keyword:category}의 대표 메뉴를 리뷰해줘"
-  - image: {src: photo_2.jpg, alt: "{keyword:region} {keyword:category} 메뉴"}
+  - image: {path: photo_2.jpg, alt: "{keyword:region} {keyword:category} 메뉴"}
   - paragraph: "{keyword:region} {keyword:category}의 분위기와 서비스를 리뷰해줘"
   - divider
   - h3: "방문 팁"

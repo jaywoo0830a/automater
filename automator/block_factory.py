@@ -41,7 +41,7 @@ from automator.options import (
 FACTORIES: dict[str, type] = {
     "paragraph": ParagraphBlock,
     "image":     ImageBlock,
-    "featured":  FeaturedImageBlock,
+    "featured_image": FeaturedImageBlock,
     "heading":   HeadingBlock,
     "list":      ListBlock,
     "quote":     QuoteBlock,
@@ -50,7 +50,7 @@ FACTORIES: dict[str, type] = {
 
 _PLACEHOLDER_RE = re.compile(r"\{(\w+)\}")
 
-_MEDIA_BLOCK_TYPES = {"image", "featured"}
+_MEDIA_BLOCK_TYPES = {"image", "featured_image"}
 
 
 # ---------------------------------------------------------------------------

@@ -31,18 +31,18 @@ post:
   - h2: "{keyword:region} {keyword:subject} 과외 소개"
   - paragraph: "{keyword:region} {keyword:subject} 과외를 소개해줘"
   - image:
-      src: body.jpg
+      path: body.jpg
       link: "tel:01012345678"
-  - quote: {text: "배움에는 끝이 없다", by: "공자"}
+  - quote: {text: "배움에는 끝이 없다", attribution: "공자"}
   - paragraph: "{keyword:region} {keyword:subject} 과외 후기를 감성적으로 써줘"
   - divider
   - paragraph: "{keyword:region} {keyword:subject} 과외 홍보 마무리. 행동 유도 포함"
-  - thumbnail:
-      src: thumb.jpg
+  - featured_image:
+      path: thumb.jpg
       link: "tel:01012345678"
-      overlay: "{keyword:region} {keyword:subject} 과외"
-      background: 0.5
-      position: bottom
+      overlay_text: "{keyword:region} {keyword:subject} 과외"
+      overlay_background: 0.5
+      overlay_position: bottom
 
 images: ./images
 

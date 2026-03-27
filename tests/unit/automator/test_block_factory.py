@@ -21,7 +21,7 @@ def test_all_block_types_registered():
     """Every concrete Block type has a factory entry."""
     assert "paragraph" in FACTORIES
     assert "image" in FACTORIES
-    assert "featured" in FACTORIES
+    assert "featured_image" in FACTORIES
     assert "heading" in FACTORIES
     assert "list" in FACTORIES
     assert "quote" in FACTORIES
@@ -38,10 +38,9 @@ def test_unknown_type_raises():
 # ---------------------------------------------------------------------------
 
 def test_paragraph_from_config():
-    block = create_block("paragraph", {"prompt": "test prompt", "tone": "review"})
+    block = create_block("paragraph", {"prompt": "test prompt"})
     assert isinstance(block, ParagraphBlock)
     assert block.prompt == "test prompt"
-    assert block.tone == "review"
 
 
 def test_heading_from_config():
@@ -58,7 +57,7 @@ def test_image_from_config():
 
 
 def test_featured_from_config():
-    block = create_block("featured", {"path": "/tmp/b.jpg", "overlay_text": "text"})
+    block = create_block("featured_image", {"path": "/tmp/b.jpg", "overlay_text": "text"})
     assert isinstance(block, FeaturedImageBlock)
 
 
@@ -86,11 +85,11 @@ def test_keyword_placeholder():
     """'{keyword}' in config is replaced with the full keyword string."""
     block = create_block(
         "paragraph",
-        {"keyword": "{keyword}", "tone": "review"},
+        {"prompt": "{keyword} 과외를 소개해줘"},
         values={"region": "강남", "subject": "수학"},
         keyword="강남 수학",
     )
-    assert block.keyword == "강남 수학"
+    assert block.prompt == "강남 수학 과외를 소개해줘"
 
 
 def test_slug_placeholder():
@@ -130,10 +129,9 @@ def test_non_string_values_unchanged():
     """Non-string config values pass through without interpolation."""
     block = create_block(
         "paragraph",
-        {"prompt": "test", "min_chars": 250, "max_chars": 500},
+        {"prompt": "test", "newlines": 3},
     )
-    assert block.min_chars == 250
-    assert block.max_chars == 500
+    assert block.newlines == 3
 
 
 # ---------------------------------------------------------------------------
@@ -153,7 +151,7 @@ def test_unknown_config_keys_ignored():
 def test_list_interpolation():
     """Placeholders inside list items are also interpolated."""
     block = create_block(
-        "featured",
+        "featured_image",
         {"path": "/img.jpg", "overlay_text": ["{region}", "{subject}"]},
         values={"region": "강남", "subject": "수학"},
         keyword="강남 수학",
@@ -181,7 +179,7 @@ def test_featured_media_id_with_overlay():
     """Featured block resolves media_id and keeps overlay_text."""
     resolver = lambda mid: f"/uploads/{mid}/thumb.jpg"
     block = create_block(
-        "featured",
+        "featured_image",
         {"media_id": 7, "overlay_text": "{keyword}"},
         values={"region": "강남"},
         keyword="강남 수학",

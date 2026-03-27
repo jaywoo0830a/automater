@@ -120,17 +120,6 @@ def test_featured_image_produces_featured_step(builder, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# SEO keyword integration
-# ---------------------------------------------------------------------------
-
-def test_keyword_triggers_seo_prompt(builder):
-    """ParagraphBlock with keyword uses build_prompt() internally."""
-    post = builder.build(_spec(ParagraphBlock(keyword="강남 수학 과외")))
-    para_steps = [s for s in post.steps if isinstance(s, ParagraphStep)]
-    assert len(para_steps) == 1
-
-
-# ---------------------------------------------------------------------------
 # Empty body
 # ---------------------------------------------------------------------------
 

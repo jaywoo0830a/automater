@@ -33,7 +33,7 @@ FULL_CONFIG = {
         {"paragraph": "{keyword:region} {keyword:subject} 과외를 소개해줘"},
         {"image": "body.jpg"},
         {"paragraph": "{keyword:region} {keyword:subject} 과외 후기를 써줘"},
-        {"thumbnail": {"src": "thumb.jpg", "overlay": "{keyword:region} {keyword:subject} 과외"}},
+        {"featured_image": {"path": "thumb.jpg", "overlay_text": "{keyword:region} {keyword:subject} 과외"}},
     ],
     "images": "./images",
     "publish": {"schedule": "immediate", "tags": ["교육"]},
@@ -105,10 +105,10 @@ class TestParagraph:
         assert isinstance(block, ParagraphBlock)
         assert block.prompt == "강남 수학 과외를 소개해줘"
 
-    def test_keyword_field_empty(self):
+    def test_prompt_interpolated(self):
         config = {**FULL_CONFIG, "post": [{"paragraph": "{keyword:region} 소개"}]}
         spec = build_spec(_combo(), config)
-        assert spec.body[0].blocks[0].keyword == ""
+        assert spec.body[0].blocks[0].prompt == "강남 소개"
 
     def test_i_in_prompt(self):
         config = {**FULL_CONFIG, "post": [{"paragraph": "포스팅 #{i}"}]}
@@ -159,7 +159,7 @@ class TestImage:
 
     def test_dict_form_with_alt(self):
         config = {**FULL_CONFIG, "post": [
-            {"image": {"src": "p.jpg", "alt": "{keyword:region} 외관"}},
+            {"image": {"path": "p.jpg", "alt": "{keyword:region} 외관"}},
         ]}
         spec = build_spec(_combo(), config)
         b = spec.body[0].blocks[0]
@@ -168,7 +168,7 @@ class TestImage:
 
     def test_dict_form_with_link(self):
         config = {**FULL_CONFIG, "post": [
-            {"image": {"src": "p.jpg", "link": "tel:01012345678"}},
+            {"image": {"path": "p.jpg", "link": "tel:01012345678"}},
         ]}
         spec = build_spec(_combo(), config)
         assert spec.body[0].blocks[0].link == "tel:01012345678"
@@ -186,46 +186,46 @@ class TestImage:
 class TestThumbnail:
 
     def test_static(self):
-        config = {**FULL_CONFIG, "post": [{"thumbnail": "thumb.jpg"}]}
+        config = {**FULL_CONFIG, "post": [{"featured_image": "thumb.jpg"}]}
         spec = build_spec(_combo(), config)
         assert spec.body[0].blocks[0].path == "images/thumb.jpg"
 
     def test_keyword_in_path(self):
-        config = {**FULL_CONFIG, "post": [{"thumbnail": "{keyword:region}.jpg"}]}
+        config = {**FULL_CONFIG, "post": [{"featured_image": "{keyword:region}.jpg"}]}
         spec = build_spec(_combo(), config)
         assert spec.body[0].blocks[0].path == "images/강남.jpg"
 
     def test_dict_form_with_overlay(self):
         config = {**FULL_CONFIG, "post": [
-            {"thumbnail": {"src": "t.jpg", "overlay": "{keyword:region} 과외"}},
+            {"featured_image": {"path": "t.jpg", "overlay_text": "{keyword:region} 과외"}},
         ]}
         spec = build_spec(_combo(), config)
         assert spec.body[0].blocks[0].overlay_text == "강남 과외"
 
     def test_dict_form_with_color(self):
         config = {**FULL_CONFIG, "post": [
-            {"thumbnail": {"src": "t.jpg", "overlay": "텍스트", "color": "#FFD700"}},
+            {"featured_image": {"path": "t.jpg", "overlay_text": "텍스트", "overlay_color": "#FFD700"}},
         ]}
         spec = build_spec(_combo(), config)
         assert spec.body[0].blocks[0].overlay_color == "#FFD700"
 
     def test_dict_form_with_background(self):
         config = {**FULL_CONFIG, "post": [
-            {"thumbnail": {"src": "t.jpg", "overlay": "텍스트", "background": 0.6}},
+            {"featured_image": {"path": "t.jpg", "overlay_text": "텍스트", "overlay_background": 0.6}},
         ]}
         spec = build_spec(_combo(), config)
         assert spec.body[0].blocks[0].overlay_background == 0.6
 
     def test_dict_form_with_position(self):
         config = {**FULL_CONFIG, "post": [
-            {"thumbnail": {"src": "t.jpg", "overlay": "텍스트", "position": "bottom"}},
+            {"featured_image": {"path": "t.jpg", "overlay_text": "텍스트", "overlay_position": "bottom"}},
         ]}
         spec = build_spec(_combo(), config)
         assert spec.body[0].blocks[0].overlay_position == "bottom"
 
     def test_dict_form_with_gps(self):
         config = {**FULL_CONFIG, "post": [
-            {"thumbnail": {"src": "t.jpg", "gps": [37.497, 127.027]}},
+            {"featured_image": {"path": "t.jpg", "gps": [37.497, 127.027]}},
         ]}
         spec = build_spec(_combo(), config)
         assert spec.body[0].blocks[0].exif_gps_lat == 37.497
@@ -233,49 +233,49 @@ class TestThumbnail:
 
     def test_dict_form_with_link(self):
         config = {**FULL_CONFIG, "post": [
-            {"thumbnail": {"src": "t.jpg", "link": "tel:01012345678"}},
+            {"featured_image": {"path": "t.jpg", "link": "tel:01012345678"}},
         ]}
         spec = build_spec(_combo(), config)
         assert spec.body[0].blocks[0].link == "tel:01012345678"
 
     def test_dict_form_with_hue_shift_fixed(self):
         config = {**FULL_CONFIG, "post": [
-            {"thumbnail": {"src": "t.jpg", "hue_shift": 0.1}},
+            {"featured_image": {"path": "t.jpg", "hue_shift": 0.1}},
         ]}
         spec = build_spec(_combo(), config)
         assert spec.body[0].blocks[0].hue_shift == 0.1
 
     def test_dict_form_with_hue_shift_range(self):
         config = {**FULL_CONFIG, "post": [
-            {"thumbnail": {"src": "t.jpg", "hue_shift": "0.1 ~ 0.3"}},
+            {"featured_image": {"path": "t.jpg", "hue_shift": "0.1 ~ 0.3"}},
         ]}
         spec = build_spec(_combo(), config)
         assert 0.1 <= spec.body[0].blocks[0].hue_shift <= 0.3
 
     def test_dict_form_with_brightness_shift_fixed(self):
         config = {**FULL_CONFIG, "post": [
-            {"thumbnail": {"src": "t.jpg", "brightness_shift": 0.15}},
+            {"featured_image": {"path": "t.jpg", "brightness_shift": 0.15}},
         ]}
         spec = build_spec(_combo(), config)
         assert spec.body[0].blocks[0].brightness_shift == 0.15
 
     def test_dict_form_with_brightness_shift_range(self):
         config = {**FULL_CONFIG, "post": [
-            {"thumbnail": {"src": "t.jpg", "brightness_shift": "0.5 ~ 1.5"}},
+            {"featured_image": {"path": "t.jpg", "brightness_shift": "0.5 ~ 1.5"}},
         ]}
         spec = build_spec(_combo(), config)
         assert 0.5 <= spec.body[0].blocks[0].brightness_shift <= 1.5
 
     def test_dict_form_with_saturation_shift_range(self):
         config = {**FULL_CONFIG, "post": [
-            {"thumbnail": {"src": "t.jpg", "saturation_shift": "0.5 ~ 1.5"}},
+            {"featured_image": {"path": "t.jpg", "saturation_shift": "0.5 ~ 1.5"}},
         ]}
         spec = build_spec(_combo(), config)
         assert 0.5 <= spec.body[0].blocks[0].saturation_shift <= 1.5
 
     def test_default_hue_and_brightness(self):
         config = {**FULL_CONFIG, "post": [
-            {"thumbnail": {"src": "t.jpg"}},
+            {"featured_image": {"path": "t.jpg"}},
         ]}
         spec = build_spec(_combo(), config)
         assert spec.body[0].blocks[0].hue_shift == 0.03
@@ -295,7 +295,7 @@ class TestOtherBlocks:
         assert spec.body[0].blocks[0].text == "인용문"
 
     def test_quote_dict(self):
-        config = {**FULL_CONFIG, "post": [{"quote": {"text": "인용", "by": "작가"}}]}
+        config = {**FULL_CONFIG, "post": [{"quote": {"text": "인용", "attribution": "작가"}}]}
         spec = build_spec(_combo(), config)
         b = spec.body[0].blocks[0]
         assert b.text == "인용"

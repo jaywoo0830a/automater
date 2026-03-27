@@ -61,8 +61,8 @@
 #       by: "{keyword:region}"
 #
 # 사용: {map:photo}, {map:link} — 어디서든 토큰으로 사용
-#   - image: {src: "{map:photo}", link: "{map:link}"}
-#   - thumbnail: {src: "{map:photo}", link: "{map:link}"}
+#   - image: {path: "{map:photo}", link: "{map:link}"}
+#   - featured_image: {path: "{map:photo}", link: "{map:link}"}
 
 # ═══════════════════════════════════════════════════════════
 # post (선택) — 블록 리스트
@@ -76,25 +76,25 @@
 #
 # ── image
 #   - image: "{keyword:region}.jpg"
-#   - image: {src: photo.jpg, alt: "{keyword:region} 외관"}
-#   - image: {src: photo.jpg, link: "tel:01012345678"}
+#   - image: {path: photo.jpg, alt: "{keyword:region} 외관"}
+#   - image: {path: photo.jpg, link: "tel:01012345678"}
 #
-# ── thumbnail (대표 이미지)
-#   - thumbnail: thumb.jpg
-#   - thumbnail:
-#       src: thumb.jpg
-#       overlay: "{keyword:region} 과외"
+# ── featured_image (대표 이미지)
+#   - featured_image: thumb.jpg
+#   - featured_image:
+#       path: thumb.jpg
+#       overlay_text: "{keyword:region} 과외"
 #       link: "tel:01012345678"       # 이미지 클릭 시 URL (tel:, http:// 등)
-#       color: "#FFD700"            # 텍스트 색상 (기본 #FFFFFF)
-#       background: 0.6             # 반투명 배너 (0.0~1.0, 기본 0.0=없음)
-#       position: bottom            # top / center / bottom (기본 center)
+#       overlay_color: "#FFD700"            # 텍스트 색상 (기본 #FFFFFF)
+#       overlay_background: 0.6             # 반투명 배너 (0.0~1.0, 기본 0.0=없음)
+#       overlay_position: bottom            # top / center / bottom (기본 center)
 #       hue_shift: 0.03             # 색조 랜덤 회전 (±, 기본 0.03)
 #       hue_shift: "0.1 ~ 0.3"     # 범위 문법: 조합마다 0.1~0.3 사이 랜덤
 #       saturation_shift: "0.5 ~ 1.5"  # 채도 (기본 0.30)
 #       brightness_shift: 0.05      # 밝기 (±, 기본 0.05)
 #       brightness_shift: "0.05 ~ 0.15"  # 범위 문법
 #       gps: [37.497, 127.027]      # GPS 좌표
-#       filename: "gangnam-tutor"   # 파일명 키워드
+#       filename_keyword: "gangnam-tutor"   # 파일명 키워드
 #
 # ── 기본 jitter (모든 이미지 공통, DSL 없이 자동 적용)
 #   pixel_jitter: true     # 1~3 픽셀 RGB 미세 변경
@@ -103,7 +103,7 @@
 #
 # ── quote (인용구)
 #   - quote: "인용문"
-#   - quote: {text: "인용", by: "작가"}
+#   - quote: {text: "인용", attribution: "작가"}
 #
 # ── list
 #   - list: [항목1, 항목2]

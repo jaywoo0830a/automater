@@ -6,7 +6,6 @@ Section/Block validation and aggregation utilities.
 Public interface
 ----------------
     all_blocks(sections)          -> list[Block]
-    paragraph_block_count(sections) -> int
     validate_sections(sections)   -> None (raises ValueError)
 """
 
@@ -14,18 +13,13 @@ from __future__ import annotations
 
 from automator.options import (
     Block, Section,
-    ParagraphBlock, FeaturedImageBlock,
+    FeaturedImageBlock,
 )
 
 
 def all_blocks(sections: list[Section]) -> list[Block]:
     """섹션 목록에서 Block 을 순서대로 평탄화해 반환한다."""
     return [block for section in sections for block in section.blocks]
-
-
-def paragraph_block_count(sections: list[Section]) -> int:
-    """전체 섹션에서 ParagraphBlock 의 수를 반환한다."""
-    return sum(1 for b in all_blocks(sections) if isinstance(b, ParagraphBlock))
 
 
 def validate_sections(sections: list[Section]) -> None:

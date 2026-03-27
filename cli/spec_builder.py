@@ -207,8 +207,8 @@ def _parse_block(
     if block_type == "image":
         return _parse_image(value, values, pools, images_dir, index, exif_opt, maps)
 
-    if block_type == "thumbnail":
-        return _parse_thumbnail(value, values, pools, images_dir, index, exif_opt, maps)
+    if block_type == "featured_image":
+        return _parse_featured_image(value, values, pools, images_dir, index, exif_opt, maps)
 
     if block_type == "quote":
         return _parse_quote(value, values, pools, index, maps)
@@ -253,8 +253,7 @@ def _parse_image(
 
     if isinstance(value, dict):
         cfg = interpolate_deep(dict(value), values, pools, index, maps=maps)
-        src = cfg.get("src", cfg.get("path", ""))
-        path = _resolve_path(images_dir, src)
+        path = _resolve_path(images_dir, str(cfg.get("path", "")))
         return ImageBlock(
             path=path,
             alt=str(cfg.get("alt", "")),
@@ -265,7 +264,7 @@ def _parse_image(
     return ImageBlock(exif_optimization=exif_opt)
 
 
-def _parse_thumbnail(
+def _parse_featured_image(
     value: Any,
     values: dict[str, str],
     pools: dict[str, list[str]],
@@ -281,8 +280,7 @@ def _parse_thumbnail(
 
     if isinstance(value, dict):
         cfg = interpolate_deep(dict(value), values, pools, index, maps=maps)
-        src = cfg.get("src", cfg.get("path", ""))
-        path = _resolve_path(images_dir, src)
+        path = _resolve_path(images_dir, str(cfg.get("path", "")))
 
         gps = cfg.get("gps")
         gps_lat = gps[0] if isinstance(gps, (list, tuple)) and len(gps) >= 2 else None
@@ -290,19 +288,19 @@ def _parse_thumbnail(
 
         return FeaturedImageBlock(
             path=path,
-            overlay_text=cfg.get("overlay", cfg.get("overlay_text", "")),
-            overlay_color=str(cfg.get("color", "#FFFFFF")),
-            overlay_background=float(cfg.get("background", 0.0)),
-            overlay_position=str(cfg.get("position", "center")),
+            overlay_text=cfg.get("overlay_text", ""),
+            overlay_color=str(cfg.get("overlay_color", "#FFFFFF")),
+            overlay_background=float(cfg.get("overlay_background", 0.0)),
+            overlay_position=str(cfg.get("overlay_position", "center")),
             link=str(cfg.get("link", "")),
             exif_optimization=exif_opt,
             saturation_shift=_parse_shift(cfg.get("saturation_shift"), 0.30),
             hue_shift=_parse_shift(cfg.get("hue_shift"), 0.03),
             brightness_shift=_parse_shift(cfg.get("brightness_shift"), 0.05),
-            exif_description=str(cfg.get("exif_desc", "")),
+            exif_description=str(cfg.get("exif_description", "")),
             exif_gps_lat=gps_lat,
             exif_gps_lng=gps_lng,
-            filename_keyword=str(cfg.get("filename", "")),
+            filename_keyword=str(cfg.get("filename_keyword", "")),
         )
 
     return FeaturedImageBlock(exif_optimization=exif_opt)
@@ -323,7 +321,7 @@ def _parse_quote(
         cfg = interpolate_deep(dict(value), values, pools, index, maps=maps)
         return QuoteBlock(
             text=str(cfg.get("text", "")),
-            attribution=str(cfg.get("by", cfg.get("attribution", ""))),
+            attribution=str(cfg.get("attribution", "")),
         )
 
     return QuoteBlock()

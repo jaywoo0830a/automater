@@ -124,24 +124,13 @@ class ParagraphBlock:
     """
     텍스트 단락 하나.
 
-    AI 프롬프트는 prompt → keyword → (빈 값) 순으로 우선한다.
-    keyword 가 있으면 generate_paragraph() 가 SEO 최적화 프롬프트를 자동 생성한다.
-
     Attributes:
-        prompt:    Gemini 에 직접 전달할 프롬프트.
-                   keyword 와 함께 쓰면 keyword 우선 (SEO 자동 프롬프트).
-        keyword:   SEO 키워드. 설정 시 위치·빈도·문체를 포함한 프롬프트를 자동 생성.
-        tone:      문체. keyword 가 있을 때 프롬프트 생성에 사용.
-        min_chars: 최소 글자 수 (0 = 제한 없음).
-        max_chars: 최대 글자 수 (0 = 제한 없음).
-        newlines:  단락 뒤 줄바꿈 횟수 (기본 2).
+        prompt:   AI에 전달할 프롬프트. 완성된 프롬프트 문자열.
+                  SEO 프롬프트 조립은 CLI 계층의 책임.
+        newlines: 단락 뒤 줄바꿈 횟수 (기본 2).
     """
-    prompt:    str       = ""
-    keyword:   str       = ""
-    tone:      BlockTone = "informational"
-    min_chars: int       = 0
-    max_chars: int       = 0
-    newlines:  int       = 2
+    prompt:   str = ""
+    newlines: int = 2
 
 
 @dataclass(frozen=True)
