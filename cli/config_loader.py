@@ -31,11 +31,15 @@ def load_config(path: str) -> dict[str, Any]:
     """
     Load a campaign file and return a validated, normalized dict.
 
+    The config includes '_base_dir' — the parent directory of the YAML
+    file, used for resolving relative paths (images, maps, etc.).
+
     Raises:
         ConfigError: File not found, parse error, or validation failure.
     """
     raw = _read_file(path)
     config = _normalize(raw)
+    config["_base_dir"] = str(Path(path).resolve().parent)
     _validate(config)
     return config
 
@@ -155,6 +159,7 @@ def _validate_semantic(config: dict[str, Any]) -> None:
     """Check cross-field references resolve."""
     keywords = config.get("keywords", {})
     pools = config.get("pools", {})
+    maps = config.get("maps", {}) or {}
 
     # Collect all DSL token references from titles and post
     all_templates = list(config.get("titles", []))
@@ -183,6 +188,11 @@ def _validate_semantic(config: dict[str, Any]) -> None:
                     raise ConfigError(
                         f"pools['{slug}'] must not be empty"
                     )
+            if token_type == "map" and slug not in maps:
+                raise ConfigError(
+                    f"Token '{{map:{slug}}}' references undefined map. "
+                    f"Available: {sorted(maps.keys())}"
+                )
 
 
 def _extract_strings(obj: Any) -> list[str]:

@@ -15,7 +15,7 @@ from __future__ import annotations
 import random
 import re
 from datetime import datetime, timedelta, timezone
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from automator.contracts import PostingSpec
@@ -64,7 +64,7 @@ def build_spec(
     title_template = combo.title_template.replace("{i}", str(combo.index))
     title_opt = _build_title(combo, config, title_template)
 
-    loaded_maps = load_maps(config.get("maps"), base_dir=".")
+    loaded_maps = load_maps(config.get("maps"), base_dir=config.get("_base_dir", "."))
     body = _build_body(combo, config, loaded_maps)
     publish_opt = _build_publish(config.get("publish", {}))
 
@@ -128,7 +128,11 @@ def _build_body(
 
     values = combo.values
     pools = config.get("pools", {})
+    base_dir = config.get("_base_dir", ".")
     images_dir = config.get("images", ".")
+    # Resolve images_dir relative to the YAML file's directory
+    if images_dir and not Path(images_dir).is_absolute():
+        images_dir = str(Path(base_dir) / images_dir)
     exif_opt = config.get("exif_optimization", True)
     idx = combo.index
     resolved = resolve_maps(loaded_maps or {}, values)
@@ -381,7 +385,9 @@ def _resolve_path(images_dir: str, filename: str) -> str:
         return ""
     if not images_dir or images_dir == ".":
         return filename
-    return str(PurePosixPath(images_dir) / filename)
+    resolved = Path(images_dir) / filename
+    # Normalize to remove .. segments for cleaner paths
+    return str(resolved.resolve()) if resolved.is_absolute() else str(resolved)
 
 
 # ---------------------------------------------------------------------------
