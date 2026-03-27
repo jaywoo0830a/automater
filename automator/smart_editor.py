@@ -366,6 +366,9 @@ class SmartEditorOne(BlogEditor):
             state="visible", timeout=10_000
         )
 
+        if self._upload_delay_ms > 0:
+            time.sleep(self._upload_delay_ms / 1000)
+
     def insert_link(self, url: str) -> None:
         """
         Attach a hyperlink to the last uploaded image.

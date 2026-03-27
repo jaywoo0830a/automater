@@ -12,11 +12,10 @@ delegated to injected collaborators. JobRunner owns only the sequence.
 
 from __future__ import annotations
 
-import time
 from pathlib import Path
 
 from automator.contracts import PostingSpec
-from automator.editor import BlogEditor, FeaturedImageStep, _PostContent
+from automator.editor import BlogEditor, ImageStep, FeaturedImageStep, _PostContent
 from automator.spec_validator import SpecValidator
 from automator.content_builder import ContentBuilder
 
@@ -60,7 +59,6 @@ class JobRunner:
         editor.open()
         editor.write_title(post.title)
 
-        upload_delay_ms = editor.upload_delay_ms
         image_upload_count = 0
         rep_index: int | None = None
 
@@ -71,12 +69,10 @@ class JobRunner:
 
                 step.execute(editor)
 
-                if step.needs_upload_delay:
+                if isinstance(step, (ImageStep, FeaturedImageStep)):
                     if isinstance(step, FeaturedImageStep):
                         rep_index = image_upload_count
                     image_upload_count += 1
-                    if upload_delay_ms > 0:
-                        time.sleep(upload_delay_ms / 1000)
 
         finally:
             for path in post.tmp_files:

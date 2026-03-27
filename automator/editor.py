@@ -130,20 +130,11 @@ class BlogEditor(ABC):
 # ---------------------------------------------------------------------------
 
 class PostStep(ABC):
-    """
-    Abstract command that knows how to execute itself on a BlogEditor.
-
-    Orchestration properties:
-        needs_upload_delay — True for file uploads
-    """
+    """Abstract command that knows how to execute itself on a BlogEditor."""
 
     @abstractmethod
     def execute(self, editor: BlogEditor) -> None:
         """Execute this step on the given editor."""
-
-    @property
-    def needs_upload_delay(self) -> bool:
-        return False
 
 
 # ---------------------------------------------------------------------------
@@ -171,10 +162,6 @@ class ImageStep(PostStep):
         if self.link:
             editor.insert_link(self.link)
 
-    @property
-    def needs_upload_delay(self) -> bool:
-        return True
-
 
 @dataclass(frozen=True)
 class FeaturedImageStep(PostStep):
@@ -186,10 +173,6 @@ class FeaturedImageStep(PostStep):
         editor.upload_file(self.path)
         if self.link:
             editor.insert_link(self.link)
-
-    @property
-    def needs_upload_delay(self) -> bool:
-        return True
 
 
 @dataclass(frozen=True)

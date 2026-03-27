@@ -90,26 +90,3 @@ def test_divider_step_calls_insert_divider(mock_editor):
     step.execute(mock_editor)
     mock_editor.insert_divider.assert_called_once()
 
-
-# ---------------------------------------------------------------------------
-# Orchestration properties
-# ---------------------------------------------------------------------------
-
-def test_paragraph_step_no_upload_delay():
-    assert not ParagraphStep(text="x").needs_upload_delay
-
-
-def test_image_step_needs_upload_delay():
-    assert ImageStep(path="x").needs_upload_delay
-
-
-def test_featured_image_step_needs_upload_delay():
-    assert FeaturedImageStep(path="x").needs_upload_delay
-
-
-def test_heading_step_no_upload_delay():
-    assert not HeadingStep(level=1, text="x").needs_upload_delay
-
-
-def test_divider_step_no_upload_delay():
-    assert not DividerStep().needs_upload_delay
