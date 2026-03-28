@@ -7,6 +7,9 @@ from PySide6.QtWidgets import (
     QListWidget, QPushButton, QInputDialog,
 )
 
+from gui.excel_buttons import ExcelButtonRow
+from gui.excel_io import import_titles, export_titles, template_titles
+
 
 class TitlesTab(QWidget):
 
@@ -33,11 +36,23 @@ class TitlesTab(QWidget):
         )
         hint.setStyleSheet("color: gray; font-size: 11px;")
 
+        excel_row = ExcelButtonRow(
+            self,
+            label="제목",
+            default_filename="titles.xlsx",
+            import_fn=import_titles,
+            export_fn=lambda path, data: export_titles(path, data),
+            template_fn=template_titles,
+            get_data=self._get_titles,
+            set_data=self._set_titles,
+        )
+
         layout = QVBoxLayout()
         layout.addWidget(QLabel("제목 템플릿 (하나씩 추가):"))
         layout.addWidget(self._list)
         layout.addWidget(hint)
         layout.addLayout(btn_row)
+        layout.addWidget(excel_row)
         self.setLayout(layout)
 
     def _add(self) -> None:
@@ -63,6 +78,22 @@ class TitlesTab(QWidget):
         row = self._list.currentRow()
         if row >= 0:
             self._list.takeItem(row)
+
+    # -- excel helpers ---------------------------------------------------
+
+    def _get_titles(self) -> list[str]:
+        return self.to_dict().get("titles", [])
+
+    def _set_titles(self, data: list[str], append: bool = False) -> None:
+        if append:
+            existing = self._get_titles()
+            for t in data:
+                if t not in existing:
+                    existing.append(t)
+            data = existing
+        self.from_dict({"titles": data})
+
+    # -- serialisation ----------------------------------------------------
 
     def to_dict(self) -> dict:
         titles = [self._list.item(i).text() for i in range(self._list.count())]

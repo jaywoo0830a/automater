@@ -32,6 +32,7 @@ from gui.tabs.keywords_tab import KeywordsTab
 from gui.tabs.post_tab import PostTab
 from gui.tabs.publish_tab import PublishTab
 from gui.tabs.run_tab import RunTab
+from gui.tabs.maps_tab import MapsTab
 
 
 class MainWindow(QMainWindow):
@@ -47,6 +48,7 @@ class MainWindow(QMainWindow):
         self._titles_tab = TitlesTab()
         self._keywords_tab = KeywordsTab()
         self._post_tab = PostTab()
+        self._maps_tab = MapsTab()
         self._publish_tab = PublishTab()
         self._run_tab = RunTab()
 
@@ -54,6 +56,7 @@ class MainWindow(QMainWindow):
         self._tabs.addTab(self._accounts_tab, "계정")
         self._tabs.addTab(self._titles_tab, "제목")
         self._tabs.addTab(self._keywords_tab, "키워드 / 풀")
+        self._tabs.addTab(self._maps_tab, "맵")
         self._tabs.addTab(self._post_tab, "포스트 블록")
         self._tabs.addTab(self._publish_tab, "발행")
         self._tabs.addTab(self._run_tab, "실행 설정")
@@ -107,6 +110,7 @@ class MainWindow(QMainWindow):
         config.update(self._accounts_tab.to_dict())
         config.update(self._titles_tab.to_dict())
         config.update(self._keywords_tab.to_dict())
+        config.update(self._maps_tab.to_dict())
         config.update(self._post_tab.to_dict())
         config.update(self._publish_tab.to_dict())
         config.update(self._run_tab.to_dict())
@@ -114,6 +118,7 @@ class MainWindow(QMainWindow):
 
     def _to_yaml(self) -> str:
         config = self._build_config()
+        config.pop("_maps_data", None)
         return yaml.dump(
             config,
             allow_unicode=True,
@@ -141,12 +146,38 @@ class MainWindow(QMainWindow):
         if not path:
             return
         try:
-            text = self._to_yaml()
+            config = self._build_config()
+            # 맵 데이터가 있으면 별도 YAML 파일로 저장하고 file: 참조로 교체
+            self._save_map_files(config, Path(path).parent)
+            text = yaml.dump(
+                config,
+                allow_unicode=True,
+                default_flow_style=False,
+                sort_keys=False,
+            )
             Path(path).write_text(text, encoding="utf-8")
             self._last_saved_path = path
             self._status.showMessage(f"저장 완료: {path}", 5000)
         except Exception as e:
             QMessageBox.critical(self, "저장 오류", str(e))
+
+    @staticmethod
+    def _save_map_files(config: dict, base_dir: Path) -> None:
+        maps_data = config.pop("_maps_data", None)
+        if not maps_data or "maps" not in config:
+            return
+        maps_dir = base_dir / "maps"
+        maps_dir.mkdir(exist_ok=True)
+        for slug, data in maps_data.items():
+            if slug not in config["maps"]:
+                continue
+            filename = f"{slug}.yaml"
+            file_path = maps_dir / filename
+            file_path.write_text(
+                yaml.dump(data, allow_unicode=True, default_flow_style=False, sort_keys=False),
+                encoding="utf-8",
+            )
+            config["maps"][slug]["file"] = f"maps/{filename}"
 
     def _load_yaml(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -157,10 +188,13 @@ class MainWindow(QMainWindow):
             return
         try:
             raw = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+            # 맵 파일 읽어서 _maps_data 복원
+            self._load_map_files(raw, Path(path).parent)
             self._platform_tab.from_dict(raw)
             self._accounts_tab.from_dict(raw)
             self._titles_tab.from_dict(raw)
             self._keywords_tab.from_dict(raw)
+            self._maps_tab.from_dict(raw)
             self._post_tab.from_dict(raw)
             self._publish_tab.from_dict(raw)
             self._run_tab.from_dict(raw)
@@ -169,6 +203,26 @@ class MainWindow(QMainWindow):
             self._refresh_preview()
         except Exception as e:
             QMessageBox.critical(self, "불러오기 오류", str(e))
+
+    @staticmethod
+    def _load_map_files(raw: dict, base_dir: Path) -> None:
+        maps_config = raw.get("maps")
+        if not maps_config:
+            return
+        maps_data: dict = {}
+        for slug, entry in maps_config.items():
+            if not isinstance(entry, dict):
+                continue
+            file_path = entry.get("file", "")
+            if not file_path:
+                continue
+            p = Path(file_path)
+            if not p.is_absolute():
+                p = base_dir / p
+            if p.exists():
+                data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+                maps_data[slug] = data
+        raw["_maps_data"] = maps_data
 
     def _run_campaign(self) -> None:
         if not self._last_saved_path:

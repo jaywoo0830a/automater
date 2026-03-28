@@ -7,6 +7,9 @@ from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QLabel,
 )
 
+from gui.excel_buttons import ExcelButtonRow
+from gui.excel_io import import_accounts, export_accounts, template_accounts
+
 
 _COLUMNS = [
     ("아이디", "username"),
@@ -49,10 +52,22 @@ class AccountsTab(QWidget):
         btn_row.addWidget(btn_remove)
         btn_row.addStretch()
 
+        excel_row = ExcelButtonRow(
+            self,
+            label="계정",
+            default_filename="accounts.xlsx",
+            import_fn=import_accounts,
+            export_fn=lambda path, data: export_accounts(path, data),
+            template_fn=template_accounts,
+            get_data=self._get_accounts,
+            set_data=self._set_accounts,
+        )
+
         layout = QVBoxLayout()
         layout.addWidget(self._table)
         layout.addWidget(hint)
         layout.addLayout(btn_row)
+        layout.addWidget(excel_row)
         self.setLayout(layout)
 
         self._add_row()
@@ -67,6 +82,20 @@ class AccountsTab(QWidget):
         row = self._table.currentRow()
         if row >= 0:
             self._table.removeRow(row)
+
+    # -- excel helpers ---------------------------------------------------
+
+    def _get_accounts(self) -> list[dict]:
+        return self.to_dict().get("accounts", [])
+
+    def _set_accounts(self, data: list[dict], append: bool = False) -> None:
+        if append:
+            existing = self._get_accounts()
+            existing.extend(data)
+            data = existing
+        self.from_dict({"accounts": data})
+
+    # -- serialisation ----------------------------------------------------
 
     def to_dict(self) -> dict:
         accounts = []

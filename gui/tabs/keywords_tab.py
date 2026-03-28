@@ -9,12 +9,19 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
+from gui.excel_buttons import ExcelButtonRow
+from gui.excel_io import import_kv, export_kv, template_kv
+
 
 class _KvTable(QWidget):
     """카테고리(slug) → 값 목록 편집 테이블."""
 
-    def __init__(self, title: str, hint: str) -> None:
+    def __init__(self, title: str, hint: str, excel_label: str = "데이터",
+                 excel_filename: str = "data.xlsx",
+                 template_examples: list[list[str]] | None = None) -> None:
         super().__init__()
+        self._excel_label = excel_label
+        self._template_examples = template_examples
 
         self._table = QTableWidget(0, 2)
         self._table.setHorizontalHeaderLabels(["카테고리", "값 (콤마 구분)"])
@@ -34,11 +41,23 @@ class _KvTable(QWidget):
         hint_label = QLabel(hint)
         hint_label.setStyleSheet("color: gray; font-size: 11px;")
 
+        excel_row = ExcelButtonRow(
+            self,
+            label=excel_label,
+            default_filename=excel_filename,
+            import_fn=import_kv,
+            export_fn=lambda path, data: export_kv(path, data, sheet_name=excel_label),
+            template_fn=lambda path: template_kv(path, sheet_name=excel_label, examples=self._template_examples),
+            get_data=self.to_data,
+            set_data=self._set_data,
+        )
+
         layout = QVBoxLayout()
         layout.addWidget(QLabel(title))
         layout.addWidget(self._table)
         layout.addWidget(hint_label)
         layout.addLayout(btn_row)
+        layout.addWidget(excel_row)
         self.setLayout(layout)
 
     def _add(self) -> None:
@@ -65,6 +84,18 @@ class _KvTable(QWidget):
                 result[slug] = [v.strip() for v in vals.split(",") if v.strip()]
         return result
 
+    def _set_data(self, data: dict, append: bool = False) -> None:
+        if append:
+            existing = self.to_data()
+            for slug, vals in data.items():
+                if slug in existing:
+                    merged = list(dict.fromkeys(existing[slug] + vals))
+                    existing[slug] = merged
+                else:
+                    existing[slug] = vals
+            data = existing
+        self.from_data(data)
+
     def from_data(self, data: dict) -> None:
         self._table.setRowCount(0)
         for slug, vals in data.items():
@@ -82,11 +113,17 @@ class KeywordsTab(QWidget):
 
         self._kw_table = _KvTable(
             "키워드 (조합 생성)",
-            "조합 수 = 카테고리별 값 수의 곱 × 제목 수. 예: region 3개 × subject 2개 = 6 조합"
+            "조합 수 = 카테고리별 값 수의 곱 × 제목 수. 예: region 3개 × subject 2개 = 6 조합",
+            excel_label="키워드",
+            excel_filename="keywords.xlsx",
+            template_examples=[["region", "강남, 서초, 송파"], ["subject", "수학, 영어"]],
         )
         self._pool_table = _KvTable(
             "풀 (랜덤 선택)",
-            "매 포스트마다 풀에서 하나를 무작위로 선택합니다."
+            "매 포스트마다 풀에서 하나를 무작위로 선택합니다.",
+            excel_label="풀",
+            excel_filename="pools.xlsx",
+            template_examples=[["suffix", "추천, 리뷰, 비교"]],
         )
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
