@@ -319,9 +319,6 @@ def _parse_featured_image(
             overlay_position=str(cfg.get("overlay_position", "center")),
             link=str(cfg.get("link", "")),
             exif_optimization=exif_opt,
-            saturation_shift=_parse_shift(cfg.get("saturation_shift"), 0.30),
-            hue_shift=_parse_shift(cfg.get("hue_shift"), 0.03),
-            brightness_shift=_parse_shift(cfg.get("brightness_shift"), 0.05),
             exif_description=str(cfg.get("exif_description", "")),
             exif_gps_lat=gps_lat,
             exif_gps_lng=gps_lng,
@@ -371,33 +368,6 @@ def _parse_list(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-_SHIFT_RANGE_RE = re.compile(
-    r"([\d.]+)\s*~\s*([\d.]+)",
-)
-
-
-def _parse_shift(value: Any, default: float) -> float:
-    """
-    Parse a shift value — fixed float or range string.
-
-        0.03        → 0.03
-        "0.1 ~ 0.3" → random.uniform(0.1, 0.3)
-    """
-    if value is None:
-        return default
-    if isinstance(value, (int, float)):
-        return float(value)
-    s = str(value).strip()
-    m = _SHIFT_RANGE_RE.match(s)
-    if m:
-        lo, hi = float(m.group(1)), float(m.group(2))
-        return random.uniform(lo, hi)
-    try:
-        return float(s)
-    except ValueError:
-        return default
-
 
 def _resolve_path(images_dir: str, filename: str) -> str:
     if not filename:

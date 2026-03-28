@@ -274,28 +274,10 @@ class _ImageDialog(QDialog):
             self._overlay_pos = QComboBox()
             self._overlay_pos.addItems(["center", "top", "bottom"])
 
-            self._hue = QDoubleSpinBox()
-            self._hue.setRange(0.0, 1.0)
-            self._hue.setSingleStep(0.01)
-            self._hue.setValue(0.03)
-
-            self._brightness = QDoubleSpinBox()
-            self._brightness.setRange(0.0, 1.0)
-            self._brightness.setSingleStep(0.01)
-            self._brightness.setValue(0.05)
-
-            self._saturation = QDoubleSpinBox()
-            self._saturation.setRange(0.0, 2.0)
-            self._saturation.setSingleStep(0.05)
-            self._saturation.setValue(0.30)
-
             form.addRow("오버레이 텍스트:", self._overlay_text)
             form.addRow("텍스트 색상:", self._overlay_color)
             form.addRow("배경 불투명도:", self._overlay_bg)
             form.addRow("텍스트 위치:", self._overlay_pos)
-            form.addRow("색조 변화:", self._hue)
-            form.addRow("밝기 변화:", self._brightness)
-            form.addRow("채도 변화:", self._saturation)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -333,16 +315,6 @@ class _ImageDialog(QDialog):
             op = self._overlay_pos.currentText()
             if op != "center":
                 cfg["overlay_position"] = op
-            hue = self._hue.value()
-            if hue != 0.03:
-                cfg["hue_shift"] = hue
-            br = self._brightness.value()
-            if br != 0.05:
-                cfg["brightness_shift"] = br
-            sat = self._saturation.value()
-            if sat != 0.30:
-                cfg["saturation_shift"] = sat
-
         if len(cfg) == 1 and "path" in cfg:
             return {self._block_type: cfg["path"]}
         return {self._block_type: cfg}

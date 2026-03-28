@@ -39,22 +39,14 @@ def _to_jpeg(img: Image.Image, quality: int = 92) -> bytes:
 
 def process_image(src: bytes, block: ImageBlock | FeaturedImageBlock) -> bytes:
     """
-    이미지 변환 파이프라인. block 타입에 따라 적용할 변환이 결정된다.
+    이미지 변환 파이프라인.
 
-    공통:      size_jitter → pixel_jitter → saturation → regional_effects → exif
-    Featured:  + hue → brightness → overlay
+    공통:      size_jitter → pixel_jitter → effects → exif
+    Featured:  + overlay (effects 후)
     """
     img = Image.open(io.BytesIO(src)).convert("RGB")
     img = _apply_size_jitter(img, block.size_jitter_px)
     img = _apply_pixel_jitter(img, block.pixel_jitter)
-
-    if isinstance(block, FeaturedImageBlock):
-        img = _apply_saturation(img, block.saturation_shift)
-        img = _apply_hue_shift(img, block.hue_shift)
-        img = _apply_brightness(img, block.brightness_shift)
-
-    else:
-        img = _apply_saturation(img, block.saturation_jitter)
 
     # 영역 지정 효과 (overlay 전에 적용)
     for fx in block.effects:
@@ -110,39 +102,6 @@ def _apply_size_jitter(img: Image.Image, jitter_px: int) -> Image.Image:
     if (new_w, new_h) == (w, h):
         return img
     return img.resize((new_w, new_h), Image.LANCZOS)
-
-
-def _apply_saturation(img: Image.Image, jitter: float) -> Image.Image:
-    if jitter <= 0.0:
-        return img
-    from PIL import ImageEnhance
-    factor = max(0.0, 1.0 + random.uniform(-jitter, jitter))
-    return ImageEnhance.Color(img).enhance(factor)
-
-
-def _apply_hue_shift(img: Image.Image, shift: float) -> Image.Image:
-    """
-    Rotate hue by a random amount within ±shift (0.0~1.0 = 0~360°).
-
-    Converts RGB → HSV, shifts hue channel, converts back.
-    Pure Pillow — no numpy dependency.
-    """
-    if shift <= 0.0:
-        return img
-    offset = random.uniform(-shift, shift)
-    hsv = img.convert("HSV")
-    h, s, v = hsv.split()
-    h = h.point(lambda p: (p + int(offset * 255)) % 256)
-    return Image.merge("HSV", (h, s, v)).convert("RGB")
-
-
-def _apply_brightness(img: Image.Image, shift: float) -> Image.Image:
-    """Randomly adjust brightness within ±shift factor."""
-    if shift <= 0.0:
-        return img
-    from PIL import ImageEnhance
-    factor = max(0.1, 1.0 + random.uniform(-shift, shift))
-    return ImageEnhance.Brightness(img).enhance(factor)
 
 
 def _apply_text_overlay(

@@ -12,7 +12,7 @@ import pytest
 from PIL import Image
 
 from automator.image_processor import process_image
-from automator.options import ImageBlock, FeaturedImageBlock
+from automator.options import ImageBlock, FeaturedImageBlock, RegionalEffect
 
 
 # ---------------------------------------------------------------------------
@@ -44,8 +44,8 @@ class TestImageBlockDefaults:
     def test_size_jitter_default(self):
         assert ImageBlock(path="x.jpg").size_jitter_px == 2
 
-    def test_saturation_jitter_default(self):
-        assert ImageBlock(path="x.jpg").saturation_jitter == 0.03
+    def test_effects_default(self):
+        assert ImageBlock(path="x.jpg").effects == []
 
     def test_exif_description_default(self):
         assert ImageBlock(path="x.jpg").exif_description == ""
@@ -67,14 +67,8 @@ class TestFeaturedImageBlockDefaults:
     def test_overlay_color_default(self):
         assert FeaturedImageBlock().overlay_color == "#FFFFFF"
 
-    def test_saturation_shift_default(self):
-        assert FeaturedImageBlock().saturation_shift == 0.30
-
-    def test_hue_shift_default(self):
-        assert FeaturedImageBlock().hue_shift == 0.03
-
-    def test_brightness_shift_default(self):
-        assert FeaturedImageBlock().brightness_shift == 0.05
+    def test_effects_default(self):
+        assert FeaturedImageBlock().effects == []
 
     def test_overlay_text_default(self):
         assert FeaturedImageBlock().overlay_text == ""
@@ -148,6 +142,19 @@ class TestProcessImage:
         result = process_image(src, block)
         assert result[:2] == b"\xff\xd8"
 
+    def test_effects_applied(self):
+        block = ImageBlock(
+            path="x.jpg", pixel_jitter=False, size_jitter_px=0,
+            exif_optimization=False,
+            effects=[RegionalEffect(region="border:20", effect="brightness:0.3")],
+        )
+        img = _jpeg(100, 100, color=(200, 200, 200))
+        result = process_image(img, block)
+        out = Image.open(io.BytesIO(result))
+        corner = out.getpixel((5, 5))
+        center = out.getpixel((50, 50))
+        assert corner[0] < center[0]
+
 
 # ---------------------------------------------------------------------------
 # process_image with FeaturedImageBlock
@@ -161,14 +168,11 @@ class TestProcessFeatured:
         assert result[:2] == b"\xff\xd8"
 
     def test_overlay_text_applied(self):
-        """overlay_text 가 있으면 처리 후 파일 크기가 달라질 수 있다."""
         base    = FeaturedImageBlock(pixel_jitter=False, size_jitter_px=0)
         overlay = FeaturedImageBlock(pixel_jitter=False, size_jitter_px=0,
                                      overlay_text="강남 수학")
         size_base    = len(process_image(_jpeg(200, 200), base))
         size_overlay = len(process_image(_jpeg(200, 200), overlay))
-        # 텍스트 오버레이가 적용된 이미지와 아닌 이미지는 크기가 다를 수 있다
-        # (같을 수도 있으므로 단순히 유효한 JPEG 인지만 확인)
         assert size_overlay > 0
 
     def test_list_overlay_text(self):
@@ -177,7 +181,6 @@ class TestProcessFeatured:
         assert result[:2] == b"\xff\xd8"
 
     def test_background_banner_changes_output(self):
-        """overlay_background > 0 draws a semi-transparent banner."""
         no_bg = FeaturedImageBlock(
             pixel_jitter=False, size_jitter_px=0,
             overlay_text="테스트", overlay_background=0.0,
@@ -207,41 +210,34 @@ class TestProcessFeatured:
         result = process_image(_jpeg(200, 200), block)
         assert result[:2] == b"\xff\xd8"
 
-    def test_hue_shift_changes_colors(self):
-        """hue_shift > 0 produces different pixel colors."""
-        no_hue = FeaturedImageBlock(
-            pixel_jitter=False, size_jitter_px=0, saturation_shift=0.0,
-            hue_shift=0.0, brightness_shift=0.0,
-        )
-        with_hue = FeaturedImageBlock(
-            pixel_jitter=False, size_jitter_px=0, saturation_shift=0.0,
-            hue_shift=0.5, brightness_shift=0.0,
+    def test_effects_with_hue_changes_colors(self):
+        """effects hue > 0 produces different pixel colors."""
+        no_fx = FeaturedImageBlock(pixel_jitter=False, size_jitter_px=0)
+        with_fx = FeaturedImageBlock(
+            pixel_jitter=False, size_jitter_px=0,
+            effects=[RegionalEffect(region="all", effect="hue:0.5")],
         )
         img = _jpeg(100, 100, color=(200, 100, 50))
-        result_no  = process_image(img, no_hue)
-        result_yes = process_image(img, with_hue)
+        result_no  = process_image(img, no_fx)
+        result_yes = process_image(img, with_fx)
         assert result_no != result_yes
 
-    def test_hue_shift_zero_preserves(self):
+    def test_no_effects_preserves(self):
         block = FeaturedImageBlock(
-            pixel_jitter=False, size_jitter_px=0, saturation_shift=0.0,
-            hue_shift=0.0, brightness_shift=0.0, exif_optimization=False,
+            pixel_jitter=False, size_jitter_px=0, exif_optimization=False,
         )
         img = _jpeg(100, 100)
         r1 = process_image(img, block)
         r2 = process_image(img, block)
         assert r1 == r2
 
-    def test_brightness_shift_changes_output(self):
-        no_br = FeaturedImageBlock(
-            pixel_jitter=False, size_jitter_px=0, saturation_shift=0.0,
-            hue_shift=0.0, brightness_shift=0.0,
-        )
-        with_br = FeaturedImageBlock(
-            pixel_jitter=False, size_jitter_px=0, saturation_shift=0.0,
-            hue_shift=0.0, brightness_shift=0.5,
+    def test_effects_brightness_changes_output(self):
+        no_fx = FeaturedImageBlock(pixel_jitter=False, size_jitter_px=0)
+        with_fx = FeaturedImageBlock(
+            pixel_jitter=False, size_jitter_px=0,
+            effects=[RegionalEffect(region="all", effect="brightness:0.5")],
         )
         img = _jpeg(100, 100, color=(150, 150, 150))
-        result_no  = process_image(img, no_br)
-        result_yes = process_image(img, with_br)
+        result_no  = process_image(img, no_fx)
+        result_yes = process_image(img, with_fx)
         assert result_no != result_yes

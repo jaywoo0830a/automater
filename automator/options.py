@@ -182,7 +182,6 @@ class ImageBlock:
         exif_optimization:  True면 현실적인 카메라 EXIF 자동 삽입.
         pixel_jitter:       1-3 픽셀 RGB 미세 변경.
         size_jitter_px:     ±N px 리사이즈.
-        saturation_jitter:  채도 변화 (±, 기본 ±3%).
         exif_description:   Exif ImageDescription 값.
         exif_gps_lat:       Exif GPS 위도.
         exif_gps_lng:       Exif GPS 경도.
@@ -195,7 +194,6 @@ class ImageBlock:
     exif_optimization:  bool       = True
     pixel_jitter:       bool       = True
     size_jitter_px:     int        = 2
-    saturation_jitter:  float      = 0.03
     exif_description:   str        = ""
     exif_gps_lat:       float | None = None
     exif_gps_lng:       float | None = None
@@ -221,13 +219,11 @@ class FeaturedImageBlock:
         exif_optimization:       True면 현실적인 카메라 EXIF 자동 삽입.
         pixel_jitter:            1-3 픽셀 RGB 미세 변경.
         size_jitter_px:          ±N px 리사이즈.
-        saturation_shift:        채도 변화 (±, 기본 ±30%).
-        hue_shift:               색조 회전 (±, 기본 ±3%). 같은 이미지가 다른 톤으로 보임.
-        brightness_shift:        밝기 변화 (±, 기본 ±5%).
         exif_description:        Exif ImageDescription 값 (ASCII만).
         exif_gps_lat:            Exif GPS 위도.
         exif_gps_lng:            Exif GPS 경도.
         filename_keyword:        업로드 파일명에 포함할 키워드.
+        effects:                 영역 지정 효과 목록. 순서대로 적용.
     """
     path:                   str        = ""
     overlay_text:           str | list = ""
@@ -238,9 +234,6 @@ class FeaturedImageBlock:
     exif_optimization:      bool       = True
     pixel_jitter:           bool       = True
     size_jitter_px:         int        = 2
-    saturation_shift:       float      = 0.30
-    hue_shift:              float      = 0.03
-    brightness_shift:       float      = 0.05
     exif_description:       str        = ""
     exif_gps_lat:           float | None = None
     exif_gps_lng:           float | None = None

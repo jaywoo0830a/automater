@@ -16,7 +16,7 @@ from automator.options import (
 )
 
 from cli.combo_builder import Combo
-from cli.spec_builder import build_spec, _parse_shift
+from cli.spec_builder import build_spec
 
 
 # ---------------------------------------------------------------------------
@@ -238,48 +238,27 @@ class TestThumbnail:
         spec = build_spec(_combo(), config)
         assert spec.body[0].blocks[0].link == "tel:01012345678"
 
-    def test_dict_form_with_hue_shift_fixed(self):
+    def test_dict_form_with_effects(self):
         config = {**FULL_CONFIG, "post": [
-            {"featured_image": {"path": "t.jpg", "hue_shift": 0.1}},
+            {"featured_image": {"path": "t.jpg", "effects": [
+                {"region": "border:20", "effect": "brightness:0.5"},
+                {"effect": "grayscale"},
+            ]}},
         ]}
         spec = build_spec(_combo(), config)
-        assert spec.body[0].blocks[0].hue_shift == 0.1
+        block = spec.body[0].blocks[0]
+        assert len(block.effects) == 2
+        assert block.effects[0].region == "border:20"
+        assert block.effects[0].effect == "brightness:0.5"
+        assert block.effects[1].region == "all"
+        assert block.effects[1].effect == "grayscale"
 
-    def test_dict_form_with_hue_shift_range(self):
-        config = {**FULL_CONFIG, "post": [
-            {"featured_image": {"path": "t.jpg", "hue_shift": "0.1 ~ 0.3"}},
-        ]}
-        spec = build_spec(_combo(), config)
-        assert 0.1 <= spec.body[0].blocks[0].hue_shift <= 0.3
-
-    def test_dict_form_with_brightness_shift_fixed(self):
-        config = {**FULL_CONFIG, "post": [
-            {"featured_image": {"path": "t.jpg", "brightness_shift": 0.15}},
-        ]}
-        spec = build_spec(_combo(), config)
-        assert spec.body[0].blocks[0].brightness_shift == 0.15
-
-    def test_dict_form_with_brightness_shift_range(self):
-        config = {**FULL_CONFIG, "post": [
-            {"featured_image": {"path": "t.jpg", "brightness_shift": "0.5 ~ 1.5"}},
-        ]}
-        spec = build_spec(_combo(), config)
-        assert 0.5 <= spec.body[0].blocks[0].brightness_shift <= 1.5
-
-    def test_dict_form_with_saturation_shift_range(self):
-        config = {**FULL_CONFIG, "post": [
-            {"featured_image": {"path": "t.jpg", "saturation_shift": "0.5 ~ 1.5"}},
-        ]}
-        spec = build_spec(_combo(), config)
-        assert 0.5 <= spec.body[0].blocks[0].saturation_shift <= 1.5
-
-    def test_default_hue_and_brightness(self):
+    def test_default_effects_empty(self):
         config = {**FULL_CONFIG, "post": [
             {"featured_image": {"path": "t.jpg"}},
         ]}
         spec = build_spec(_combo(), config)
-        assert spec.body[0].blocks[0].hue_shift == 0.03
-        assert spec.body[0].blocks[0].brightness_shift == 0.05
+        assert spec.body[0].blocks[0].effects == []
 
 
 # ---------------------------------------------------------------------------
@@ -421,35 +400,3 @@ class TestDefaultBody:
         assert all(isinstance(b, ParagraphBlock) for b in spec.body[0].blocks)
 
 
-# ---------------------------------------------------------------------------
-# _parse_shift — fixed float or "lo ~ hi" range
-# ---------------------------------------------------------------------------
-
-class TestParseShift:
-
-    def test_none_returns_default(self):
-        assert _parse_shift(None, 0.03) == 0.03
-
-    def test_int_returns_float(self):
-        assert _parse_shift(1, 0.0) == 1.0
-
-    def test_float_passthrough(self):
-        assert _parse_shift(0.15, 0.0) == 0.15
-
-    def test_string_float(self):
-        assert _parse_shift("0.25", 0.0) == 0.25
-
-    def test_range_string(self):
-        result = _parse_shift("0.1 ~ 0.3", 0.0)
-        assert 0.1 <= result <= 0.3
-
-    def test_range_no_spaces(self):
-        result = _parse_shift("0.5~1.5", 0.0)
-        assert 0.5 <= result <= 1.5
-
-    def test_range_integer(self):
-        result = _parse_shift("1 ~ 3", 0.0)
-        assert 1.0 <= result <= 3.0
-
-    def test_invalid_returns_default(self):
-        assert _parse_shift("abc", 0.99) == 0.99
