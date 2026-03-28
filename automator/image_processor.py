@@ -19,6 +19,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from automator.options import ImageBlock, FeaturedImageBlock
 from automator.exif_optimizer import optimize_exif
+from automator.region_effect import apply_regional_effect
 
 
 # ---------------------------------------------------------------------------
@@ -40,7 +41,7 @@ def process_image(src: bytes, block: ImageBlock | FeaturedImageBlock) -> bytes:
     """
     이미지 변환 파이프라인. block 타입에 따라 적용할 변환이 결정된다.
 
-    공통:      size_jitter → pixel_jitter → saturation → exif
+    공통:      size_jitter → pixel_jitter → saturation → regional_effects → exif
     Featured:  + hue → brightness → overlay
     """
     img = Image.open(io.BytesIO(src)).convert("RGB")
@@ -51,6 +52,16 @@ def process_image(src: bytes, block: ImageBlock | FeaturedImageBlock) -> bytes:
         img = _apply_saturation(img, block.saturation_shift)
         img = _apply_hue_shift(img, block.hue_shift)
         img = _apply_brightness(img, block.brightness_shift)
+
+    else:
+        img = _apply_saturation(img, block.saturation_jitter)
+
+    # 영역 지정 효과 (overlay 전에 적용)
+    for fx in block.effects:
+        if fx.effect:
+            img = apply_regional_effect(img, fx.region, fx.effect)
+
+    if isinstance(block, FeaturedImageBlock):
         img = _apply_text_overlay(
             img,
             text=block.overlay_text,
@@ -58,8 +69,6 @@ def process_image(src: bytes, block: ImageBlock | FeaturedImageBlock) -> bytes:
             background=block.overlay_background,
             position=block.overlay_position,
         )
-    else:
-        img = _apply_saturation(img, block.saturation_jitter)
 
     jpeg_bytes = _to_jpeg(img)
     return optimize_exif(

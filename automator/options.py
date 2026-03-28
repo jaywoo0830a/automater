@@ -143,6 +143,34 @@ class ParagraphBlock:
 
 
 @dataclass(frozen=True)
+class RegionalEffect:
+    """
+    영역 지정 이미지 효과.
+
+    Attributes:
+        region: 적용 영역.
+            "all"           — 전체
+            "border:20"     — 테두리 20px
+            "border:10%"    — 테두리 (짧은 변 기준 10%)
+            "center:60%"    — 중앙 60%
+            "top:30%"       — 상단 30%
+            "bottom:30%"    — 하단 30%
+            "left:30%"      — 좌측 30%
+            "right:30%"     — 우측 30%
+            "rect:x,y,w,h"  — 절대 좌표 (px)
+        effect: 적용 효과.
+            "brightness:0.5" — 밝기 (1.0=원본)
+            "saturation:1.5" — 채도 (1.0=원본)
+            "hue:0.1"        — 색조 회전 (0.0~1.0)
+            "blur:5"         — 가우시안 블러 (px)
+            "tint:R,G,B[,A]" — 컬러 틴트
+            "grayscale"      — 흑백
+    """
+    region: str = "all"
+    effect: str = ""
+
+
+@dataclass(frozen=True)
 class ImageBlock:
     """
     본문 이미지 하나. 대표 이미지로 지정되지 않는다.
@@ -159,6 +187,7 @@ class ImageBlock:
         exif_gps_lat:       Exif GPS 위도.
         exif_gps_lng:       Exif GPS 경도.
         filename_keyword:   업로드 파일명에 포함할 키워드.
+        effects:            영역 지정 효과 목록. 순서대로 적용.
     """
     path:               str        = ""
     alt:                str        = ""
@@ -171,6 +200,7 @@ class ImageBlock:
     exif_gps_lat:       float | None = None
     exif_gps_lng:       float | None = None
     filename_keyword:   str        = ""
+    effects:            list[RegionalEffect] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -215,6 +245,7 @@ class FeaturedImageBlock:
     exif_gps_lat:           float | None = None
     exif_gps_lng:           float | None = None
     filename_keyword:       str        = ""
+    effects:                list[RegionalEffect] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

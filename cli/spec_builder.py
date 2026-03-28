@@ -29,6 +29,7 @@ from automator.options import (
     ParagraphBlock,
     PublishOption,
     QuoteBlock,
+    RegionalEffect,
     RunSetting,
     Section,
     TitleOption,
@@ -240,6 +241,26 @@ def _parse_paragraph(
     return ParagraphBlock(prompt=prompt)
 
 
+def _parse_effects(raw: Any) -> list[RegionalEffect]:
+    """Parse effects list from DSL config.
+
+        effects:
+          - region: "border:10 ~ 30"
+            effect: "brightness:0.3 ~ 0.7"
+          - effect: "grayscale"          # region 생략 → "all"
+    """
+    if not isinstance(raw, list):
+        return []
+    effects: list[RegionalEffect] = []
+    for entry in raw:
+        if isinstance(entry, dict):
+            effects.append(RegionalEffect(
+                region=str(entry.get("region", "all")),
+                effect=str(entry.get("effect", "")),
+            ))
+    return effects
+
+
 def _parse_image(
     value: Any,
     values: dict[str, str],
@@ -262,6 +283,7 @@ def _parse_image(
             alt=str(cfg.get("alt", "")),
             link=str(cfg.get("link", "")),
             exif_optimization=exif_opt,
+            effects=_parse_effects(cfg.get("effects")),
         )
 
     return ImageBlock(exif_optimization=exif_opt)
@@ -304,6 +326,7 @@ def _parse_featured_image(
             exif_gps_lat=gps_lat,
             exif_gps_lng=gps_lng,
             filename_keyword=str(cfg.get("filename_keyword", "")),
+            effects=_parse_effects(cfg.get("effects")),
         )
 
     return FeaturedImageBlock(exif_optimization=exif_opt)
