@@ -17,13 +17,13 @@ from openpyxl.utils import get_column_letter
 # ── column definitions ─────────────────────────────────────────────
 
 ACCOUNT_COLUMNS = [
-    ("username", "Username"),
-    ("password", "Password"),
-    ("blog_id", "Blog ID"),
-    ("weight", "Weight"),
-    ("min_posts", "Min"),
-    ("max_posts", "Max"),
-    ("proxy", "Proxy"),
+    ("username", "아이디"),
+    ("password", "비밀번호"),
+    ("blog_id", "블로그 ID"),
+    ("weight", "가중치"),
+    ("min_posts", "최소"),
+    ("max_posts", "최대"),
+    ("proxy", "프록시"),
 ]
 ACCOUNT_DEFAULTS = ["", "", "", "1", "0", "0", ""]
 

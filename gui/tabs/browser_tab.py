@@ -71,7 +71,7 @@ class BrowserTab(QWidget):
         self._geo_lng.setPlaceholderText("127.027")
 
         advanced = CollapsibleSection("고급 설정")
-        advanced.add_row("뷰포트 너��:", self._viewport_w)
+        advanced.add_row("뷰포트 너비:", self._viewport_w)
         advanced.add_row("뷰포트 높이:", self._viewport_h)
         advanced.add_row("User-Agent:", self._user_agent)
         advanced.add_row("색상 모드:", self._color_scheme)

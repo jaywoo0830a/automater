@@ -42,7 +42,7 @@ class PlatformTab(QWidget):
         ws_widget.setLayout(ws_row)
 
         # Session store
-        self._store_file = QRadioButton("File (default)")
+        self._store_file = QRadioButton("파일 (기본)")
         self._store_redis = QRadioButton("Redis")
         self._store_file.setChecked(True)
 
@@ -61,12 +61,12 @@ class PlatformTab(QWidget):
         store_row.addWidget(self._store_redis)
         store_row.addWidget(self._redis_url)
 
-        store_group = QGroupBox("Session Store")
+        store_group = QGroupBox("세션 저장소")
         store_group.setLayout(store_row)
 
         form = QFormLayout()
-        form.addRow("Platform:", self._platform)
-        form.addRow("Workspace:", ws_widget)
+        form.addRow("플랫폼:", self._platform)
+        form.addRow("작업 디렉토리:", ws_widget)
 
         layout = QVBoxLayout()
         layout.addLayout(form)
@@ -76,7 +76,7 @@ class PlatformTab(QWidget):
 
     def _browse_workspace(self) -> None:
         path = QFileDialog.getExistingDirectory(
-            self, "Select workspace directory", self._workspace.text(),
+            self, "작업 디렉토리 선택", self._workspace.text(),
         )
         if path:
             self._workspace.setText(path)

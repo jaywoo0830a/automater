@@ -15,7 +15,7 @@ from gui.main_window import MainWindow
 
 def main() -> int:
     app = QApplication(sys.argv)
-    app.setApplicationName("Campaign Builder")
+    app.setApplicationName("캠페인 빌더")
     window = MainWindow()
     window.show()
     return app.exec()

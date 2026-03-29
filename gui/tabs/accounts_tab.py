@@ -13,16 +13,16 @@ from gui.excel_io import import_accounts, export_accounts, template_accounts
 
 
 _COLUMNS = [
-    ("Username", "username"),
-    ("Password", "password"),
-    ("Blog ID", "blog_id"),
+    ("아이디", "username"),
+    ("비밀번호", "password"),
+    ("블로그 ID", "blog_id"),
 ]
 
 _ADV_COLUMNS = [
-    ("Weight", "weight"),
-    ("Min", "min_posts"),
-    ("Max", "max_posts"),
-    ("Proxy", "proxy"),
+    ("가중치", "weight"),
+    ("최소", "min_posts"),
+    ("최대", "max_posts"),
+    ("프록시", "proxy"),
 ]
 
 _ALL_COLUMNS = _COLUMNS + _ADV_COLUMNS
@@ -41,16 +41,16 @@ class AccountsTab(QWidget):
         self._table.setHorizontalHeaderLabels(_HEADERS)
         self._table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
 
-        btn_add = QPushButton("+ Add")
+        btn_add = QPushButton("+ 계정 추가")
         btn_add.clicked.connect(self._add_row)
-        btn_remove = QPushButton("- Remove")
+        btn_remove = QPushButton("- 선택 삭제")
         btn_remove.clicked.connect(self._remove_row)
 
         hint = QLabel(
-            "Weight: ratio (1:3 = 25%:75%)  |  "
-            "Min: guaranteed  |  "
-            "Max: cap (0=unlimited)  |  "
-            "Session: auto-generated"
+            "가중치: 분배 비율 (1:3 = 25%:75%)  |  "
+            "최소: 보장 수량  |  "
+            "최대: 상한 (0=무제한)  |  "
+            "세션: 자동 생성"
         )
         hint.setStyleSheet("color: gray; font-size: 11px;")
 
@@ -61,7 +61,7 @@ class AccountsTab(QWidget):
 
         excel_row = ExcelButtonRow(
             self,
-            label="Accounts",
+            label="계정",
             default_filename="accounts.xlsx",
             import_fn=import_accounts,
             export_fn=lambda path, data: export_accounts(path, data),

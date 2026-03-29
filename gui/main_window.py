@@ -53,7 +53,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Campaign Builder")
+        self.setWindowTitle("캠페인 빌더")
         self.setMinimumSize(1000, 750)
 
         # ── Builder tabs ──
@@ -70,48 +70,48 @@ class MainWindow(QMainWindow):
 
         self._accounts_tab.set_platform_tab(self._platform_tab)
 
-        self._tabs.addTab(self._platform_tab, "Platform")
-        self._tabs.addTab(self._accounts_tab, "Accounts")
-        self._tabs.addTab(self._browser_tab, "Browser")
-        self._tabs.addTab(self._titles_tab, "Titles")
-        self._tabs.addTab(self._keywords_tab, "Keywords")
-        self._tabs.addTab(self._maps_tab, "Maps")
-        self._tabs.addTab(self._post_tab, "Post")
-        self._tabs.addTab(self._publish_tab, "Publish")
-        self._tabs.addTab(self._run_tab, "Run")
+        self._tabs.addTab(self._platform_tab, "플랫폼")
+        self._tabs.addTab(self._accounts_tab, "계정")
+        self._tabs.addTab(self._browser_tab, "브라우저")
+        self._tabs.addTab(self._titles_tab, "제목")
+        self._tabs.addTab(self._keywords_tab, "키워드 / 풀")
+        self._tabs.addTab(self._maps_tab, "맵")
+        self._tabs.addTab(self._post_tab, "포스트 블록")
+        self._tabs.addTab(self._publish_tab, "발행")
+        self._tabs.addTab(self._run_tab, "실행 설정")
 
         # ── Bottom panel ──
         self._bottom_tabs = QTabWidget()
 
         self._preview = QTextEdit()
         self._preview.setReadOnly(True)
-        self._preview.setPlaceholderText("YAML preview...")
+        self._preview.setPlaceholderText("YAML 미리보기...")
 
         self._log = QTextEdit()
         self._log.setReadOnly(True)
-        self._log.setPlaceholderText("Execution log...")
+        self._log.setPlaceholderText("실행 로그...")
 
-        self._bottom_tabs.addTab(self._preview, "YAML")
-        self._bottom_tabs.addTab(self._log, "Log")
+        self._bottom_tabs.addTab(self._preview, "YAML 미리보기")
+        self._bottom_tabs.addTab(self._log, "실행 로그")
 
         # ── File buttons ──
-        btn_load = QPushButton("Load")
+        btn_load = QPushButton("불러오기")
         btn_load.clicked.connect(self._load_yaml)
-        btn_save = QPushButton("Save")
+        btn_save = QPushButton("저장")
         btn_save.clicked.connect(self._save_yaml)
-        btn_refresh = QPushButton("Refresh YAML")
+        btn_refresh = QPushButton("YAML 갱신")
         btn_refresh.clicked.connect(self._refresh_preview)
 
         # ── Workflow buttons ──
-        self._btn_validate = QPushButton("Validate")
+        self._btn_validate = QPushButton("검증")
         self._btn_validate.clicked.connect(self._run_validate)
-        self._btn_prepare = QPushButton("Prepare")
+        self._btn_prepare = QPushButton("세션 준비")
         self._btn_prepare.clicked.connect(self._run_prepare)
-        self._btn_preview_plan = QPushButton("Preview")
+        self._btn_preview_plan = QPushButton("미리보기")
         self._btn_preview_plan.clicked.connect(self._run_preview)
         self._btn_dryrun = QPushButton("Dry-run")
         self._btn_dryrun.clicked.connect(self._run_dryrun)
-        self._btn_execute = QPushButton("Execute")
+        self._btn_execute = QPushButton("실행")
         self._btn_execute.setStyleSheet("QPushButton { font-weight: bold; }")
         self._btn_execute.clicked.connect(self._run_execute)
 
@@ -189,14 +189,14 @@ class MainWindow(QMainWindow):
         try:
             self._preview.setPlainText(self._to_yaml())
             self._bottom_tabs.setCurrentIndex(0)
-            self._status.showMessage("YAML refreshed", 3000)
+            self._status.showMessage("YAML 갱신됨", 3000)
         except Exception as e:
-            QMessageBox.warning(self, "Preview error", str(e))
+            QMessageBox.warning(self, "미리보기 오류", str(e))
 
     def _save_yaml(self) -> None:
         default = self._last_saved_path or str(Path(self._platform_tab.workspace) / "campaign.yaml")
         path, _ = QFileDialog.getSaveFileName(
-            self, "Save YAML", default,
+            self, "YAML 저장", default,
             "YAML (*.yaml *.yml)",
         )
         if not path:
@@ -212,13 +212,13 @@ class MainWindow(QMainWindow):
             )
             Path(path).write_text(text, encoding="utf-8")
             self._last_saved_path = path
-            self._status.showMessage(f"Saved: {path}", 5000)
+            self._status.showMessage(f"저장 완료: {path}", 5000)
         except Exception as e:
-            QMessageBox.critical(self, "Save error", str(e))
+            QMessageBox.critical(self, "저장 오류", str(e))
 
     def _load_yaml(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Load YAML", self._last_saved_path or self._platform_tab.workspace,
+            self, "YAML 불러오기", self._last_saved_path or self._platform_tab.workspace,
             "YAML (*.yaml *.yml)",
         )
         if not path:
@@ -236,10 +236,10 @@ class MainWindow(QMainWindow):
             self._publish_tab.from_dict(raw)
             self._run_tab.from_dict(raw)
             self._last_saved_path = path
-            self._status.showMessage(f"Loaded: {path}", 5000)
+            self._status.showMessage(f"불러옴: {path}", 5000)
             self._refresh_preview()
         except Exception as e:
-            QMessageBox.critical(self, "Load error", str(e))
+            QMessageBox.critical(self, "불러오기 오류", str(e))
 
     @staticmethod
     def _save_map_files(config: dict, base_dir: Path) -> None:
@@ -285,7 +285,7 @@ class MainWindow(QMainWindow):
 
     def _ensure_saved(self) -> bool:
         if not self._last_saved_path:
-            QMessageBox.information(self, "Save required", "Save YAML first.")
+            QMessageBox.information(self, "저장 필요", "먼저 YAML 파일을 저장하세요.")
             self._save_yaml()
         return bool(self._last_saved_path)
 
@@ -343,23 +343,23 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _run_validate(self) -> None:
-        self._run_cli("--validate", label="Validate")
+        self._run_cli("--validate", label="검증")
 
     def _run_prepare(self) -> None:
-        self._run_cli("--prepare", label="Prepare")
+        self._run_cli("--prepare", label="세션 준비")
 
     def _run_preview(self) -> None:
-        self._run_cli("--preview", label="Preview")
+        self._run_cli("--preview", label="미리보기")
 
     def _run_dryrun(self) -> None:
         self._run_cli(label="Dry-run")
 
     def _run_execute(self) -> None:
         reply = QMessageBox.question(
-            self, "Execute",
-            f"Execute campaign?\n\n{self._last_saved_path}",
+            self, "캠페인 실행",
+            f"캠페인을 실제로 실행합니까?\n\n{self._last_saved_path}",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply != QMessageBox.StandardButton.Yes:
             return
-        self._run_cli("--execute", label="Execute")
+        self._run_cli("--execute", label="실행")

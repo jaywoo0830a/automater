@@ -78,8 +78,8 @@ class ExcelButtonRow(QWidget):
             self,
             "가져오기 방식",
             "기존 데이터에 추가하시겠습니까?\n\n"
-            "Yes = Keep existing + append\n"
-            "No = Replace with imported data",
+            "예 = 기존 데이터 유지 + 추가\n"
+            "아니오 = 기존 데이터 삭제 후 교체",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             | QMessageBox.StandardButton.Cancel,
         )

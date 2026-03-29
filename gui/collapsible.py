@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 class CollapsibleSection(QWidget):
     """Collapsible section. Collapsed by default."""
 
-    def __init__(self, title: str = "Advanced", parent: QWidget | None = None) -> None:
+    def __init__(self, title: str = "고급 설정", parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
         self._toggle = QPushButton(f"[+] {title}")
