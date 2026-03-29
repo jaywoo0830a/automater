@@ -138,7 +138,7 @@ def _prepare_sessions(config: dict[str, Any]) -> int:
     print(f"{'='*50}\n")
 
     pw = sync_playwright().start()
-    mgr = SessionManager(store, pw)
+    mgr = SessionManager(store, pw, global_browser_config=config.get("browser", {}))
     failed = 0
 
     for i, account in enumerate(accounts, 1):
@@ -192,7 +192,7 @@ def _build_live_executor(
 
     store = create_session_store(config.get("session_store"))
     pw = sync_playwright().start()
-    session_mgr = SessionManager(store, pw)
+    session_mgr = SessionManager(store, pw, global_browser_config=config.get("browser", {}))
 
     headless = config.get("run", {}).get("headless", True)
     if args.headless:
