@@ -117,13 +117,9 @@ class PlatformTab(QWidget):
     def to_dict(self) -> dict:
         d: dict = {"platform": self._platform.currentText()}
         if self._store_redis.isChecked():
-            url = self._redis_url.text().strip() or "redis://localhost:6379"
-            d["session_store"] = url
-        images = self._images_dir.text().strip()
-        if images:
-            d["images"] = images
-        if not self._exif.isChecked():
-            d["exif_optimization"] = False
+            d["session_store"] = self._redis_url.text().strip() or "redis://localhost:6379"
+        d["images"] = self._images_dir.text().strip() or "./images"
+        d["exif_optimization"] = self._exif.isChecked()
         return d
 
     def from_dict(self, data: dict) -> None:

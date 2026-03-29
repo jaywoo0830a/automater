@@ -226,14 +226,21 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _build_config(self) -> dict:
+        """DSL 스펙 순서대로 config dict를 조합한다."""
         config: dict = {}
-        config.update(self._platform_tab.to_dict())
-        config.update(self._accounts_tab.to_dict())
+        # DSL 순서: platform > browser > accounts > titles > keywords > pools > maps > post > images > exif > publish > run
+        platform_data = self._platform_tab.to_dict()
+        config["platform"] = platform_data.get("platform", "naver")
         config.update(self._browser_tab.to_dict())
+        config.update(self._accounts_tab.to_dict())
         config.update(self._titles_tab.to_dict())
         config.update(self._keywords_tab.to_dict())
         config.update(self._maps_tab.to_dict())
         config.update(self._post_tab.to_dict())
+        config["images"] = platform_data.get("images", "./images")
+        config["exif_optimization"] = platform_data.get("exif_optimization", True)
+        if "session_store" in platform_data:
+            config["session_store"] = platform_data["session_store"]
         config.update(self._publish_tab.to_dict())
         config.update(self._run_tab.to_dict())
         return config

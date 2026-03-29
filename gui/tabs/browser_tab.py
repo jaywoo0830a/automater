@@ -89,30 +89,16 @@ class BrowserTab(QWidget):
     def to_dict(self) -> dict:
         browser: dict = {}
 
-        locale = self._locale.text().strip()
-        if locale and locale != "ko-KR":
-            browser["locale"] = locale
-
-        tz = self._timezone.currentText().strip()
-        if tz and tz != "Asia/Seoul":
-            browser["timezone"] = tz
-
-        # viewport
-        vw, vh = self._viewport_w.value(), self._viewport_h.value()
-        if vw != 1920 or vh != 1080:
-            browser["viewport"] = [vw, vh]
+        browser["viewport"] = [self._viewport_w.value(), self._viewport_h.value()]
 
         ua = self._user_agent.text().strip()
         if ua:
             browser["user_agent"] = ua
 
-        cs = self._color_scheme.currentText()
-        if cs != "light":
-            browser["color_scheme"] = cs
-
-        sf = self._scale_factor.value()
-        if sf != 1:
-            browser["device_scale_factor"] = sf
+        browser["locale"] = self._locale.text().strip() or "ko-KR"
+        browser["timezone"] = self._timezone.currentText().strip() or "Asia/Seoul"
+        browser["color_scheme"] = self._color_scheme.currentText()
+        browser["device_scale_factor"] = self._scale_factor.value()
 
         lat = self._geo_lat.text().strip()
         lng = self._geo_lng.text().strip()
@@ -122,20 +108,14 @@ class BrowserTab(QWidget):
             except ValueError:
                 pass
 
-        # fingerprint — 기본값(전부 true)과 다른 것만 기록
-        fp: dict = {}
-        if not self._fp_webdriver.isChecked():
-            fp["webdriver"] = True  # 위장 안 함
-        if not self._fp_plugins.isChecked():
-            fp["plugins"] = False
-        if not self._fp_chrome.isChecked():
-            fp["chrome_runtime"] = False
-        if not self._fp_languages.isChecked():
-            fp["languages"] = False
-        if fp:
-            browser["fingerprint"] = fp
+        browser["fingerprint"] = {
+            "webdriver": not self._fp_webdriver.isChecked(),
+            "plugins": self._fp_plugins.isChecked(),
+            "chrome_runtime": self._fp_chrome.isChecked(),
+            "languages": self._fp_languages.isChecked(),
+        }
 
-        return {"browser": browser} if browser else {}
+        return {"browser": browser}
 
     def from_dict(self, data: dict) -> None:
         browser = data.get("browser", {})

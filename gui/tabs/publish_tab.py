@@ -80,15 +80,13 @@ class PublishTab(QWidget):
 
         # tags
         tags = [t.strip() for t in self._tags.text().split(",") if t.strip()]
-        if tags:
-            pub["tags"] = tags
+        pub["tags"] = tags
 
         # visibility
         vis = self._VIS_MAP.get(self._visibility.currentText(), "public")
-        if vis != "public":
-            pub["visibility"] = vis
+        pub["visibility"] = vis
 
-        return {"publish": pub} if pub else {}
+        return {"publish": pub}
 
     def from_dict(self, data: dict) -> None:
         pub = data.get("publish", {})

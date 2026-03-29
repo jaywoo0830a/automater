@@ -67,22 +67,15 @@ class RunTab(QWidget):
     def to_dict(self) -> dict:
         run: dict = {}
 
-        interval = self._interval.value()
-        if interval != 60:
-            run["interval"] = f"{interval}s"
-        if not self._headless.isChecked():
-            run["headless"] = False
-        on_failure = self._FAIL_MAP.get(self._on_failure.currentText(), "stop")
-        if on_failure != "stop":
-            run["on_failure"] = on_failure
-        on_resume = self._RESUME_MAP.get(self._on_resume.currentText(), "restart")
-        if on_resume != "restart":
-            run["on_resume"] = on_resume
+        run["interval"] = f"{self._interval.value()}s"
+        run["on_failure"] = self._FAIL_MAP.get(self._on_failure.currentText(), "stop")
+        run["on_resume"] = self._RESUME_MAP.get(self._on_resume.currentText(), "restart")
+        run["headless"] = self._headless.isChecked()
+        run["parallel"] = self._parallel.isChecked()
         if self._parallel.isChecked():
-            run["parallel"] = True
             run["max_workers"] = self._max_workers.value()
 
-        return {"run": run} if run else {}
+        return {"run": run}
 
     def from_dict(self, data: dict) -> None:
         run = data.get("run", {})
