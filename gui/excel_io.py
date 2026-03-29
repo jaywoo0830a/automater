@@ -29,8 +29,7 @@ ACCOUNT_COLUMNS = [
 ACCOUNT_DEFAULTS = ["", "", "", "1", "0", "0", ""]
 
 KV_COLUMNS = [
-    ("category", "카테고리"),
-    ("values", "값 (콤마 구분)"),
+    ("value", "값"),
 ]
 
 TITLE_COLUMNS = [
@@ -125,30 +124,33 @@ def template_accounts(path: str | Path) -> None:
 
 # ── key-value (keywords / pools) ──────────────────────────────────
 
-def export_kv(path: str | Path, data: dict[str, list[str]], sheet_name: str = "data") -> None:
-    wb, ws = _single_sheet_wb(sheet_name, KV_COLUMNS)
-    for slug, vals in data.items():
-        ws.append([slug, ", ".join(vals)])
+def export_kv_single(path: str | Path, slug: str, values: list[str]) -> None:
+    """카테고리 하나를 세로 형태 엑셀로 내보내기. 파일명 = 카테고리명."""
+    wb, ws = _single_sheet_wb(slug, KV_COLUMNS)
+    for val in values:
+        ws.append([val])
     wb.save(str(path))
 
 
-def import_kv(path: str | Path) -> dict[str, list[str]]:
+def import_kv_single(path: str | Path) -> list[str]:
+    """세로 형태 엑셀에서 값 목록을 읽기. 카테고리명은 호출자가 결정."""
     wb = load_workbook(str(path), read_only=True, data_only=True)
     ws = wb[wb.sheetnames[0]]
-    result: dict[str, list[str]] = {}
+    result: list[str] = []
     for row in _read_rows(ws):
-        slug = row[0] if len(row) > 0 else ""
-        vals = row[1] if len(row) > 1 else ""
-        if slug and vals:
-            result[slug] = [v.strip() for v in vals.split(",") if v.strip()]
+        val = row[0] if row else ""
+        if val:
+            result.append(val)
     wb.close()
     return result
 
 
-def template_kv(path: str | Path, sheet_name: str = "data", examples: list[list[str]] | None = None) -> None:
-    wb, ws = _single_sheet_wb(sheet_name, KV_COLUMNS)
-    for row in (examples or [["region", "강남, 서초, 송파"]]):
-        ws.append(row)
+def template_kv_single(path: str | Path, slug: str = "category",
+                        examples: list[str] | None = None) -> None:
+    """카테고리 하나의 템플릿 엑셀 생성."""
+    wb, ws = _single_sheet_wb(slug, KV_COLUMNS)
+    for val in (examples or ["값1", "값2", "값3"]):
+        ws.append([val])
     wb.save(str(path))
 
 

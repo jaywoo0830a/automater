@@ -1,24 +1,25 @@
-"""키워드 + 풀 탭 — 카테고리별 값 관리."""
+"""키워드 + 풀 탭 - 카테고리별 값 관리."""
 
 from __future__ import annotations
+
+from pathlib import Path
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QTableWidget, QTableWidgetItem, QHeaderView,
     QPushButton, QInputDialog, QSplitter, QGroupBox,
+    QFileDialog, QMessageBox,
 )
 from PySide6.QtCore import Qt
 
-from gui.excel_buttons import ExcelButtonRow
-from gui.excel_io import import_kv, export_kv, template_kv
+from gui.excel_io import export_kv_single, import_kv_single, template_kv_single
 
 
 class _KvTable(QWidget):
-    """카테고리(slug) → 값 목록 편집 테이블."""
+    """카테고리(slug) -> 값 목록 편집 테이블. 카테고리별 엑셀 import/export."""
 
     def __init__(self, title: str, hint: str, excel_label: str = "데이터",
-                 excel_filename: str = "data.xlsx",
-                 template_examples: list[list[str]] | None = None) -> None:
+                 template_examples: list[str] | None = None) -> None:
         super().__init__()
         self._excel_label = excel_label
         self._template_examples = template_examples
@@ -41,23 +42,32 @@ class _KvTable(QWidget):
         hint_label = QLabel(hint)
         hint_label.setStyleSheet("color: gray; font-size: 11px;")
 
-        excel_row = ExcelButtonRow(
-            self,
-            label=excel_label,
-            default_filename=excel_filename,
-            import_fn=import_kv,
-            export_fn=lambda path, data: export_kv(path, data, sheet_name=excel_label),
-            template_fn=lambda path: template_kv(path, sheet_name=excel_label, examples=self._template_examples),
-            get_data=self.to_data,
-            set_data=self._set_data,
+        # 엑셀 - 카테고리별 파일
+        btn_import = QPushButton("엑셀 가져오기")
+        btn_import.clicked.connect(self._on_import)
+        btn_export = QPushButton("엑셀 내보내기")
+        btn_export.clicked.connect(self._on_export)
+        btn_template = QPushButton("엑셀 템플릿")
+        btn_template.clicked.connect(self._on_template)
+
+        excel_row = QHBoxLayout()
+        excel_row.addWidget(btn_import)
+        excel_row.addWidget(btn_export)
+        excel_row.addWidget(btn_template)
+        excel_row.addStretch()
+
+        excel_hint = QLabel(
+            "엑셀 파일: 1열에 값 나열. 파일명이 카테고리명이 됩니다."
         )
+        excel_hint.setStyleSheet("color: gray; font-size: 11px;")
 
         layout = QVBoxLayout()
         layout.addWidget(QLabel(title))
         layout.addWidget(self._table)
         layout.addWidget(hint_label)
         layout.addLayout(btn_row)
-        layout.addWidget(excel_row)
+        layout.addWidget(excel_hint)
+        layout.addLayout(excel_row)
         self.setLayout(layout)
 
     def _add(self) -> None:
@@ -73,6 +83,87 @@ class _KvTable(QWidget):
         if row >= 0:
             self._table.removeRow(row)
 
+    # -- 엑셀: 카테고리별 파일 --
+
+    def _on_import(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, f"{self._excel_label} 엑셀 가져오기", "", "Excel (*.xlsx)",
+        )
+        if not path:
+            return
+        try:
+            values = import_kv_single(path)
+        except Exception as e:
+            QMessageBox.critical(self, "엑셀 읽기 오류", str(e))
+            return
+
+        # 파일명에서 카테고리명 추출
+        slug = Path(path).stem
+
+        reply = QMessageBox.question(
+            self,
+            "가져오기 방식",
+            f"카테고리: {slug}\n값: {len(values)}개\n\n"
+            "기존 데이터에 추가하시겠습니까?\n\n"
+            "예 = 기존 데이터 유지 + 추가\n"
+            "아니오 = 해당 카테고리 교체",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            | QMessageBox.StandardButton.Cancel,
+        )
+        if reply == QMessageBox.StandardButton.Cancel:
+            return
+
+        existing = self.to_data()
+        if reply == QMessageBox.StandardButton.Yes and slug in existing:
+            merged = list(dict.fromkeys(existing[slug] + values))
+            existing[slug] = merged
+        else:
+            existing[slug] = values
+        self.from_data(existing)
+
+    def _on_export(self) -> None:
+        # 선택된 카테고리 또는 전체
+        row = self._table.currentRow()
+        if row < 0:
+            QMessageBox.information(self, "선택 필요", "내보낼 카테고리를 선택하세요.")
+            return
+        slug_item = self._table.item(row, 0)
+        slug = slug_item.text().strip() if slug_item else ""
+        if not slug:
+            return
+
+        data = self.to_data()
+        values = data.get(slug, [])
+        if not values:
+            QMessageBox.information(self, "데이터 없음", f"'{slug}' 카테고리에 값이 없습니다.")
+            return
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, f"{self._excel_label} 엑셀 내보내기", f"{slug}.xlsx", "Excel (*.xlsx)",
+        )
+        if not path:
+            return
+        try:
+            export_kv_single(path, slug, values)
+        except Exception as e:
+            QMessageBox.critical(self, "엑셀 내보내기 오류", str(e))
+
+    def _on_template(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self, f"{self._excel_label} 엑셀 템플릿",
+            f"{self._excel_label}_template.xlsx",
+            "Excel (*.xlsx)",
+        )
+        if not path:
+            return
+        try:
+            slug = Path(path).stem.replace("_template", "")
+            template_kv_single(path, slug, self._template_examples)
+        except Exception as e:
+            QMessageBox.critical(self, "템플릿 저장 오류", str(e))
+
+    # -- 데이터 --
+
     def to_data(self) -> dict:
         result: dict = {}
         for row in range(self._table.rowCount()):
@@ -83,18 +174,6 @@ class _KvTable(QWidget):
             if slug and vals:
                 result[slug] = [v.strip() for v in vals.split(",") if v.strip()]
         return result
-
-    def _set_data(self, data: dict, append: bool = False) -> None:
-        if append:
-            existing = self.to_data()
-            for slug, vals in data.items():
-                if slug in existing:
-                    merged = list(dict.fromkeys(existing[slug] + vals))
-                    existing[slug] = merged
-                else:
-                    existing[slug] = vals
-            data = existing
-        self.from_data(data)
 
     def from_data(self, data: dict) -> None:
         self._table.setRowCount(0)
@@ -113,17 +192,15 @@ class KeywordsTab(QWidget):
 
         self._kw_table = _KvTable(
             "키워드 (조합 생성)",
-            "조합 수 = 카테고리별 값 수의 곱 × 제목 수. 예: region 3개 × subject 2개 = 6 조합",
+            "조합 수 = 카테고리별 값 수의 곱 x 제목 수. 예: region 3개 x subject 2개 = 6 조합",
             excel_label="키워드",
-            excel_filename="keywords.xlsx",
-            template_examples=[["region", "강남, 서초, 송파"], ["subject", "수학, 영어"]],
+            template_examples=["강남", "서초", "송파"],
         )
         self._pool_table = _KvTable(
             "풀 (랜덤 선택)",
             "매 포스트마다 풀에서 하나를 무작위로 선택합니다.",
             excel_label="풀",
-            excel_filename="pools.xlsx",
-            template_examples=[["suffix", "추천, 리뷰, 비교"]],
+            template_examples=["추천", "리뷰", "비교"],
         )
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -145,5 +222,5 @@ class KeywordsTab(QWidget):
         return d
 
     def from_dict(self, data: dict) -> None:
-        self._kw_table.from_data(data.get("keywords", {}))
-        self._pool_table.from_data(data.get("pools", {}))
+        self._kw_table.from_data(data.get("keywords") or {})
+        self._pool_table.from_data(data.get("pools") or {})
