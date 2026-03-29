@@ -70,6 +70,8 @@ class MainWindow(QMainWindow):
         self._run_tab = RunTab()
 
         self._accounts_tab.set_platform_tab(self._platform_tab)
+        self._titles_tab.set_token_source(self._get_tokens)
+        self._post_tab.set_token_source(self._get_tokens)
 
         self._tabs.addTab(self._platform_tab, "플랫폼")
         self._tabs.addTab(self._accounts_tab, "계정")
@@ -161,6 +163,24 @@ class MainWindow(QMainWindow):
         self._cli_signals = _CliSignals()
         self._cli_signals.output.connect(self._on_cli_output)
         self._cli_signals.finished.connect(self._on_cli_finished)
+
+    # ------------------------------------------------------------------
+    # Token source
+    # ------------------------------------------------------------------
+
+    def _get_tokens(self) -> list[str]:
+        """현재 등록된 keyword/pool/map 슬러그에서 토큰 목록 생성."""
+        tokens: list[str] = []
+        kw_data = self._keywords_tab.to_dict()
+        for slug in kw_data.get("keywords", {}):
+            tokens.append(f"{{keyword:{slug}}}")
+        for slug in kw_data.get("pools", {}):
+            tokens.append(f"{{pool:{slug}}}")
+        maps_data = self._maps_tab.to_dict()
+        for slug in maps_data.get("maps", {}):
+            tokens.append(f"{{map:{slug}}}")
+        tokens.append("{i}")
+        return tokens
 
     # ------------------------------------------------------------------
     # Close event

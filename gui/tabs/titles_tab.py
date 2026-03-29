@@ -1,20 +1,25 @@
-"""제목 탭 — 제목 템플릿 목록."""
+"""제목 탭 - 제목 템플릿 목록 + 토큰 삽입."""
 
 from __future__ import annotations
 
+from typing import Callable
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QListWidget, QPushButton, QInputDialog,
+    QListWidget, QPushButton, QDialog, QDialogButtonBox,
+    QFormLayout,
 )
 
 from gui.excel_buttons import ExcelButtonRow
 from gui.excel_io import import_titles, export_titles, template_titles
+from gui.token_insert import TokenInsertButton
 
 
 class TitlesTab(QWidget):
 
     def __init__(self) -> None:
         super().__init__()
+        self._token_source: Callable[[], list[str]] = lambda: []
 
         self._list = QListWidget()
 
@@ -32,7 +37,8 @@ class TitlesTab(QWidget):
         btn_row.addStretch()
 
         hint = QLabel(
-            "사용 가능한 토큰: {keyword:slug}  {pool:slug}  {map:slug}  {i}"
+            "토큰: {keyword:slug}  {pool:slug}  {map:slug}  {i}  |  "
+            "{...} 버튼으로 삽입 가능"
         )
         hint.setStyleSheet("color: gray; font-size: 11px;")
 
@@ -48,31 +54,32 @@ class TitlesTab(QWidget):
         )
 
         layout = QVBoxLayout()
-        layout.addWidget(QLabel("제목 템플릿 (하나씩 추가):"))
+        layout.addWidget(QLabel("제목 템플릿:"))
         layout.addWidget(self._list)
         layout.addWidget(hint)
         layout.addLayout(btn_row)
         layout.addWidget(excel_row)
         self.setLayout(layout)
 
+    def set_token_source(self, fn: Callable[[], list[str]]) -> None:
+        self._token_source = fn
+
     def _add(self) -> None:
-        text, ok = QInputDialog.getText(
-            self, "제목 템플릿 추가",
-            "템플릿:",
-            text="{keyword:region} {keyword:subject} 과외 추천",
-        )
-        if ok and text.strip():
-            self._list.addItem(text.strip())
+        dlg = _TitleDialog(self, self._token_source)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            text = dlg.value()
+            if text:
+                self._list.addItem(text)
 
     def _edit(self) -> None:
         item = self._list.currentItem()
         if not item:
             return
-        text, ok = QInputDialog.getText(
-            self, "제목 템플릿 수정", "템플릿:", text=item.text()
-        )
-        if ok and text.strip():
-            item.setText(text.strip())
+        dlg = _TitleDialog(self, self._token_source, item.text())
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            text = dlg.value()
+            if text:
+                item.setText(text)
 
     def _remove(self) -> None:
         row = self._list.currentRow()
@@ -103,3 +110,37 @@ class TitlesTab(QWidget):
         self._list.clear()
         for title in data.get("titles", []):
             self._list.addItem(str(title))
+
+
+class _TitleDialog(QDialog):
+
+    def __init__(self, parent: QWidget, token_source: Callable, default: str = "") -> None:
+        super().__init__(parent)
+        self.setWindowTitle("제목 템플릿")
+        self.setMinimumWidth(500)
+
+        self._input = QLineEdit(default)
+        self._input.setPlaceholderText("{keyword:region} {keyword:subject} 과외 추천")
+
+        token_btn = TokenInsertButton(self._input, token_source)
+
+        input_row = QHBoxLayout()
+        input_row.addWidget(self._input)
+        input_row.addWidget(token_btn)
+
+        form = QFormLayout()
+        form.addRow("템플릿:", input_row)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+
+        layout = QVBoxLayout()
+        layout.addLayout(form)
+        layout.addWidget(buttons)
+        self.setLayout(layout)
+
+    def value(self) -> str:
+        return self._input.text().strip()

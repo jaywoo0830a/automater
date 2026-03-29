@@ -1,4 +1,4 @@
-"""실행 설정 탭 — 간격, 병렬, 브라우저 설정."""
+"""실행 설정 탭 - 간격, 병렬, 재개, 브라우저 설정."""
 
 from __future__ import annotations
 
@@ -25,18 +25,22 @@ class RunTab(QWidget):
         self._headless.setChecked(True)
 
         self._on_failure = QComboBox()
-        self._on_failure.addItems(["중단 (stop)", "계�� 전환 (switch_account)"])
+        self._on_failure.addItems(["중단 (stop)", "계정 전환 (switch_account)"])
+
+        self._on_resume = QComboBox()
+        self._on_resume.addItems(["처음부터 (restart)", "이어서 (skip)"])
 
         basic_form = QFormLayout()
         basic_form.addRow("포스트 간 대기:", self._interval)
         basic_form.addRow("", self._headless)
         basic_form.addRow("실패 시:", self._on_failure)
+        basic_form.addRow("재실행 시:", self._on_resume)
 
         basic_group = QGroupBox("기본")
         basic_group.setLayout(basic_form)
 
         # ── 고급 설정 (접힘) ──
-        self._parallel = QCheckBox("계정별 병렬 실행")
+        self._parallel = QCheckBox("계정별 병렬 실��")
         self._parallel.setChecked(False)
 
         self._max_workers = QSpinBox()
@@ -57,6 +61,8 @@ class RunTab(QWidget):
 
     _FAIL_MAP = {"중단 (stop)": "stop", "계정 전환 (switch_account)": "switch_account"}
     _FAIL_REV = {v: k for k, v in _FAIL_MAP.items()}
+    _RESUME_MAP = {"처음부터 (restart)": "restart", "이어서 (skip)": "skip"}
+    _RESUME_REV = {v: k for k, v in _RESUME_MAP.items()}
 
     def to_dict(self) -> dict:
         run: dict = {}
@@ -69,6 +75,9 @@ class RunTab(QWidget):
         on_failure = self._FAIL_MAP.get(self._on_failure.currentText(), "stop")
         if on_failure != "stop":
             run["on_failure"] = on_failure
+        on_resume = self._RESUME_MAP.get(self._on_resume.currentText(), "restart")
+        if on_resume != "restart":
+            run["on_resume"] = on_resume
         if self._parallel.isChecked():
             run["parallel"] = True
             run["max_workers"] = self._max_workers.value()
@@ -84,10 +93,16 @@ class RunTab(QWidget):
         self._headless.setChecked(run.get("headless", True))
 
         on_failure = run.get("on_failure", "stop")
-        display = self._FAIL_REV.get(on_failure, "중�� (stop)")
+        display = self._FAIL_REV.get(on_failure, "중단 (stop)")
         idx = self._on_failure.findText(display)
         if idx >= 0:
             self._on_failure.setCurrentIndex(idx)
+
+        on_resume = run.get("on_resume", "restart")
+        display = self._RESUME_REV.get(on_resume, "처음부터 (restart)")
+        idx = self._on_resume.findText(display)
+        if idx >= 0:
+            self._on_resume.setCurrentIndex(idx)
 
         self._parallel.setChecked(run.get("parallel", False))
         self._max_workers.setValue(int(run.get("max_workers", 3)))
