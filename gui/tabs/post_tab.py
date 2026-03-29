@@ -140,17 +140,80 @@ class PostTab(QWidget):
 
         bt = next(iter(block), "")
         val = block[bt]
+        when = block.get("when", "")
+        wait = block.get("wait", "")
 
-        if bt in ("paragraph",) + tuple(f"h{i}" for i in range(1, 7)):
+        dlg = None
+
+        # 소제목
+        if bt.startswith("h") and bt[1:].isdigit():
             current = val if isinstance(val, str) else ""
-            if bt == "paragraph":
-                text, ok = QInputDialog.getMultiLineText(self, "본문 수정", "AI 프롬프트:", current)
-            else:
-                text, ok = QInputDialog.getText(self, "소제목 수정", "텍스트:", text=current)
+            dlg = _SimpleTextDialog(
+                self, "소제목 수정", "텍스트:", bt,
+                default=current, when_default=when, wait_default=wait,
+                token_source=self._token_source,
+            )
+
+        # AI 단락
+        elif bt == "paragraph":
+            current = val if isinstance(val, str) else ""
+            dlg = _SimpleTextDialog(
+                self, "AI 단락 수정", "프롬프트:", "paragraph",
+                multiline=True, default=current,
+                when_default=when, wait_default=wait,
+                token_source=self._token_source,
+            )
+
+        # 수동 텍스트
+        elif bt == "text":
+            dlg = _TextBlockDialog(
+                self, token_source=self._token_source,
+                existing=block,
+            )
+
+        # 인용구
+        elif bt == "quote":
+            dlg = _QuoteDialog(
+                self, token_source=self._token_source,
+                existing=block,
+            )
+
+        # 목록
+        elif bt == "list":
+            items = val if isinstance(val, list) else []
+            text, ok = QInputDialog.getMultiLineText(
+                self, "목록 수정", "항목 (한 줄에 하나):",
+                "\n".join(items),
+            )
             if ok and text.strip():
-                new = {bt: text.strip()}
+                new_items = [line.strip() for line in text.splitlines() if line.strip()]
+                new = {"list": new_items}
+                if when:
+                    new["when"] = when
+                if wait:
+                    new["wait"] = wait
                 item.setData(256, new)
                 item.setText(self._label(new))
+            return
+
+        # 이미지
+        elif bt in ("image", "featured_image"):
+            dlg = _ImageDialog(
+                self, bt, token_source=self._token_source,
+                existing=block,
+            )
+
+        # divider - 수정할 본문은 없지만 when/wait 편집용
+        elif bt == "divider":
+            return
+
+        if dlg is None:
+            return
+
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            new = dlg.result()
+            item.setData(256, new)
+            item.setText(self._label(new))
 
     def _remove_block(self) -> None:
         row = self._list.currentRow()
@@ -229,33 +292,39 @@ class _SimpleTextDialog(QDialog):
 
     def __init__(self, parent: QWidget, title: str, label: str, block_type: str,
                  multiline: bool = False, default: str = "",
+                 when_default: str = "", wait_default: str = "",
                  token_source: Callable | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setMinimumWidth(500)
         self._block_type = block_type
         self._multiline = multiline
+        self._text_edit: QTextEdit | None = None
+        self._text_line: QLineEdit | None = None
 
+        text_widget: QWidget
         if multiline:
-            self._text = QTextEdit()
-            self._text.setPlainText(default)
-            self._text.setMaximumHeight(100)
+            self._text_edit = QTextEdit()
+            self._text_edit.setPlainText(default)
+            self._text_edit.setMaximumHeight(100)
+            text_widget = self._text_edit
         else:
-            self._text = QLineEdit(default)
+            self._text_line = QLineEdit(default)
+            text_widget = self._text_line
 
-        token_btn = TokenInsertButton(self._text, token_source or (lambda: []))
+        token_btn = TokenInsertButton(text_widget, token_source or (lambda: []))
 
         input_row = QHBoxLayout()
-        input_row.addWidget(self._text)
+        input_row.addWidget(text_widget)
         input_row.addWidget(token_btn)
 
         form = QFormLayout()
         form.addRow(label, input_row)
 
         # 고급
-        self._when = QLineEdit()
+        self._when = QLineEdit(when_default)
         self._when.setPlaceholderText('{keyword:region} == 강남')
-        self._wait = QLineEdit()
+        self._wait = QLineEdit(wait_default)
         self._wait.setPlaceholderText("2s 또는 1s ~ 3s")
 
         advanced = CollapsibleSection("고급 설정")
@@ -275,10 +344,12 @@ class _SimpleTextDialog(QDialog):
         self.setLayout(layout)
 
     def result(self) -> dict:
-        if self._multiline:
-            text = self._text.toPlainText().strip()
+        if self._text_edit is not None:
+            text = self._text_edit.toPlainText().strip()
+        elif self._text_line is not None:
+            text = self._text_line.text().strip()
         else:
-            text = self._text.text().strip()
+            text = ""
 
         entry: dict = {self._block_type: text}
 
@@ -295,22 +366,44 @@ class _SimpleTextDialog(QDialog):
 class _TextBlockDialog(QDialog):
     """수동 텍스트 블록 - 인라인 또는 파일 모드."""
 
-    def __init__(self, parent: QWidget, token_source: Callable | None = None) -> None:
+    def __init__(self, parent: QWidget, token_source: Callable | None = None,
+                 existing: dict | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("수동 텍스트 추가")
+        self.setWindowTitle("수동 텍스트 수정" if existing else "수동 텍스트 추가")
         self.setMinimumWidth(500)
+
+        # 기존 값 파싱
+        _raw_val = (existing or {}).get("text", "")
+        _when: str = str((existing or {}).get("when", ""))
+        _wait_entry: str = str((existing or {}).get("wait", ""))
+        if isinstance(_raw_val, dict):
+            _inline_default = ""
+            _file_default = str(_raw_val.get("file", ""))
+            _format_default = str(_raw_val.get("format", "plain"))
+            _wait_inner = str(_raw_val.get("wait", ""))
+        else:
+            _inline_default = str(_raw_val) if _raw_val else ""
+            _file_default = ""
+            _format_default = "plain"
+            _wait_inner = ""
+        _wait_default = str(_wait_entry or _wait_inner)
 
         self._inline = QTextEdit()
         self._inline.setPlaceholderText("{keyword:region} 중등 수학학원은 대표 전문 학원입니다.")
         self._inline.setMaximumHeight(100)
+        if _inline_default:
+            self._inline.setPlainText(_inline_default)
 
         token_btn_inline = TokenInsertButton(self._inline, token_source or (lambda: []))
 
-        self._file = QLineEdit()
+        self._file = QLineEdit(_file_default)
         self._file.setPlaceholderText("{i}.txt 또는 {keyword:region}/{i}.txt")
         token_btn_file = TokenInsertButton(self._file, token_source or (lambda: []))
         self._format = QComboBox()
         self._format.addItems(["plain", "html"])
+        idx = self._format.findText(_format_default)
+        if idx >= 0:
+            self._format.setCurrentIndex(idx)
 
         inline_row = QHBoxLayout()
         inline_row.addWidget(self._inline)
@@ -337,9 +430,9 @@ class _TextBlockDialog(QDialog):
         hint.setStyleSheet("color: gray; font-size: 11px;")
 
         # 고급
-        self._when = QLineEdit()
+        self._when = QLineEdit(_when)
         self._when.setPlaceholderText('{keyword:region} == 강남')
-        self._wait = QLineEdit()
+        self._wait = QLineEdit(_wait_default)
         self._wait.setPlaceholderText("2s 또는 1s ~ 3s")
 
         advanced = CollapsibleSection("고급 설정")
@@ -392,15 +485,26 @@ class _TextBlockDialog(QDialog):
 
 class _QuoteDialog(QDialog):
 
-    def __init__(self, parent: QWidget, token_source: Callable | None = None) -> None:
+    def __init__(self, parent: QWidget, token_source: Callable | None = None,
+                 existing: dict | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("인용구 추가")
+        self.setWindowTitle("인용구 수정" if existing else "인용구 추가")
         self.setMinimumWidth(500)
 
-        self._text = QLineEdit()
+        _raw_val = (existing or {}).get("quote", "")
+        if isinstance(_raw_val, dict):
+            _text_default = str(_raw_val.get("text", ""))
+            _attr_default = str(_raw_val.get("attribution", ""))
+        else:
+            _text_default = str(_raw_val) if _raw_val else ""
+            _attr_default = ""
+        _when: str = str((existing or {}).get("when", ""))
+        _wait: str = str((existing or {}).get("wait", ""))
+
+        self._text = QLineEdit(_text_default)
         self._text.setPlaceholderText("인용문 텍스트")
         token_btn = TokenInsertButton(self._text, token_source or (lambda: []))
-        self._attribution = QLineEdit()
+        self._attribution = QLineEdit(_attr_default)
         self._attribution.setPlaceholderText("출처 (선택)")
 
         text_row = QHBoxLayout()
@@ -412,9 +516,9 @@ class _QuoteDialog(QDialog):
         form.addRow("출처:", self._attribution)
 
         # 고급
-        self._when = QLineEdit()
+        self._when = QLineEdit(str(_when))
         self._when.setPlaceholderText('{keyword:region} == 강남')
-        self._wait = QLineEdit()
+        self._wait = QLineEdit(str(_wait) if _wait else "")
         self._wait.setPlaceholderText("2s 또는 1s ~ 3s")
 
         advanced = CollapsibleSection("고급 설정")
@@ -453,20 +557,26 @@ class _QuoteDialog(QDialog):
 class _ImageDialog(QDialog):
 
     def __init__(self, parent: QWidget, block_type: str,
-                 token_source: Callable | None = None) -> None:
+                 token_source: Callable | None = None,
+                 existing: dict | None = None) -> None:
         super().__init__(parent)
         is_featured = block_type == "featured_image"
-        self.setWindowTitle("대표 이미지 추가" if is_featured else "본문 이미지 추가")
+        self.setWindowTitle("이미지 수정" if existing else ("대표 이미지 추가" if is_featured else "본문 이미지 추가"))
         self.setMinimumWidth(500)
         self._block_type = block_type
         ts = token_source or (lambda: [])
 
+        # 기존 값 파싱
+        _raw = (existing or {}).get(block_type, {})
+        _val: dict = {"path": _raw} if isinstance(_raw, str) else (_raw if isinstance(_raw, dict) else {})
+        _e_when: str = str((existing or {}).get("when", ""))
+
         # 기본 필드
-        self._path = QLineEdit()
+        self._path = QLineEdit(str(_val.get("path", "")))
         self._path.setPlaceholderText("photo.jpg 또는 {map:photo}")
         token_btn_path = TokenInsertButton(self._path, ts)
 
-        self._link = QLineEdit()
+        self._link = QLineEdit(str(_val.get("link", "")))
         self._link.setPlaceholderText("tel:01012345678 또는 https://...")
         token_btn_link = TokenInsertButton(self._link, ts)
 
@@ -483,7 +593,7 @@ class _ImageDialog(QDialog):
         form.addRow("링크:", link_row)
 
         if not is_featured:
-            self._alt = QLineEdit()
+            self._alt = QLineEdit(str(_val.get("alt", "")))
             self._alt.setPlaceholderText("대체 텍스트")
             form.addRow("대체 텍스트:", self._alt)
         else:
@@ -491,7 +601,7 @@ class _ImageDialog(QDialog):
 
         # 오버레이 (featured_image 전용)
         if is_featured:
-            self._overlay_text = QLineEdit()
+            self._overlay_text = QLineEdit(str(_val.get("overlay_text", "")))
             self._overlay_text.setPlaceholderText("{keyword:region} 과외")
             token_btn_overlay = TokenInsertButton(self._overlay_text, ts)
 
@@ -499,13 +609,17 @@ class _ImageDialog(QDialog):
             overlay_row.addWidget(self._overlay_text)
             overlay_row.addWidget(token_btn_overlay)
 
-            self._overlay_color = QLineEdit("#FFFFFF")
+            self._overlay_color = QLineEdit(str(_val.get("overlay_color", "#FFFFFF")))
             self._overlay_bg = QDoubleSpinBox()
             self._overlay_bg.setRange(0.0, 1.0)
             self._overlay_bg.setSingleStep(0.1)
-            self._overlay_bg.setValue(0.0)
+            self._overlay_bg.setValue(float(_val.get("overlay_background", 0.0)))
             self._overlay_pos = QComboBox()
             self._overlay_pos.addItems(["center", "top", "bottom"])
+            _pos = str(_val.get("overlay_position", "center"))
+            _pos_idx = self._overlay_pos.findText(_pos)
+            if _pos_idx >= 0:
+                self._overlay_pos.setCurrentIndex(_pos_idx)
 
             form.addRow("오버레이 텍스트:", overlay_row)
             form.addRow("텍스트 색상:", self._overlay_color)
@@ -513,9 +627,9 @@ class _ImageDialog(QDialog):
             form.addRow("텍스트 위치:", self._overlay_pos)
 
         # 고급 1: when / wait / effects
-        self._when = QLineEdit()
+        self._when = QLineEdit(str(_e_when))
         self._when.setPlaceholderText('{keyword:region} in [강남, 서초]')
-        self._wait = QLineEdit()
+        self._wait = QLineEdit(str(_val.get("wait", "")))
         self._wait.setPlaceholderText("2s 또는 1s ~ 3s")
         self._effects = QTextEdit()
         self._effects.setPlaceholderText(
@@ -524,6 +638,18 @@ class _ImageDialog(QDialog):
             "all | hue:0.0 ~ 0.03"
         )
         self._effects.setMaximumHeight(80)
+        # 기존 effects 로드
+        _existing_effects = _val.get("effects") or []
+        if _existing_effects:
+            lines = []
+            for fx in _existing_effects:
+                region = fx.get("region", "all")
+                effect = fx.get("effect", "")
+                if region and region != "all":
+                    lines.append(f"{region} | {effect}")
+                else:
+                    lines.append(effect)
+            self._effects.setPlainText("\n".join(lines))
 
         advanced1 = CollapsibleSection("조건 / 대기 / 효과")
         advanced1.add_row("조건 (when):", self._when)
@@ -531,13 +657,14 @@ class _ImageDialog(QDialog):
         advanced1.add_row("효과 (effects):", self._effects)
 
         # 고급 2: GPS / EXIF / 파일명
-        self._gps_lat = QLineEdit()
+        _gps = _val.get("gps", [])
+        self._gps_lat = QLineEdit(str(_gps[0]) if isinstance(_gps, (list, tuple)) and len(_gps) >= 2 else "")
         self._gps_lat.setPlaceholderText("37.497")
-        self._gps_lng = QLineEdit()
+        self._gps_lng = QLineEdit(str(_gps[1]) if isinstance(_gps, (list, tuple)) and len(_gps) >= 2 else "")
         self._gps_lng.setPlaceholderText("127.027")
-        self._filename_kw = QLineEdit()
+        self._filename_kw = QLineEdit(str(_val.get("filename_keyword", "")))
         self._filename_kw.setPlaceholderText("gangnam-tutor")
-        self._exif_desc = QLineEdit()
+        self._exif_desc = QLineEdit(str(_val.get("exif_description", "")))
         self._exif_desc.setPlaceholderText("ASCII 설명 (선택)")
 
         advanced2 = CollapsibleSection("GPS / EXIF / 파일명")

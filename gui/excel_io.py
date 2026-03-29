@@ -13,6 +13,7 @@ from pathlib import Path
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.worksheet import Worksheet
 
 # ── column definitions ─────────────────────────────────────────────
 
@@ -69,19 +70,18 @@ def _read_rows(ws, skip_header: bool = True) -> list[list[str]]:
     return rows
 
 
-def _single_sheet_wb(title: str, columns: list[tuple[str, str]]) -> Workbook:
+def _single_sheet_wb(title: str, columns: list[tuple[str, str]]) -> tuple[Workbook, Worksheet]:
     wb = Workbook()
-    ws = wb.active
+    ws: Worksheet = wb.active  # type: ignore[assignment]
     ws.title = title
     _style_header(ws, columns)
-    return wb
+    return wb, ws
 
 
 # ── accounts ───────────────────────────────────────────────────────
 
 def export_accounts(path: str | Path, accounts: list[dict]) -> None:
-    wb = _single_sheet_wb("accounts", ACCOUNT_COLUMNS)
-    ws = wb.active
+    wb, ws = _single_sheet_wb("accounts", ACCOUNT_COLUMNS)
     for acc in accounts:
         ws.append([acc.get(k, d) for (k, _), d in zip(ACCOUNT_COLUMNS, ACCOUNT_DEFAULTS)])
     wb.save(str(path))
@@ -118,16 +118,15 @@ def import_accounts(path: str | Path) -> list[dict]:
 
 
 def template_accounts(path: str | Path) -> None:
-    wb = _single_sheet_wb("accounts", ACCOUNT_COLUMNS)
-    wb.active.append(["example_id", "password123", "myblog", 1, 0, 0, ""])
+    wb, ws = _single_sheet_wb("accounts", ACCOUNT_COLUMNS)
+    ws.append(["example_id", "password123", "myblog", 1, 0, 0, ""])
     wb.save(str(path))
 
 
 # ── key-value (keywords / pools) ──────────────────────────────────
 
 def export_kv(path: str | Path, data: dict[str, list[str]], sheet_name: str = "data") -> None:
-    wb = _single_sheet_wb(sheet_name, KV_COLUMNS)
-    ws = wb.active
+    wb, ws = _single_sheet_wb(sheet_name, KV_COLUMNS)
     for slug, vals in data.items():
         ws.append([slug, ", ".join(vals)])
     wb.save(str(path))
@@ -147,8 +146,7 @@ def import_kv(path: str | Path) -> dict[str, list[str]]:
 
 
 def template_kv(path: str | Path, sheet_name: str = "data", examples: list[list[str]] | None = None) -> None:
-    wb = _single_sheet_wb(sheet_name, KV_COLUMNS)
-    ws = wb.active
+    wb, ws = _single_sheet_wb(sheet_name, KV_COLUMNS)
     for row in (examples or [["region", "강남, 서초, 송파"]]):
         ws.append(row)
     wb.save(str(path))
@@ -157,8 +155,7 @@ def template_kv(path: str | Path, sheet_name: str = "data", examples: list[list[
 # ── titles ─────────────────────────────────────────────────────────
 
 def export_titles(path: str | Path, titles: list[str]) -> None:
-    wb = _single_sheet_wb("titles", TITLE_COLUMNS)
-    ws = wb.active
+    wb, ws = _single_sheet_wb("titles", TITLE_COLUMNS)
     for t in titles:
         ws.append([t])
     wb.save(str(path))
@@ -177,8 +174,8 @@ def import_titles(path: str | Path) -> list[str]:
 
 
 def template_titles(path: str | Path) -> None:
-    wb = _single_sheet_wb("titles", TITLE_COLUMNS)
-    wb.active.append(["{keyword:region} {keyword:subject} 과외 추천"])
+    wb, ws = _single_sheet_wb("titles", TITLE_COLUMNS)
+    ws.append(["{keyword:region} {keyword:subject} 과외 추천"])
     wb.save(str(path))
 
 
@@ -191,8 +188,7 @@ MAP_COLUMNS = [
 
 
 def export_map(path: str | Path, data: dict[str, str]) -> None:
-    wb = _single_sheet_wb("map", MAP_COLUMNS)
-    ws = wb.active
+    wb, ws = _single_sheet_wb("map", MAP_COLUMNS)
     for k, v in data.items():
         ws.append([k, v])
     wb.save(str(path))
@@ -212,8 +208,7 @@ def import_map(path: str | Path) -> dict[str, str]:
 
 
 def template_map(path: str | Path) -> None:
-    wb = _single_sheet_wb("map", MAP_COLUMNS)
-    ws = wb.active
+    wb, ws = _single_sheet_wb("map", MAP_COLUMNS)
     ws.append(["강남", "gangnam.jpg"])
     ws.append(["서초", "seocho.jpg"])
     ws.append(["_default", "default.jpg"])

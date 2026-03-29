@@ -290,6 +290,13 @@ class CampaignExecutor:
         assignments = assign_weighted(combos, config["accounts"])
         result = ExecutionResult()
 
+        mode_label = "DRY-RUN" if dry_run else "LIVE"
+        account_names = [acc["username"] for acc, _ in assignments]
+        logger.info("=" * 60)
+        logger.info("  캠페인 실행 시작 (%s)", mode_label)
+        logger.info("  총 조합: %d | 계정: %s", len(combos), ", ".join(account_names))
+        logger.info("=" * 60)
+
         global_run = config.get("run", {})
         on_resume = global_run.get("on_resume", "restart")
         parallel = bool(global_run.get("parallel", False))
@@ -308,6 +315,16 @@ class CampaignExecutor:
             self._execute_parallel(assignments, config, global_run, max_workers, result, progress, on_resume)
         else:
             self._execute_serial(assignments, config, global_run, dry_run, result, progress, on_resume)
+
+        logger.info("=" * 60)
+        logger.info("  캠페인 실행 완료 (%s)", mode_label)
+        logger.info("  성공: %d | 실패: %d | 세션 복구: %d",
+                     result.total_succeeded, result.total_failed, result.session_recoveries)
+        if result.errors:
+            logger.info("  오류 목록:")
+            for err in result.errors[:10]:
+                logger.info("    - %s", err)
+        logger.info("=" * 60)
 
         return result
 
@@ -407,56 +424,79 @@ class CampaignExecutor:
 
         account = config["accounts"][account_idx]
         username = account["username"]
+        total = len(combos)
+
+        logger.info("=" * 50)
+        logger.info("[%s] 배치 시작 (%d개 조합)", username, total)
+        logger.info("=" * 50)
 
         # Create editor once per account batch (not per spec)
         editor = None
         if not dry_run and self._editor_factory is not None:
             try:
+                logger.info("[%s] 에디터 초기화 중...", username)
                 editor = self._editor_factory(account)
+                logger.info("[%s] 에디터 준비 완료", username)
             except Exception as exc:
-                logger.error("[FAIL] %s | editor init: %s", username, exc)
+                logger.error("[FAIL] %s | 에디터 초기화 실패: %s", username, exc)
                 for _ in combos:
                     result.record_failure(str(exc))
                 return
 
+        succeeded_in_batch = 0
+
         for i, combo in enumerate(combos):
             combo_index = combo.index - 1  # 0-based global index
+            progress_label = f"[{i + 1}/{total}]"
 
             # skip 모드: 이미 완료된 조합 건너뛰기
             if on_resume == "skip" and progress and progress.is_done(combo_index):
-                logger.info("[SKIP] %s | combo %d (already done)", username, combo.index)
+                logger.info("%s [SKIP] %s | #%d (이전 실행에서 완료)", progress_label, username, combo.index)
                 continue
 
             try:
                 spec = build_spec(combo, config, account_idx)
+                title = generate_title(spec.title)
 
                 # Sequential mode: compute schedule_at for each post progressively
                 spec = self._resolve_sequential(spec, i, config)
+                at_label = spec.schedule_at.strftime("%H:%M") if spec.schedule_at else "즉시"
+
+                logger.info("%s [START] %s | %s (예약: %s)", progress_label, username, title, at_label)
 
                 if dry_run:
                     result.record_attempt()
-                    title = generate_title(spec.title)
-                    at_label = spec.schedule_at.strftime("%H:%M") if spec.schedule_at else "-"
-                    logger.info("[DRY-RUN] %s | %s (at=%s)", username, title, at_label)
+                    logger.info("%s [DRY-RUN] %s | %s -- OK", progress_label, username, title)
                     with result._lock:
                         result.total_succeeded += 1
+                    succeeded_in_batch += 1
                     continue
 
                 # 실행 + 세션 만료 시 복구 재시도
+                prev_succeeded = result.total_succeeded
                 editor = self._run_with_recovery(
                     spec, editor, account, result,
                 )
 
-                # 성공 시 진행 기록
-                if progress and result.total_succeeded > 0:
-                    progress.mark_done(combo_index)
+                if result.total_succeeded > prev_succeeded:
+                    succeeded_in_batch += 1
+                    logger.info("%s [DONE] %s | %s -- 성공", progress_label, username, title)
+                    if progress:
+                        progress.mark_done(combo_index)
+                else:
+                    logger.error("%s [FAIL] %s | %s -- 실패", progress_label, username, title)
 
             except Exception as exc:
                 result.record_failure(str(exc))
-                logger.error("[FAIL] %s | %s", username, str(exc))
+                logger.error("%s [FAIL] %s | %s", progress_label, username, str(exc))
 
             if not dry_run and i < len(combos) - 1 and interval > 0:
+                logger.info("[%s] %d초 대기 중...", username, interval)
                 time.sleep(interval)
+
+        logger.info("-" * 50)
+        logger.info("[%s] 배치 완료 (%d/%d 성공)", username, succeeded_in_batch, total)
+        logger.info("-" * 50)
 
     def _run_with_recovery(
         self,

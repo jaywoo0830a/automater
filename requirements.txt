@@ -1,18 +1,14 @@
 playwright>=1.44.0
 pytest>=8.2.0
-pytest-playwright>=0.5.0
 python-dotenv>=1.0.0
 google-genai>=1.0.0
 Pillow>=10.0.0
 exif>=1.6.0
-# ORM — replaces mysql-connector-python
-SQLAlchemy>=2.0.0
-PyMySQL>=1.1.0
 # Excel parsing
 openpyxl>=3.1.0
 # YAML config support (CLI)
 PyYAML>=6.0
-# Session store — Redis backend (optional)
+# Session store - Redis backend (optional)
 redis>=5.0
 # GUI
 PySide6>=6.7.0

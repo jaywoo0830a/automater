@@ -177,12 +177,12 @@ class MainWindow(QMainWindow):
         """현재 등록된 keyword/pool/map 슬러그에서 토큰 목록 생성."""
         tokens: list[str] = []
         kw_data = self._keywords_tab.to_dict()
-        for slug in kw_data.get("keywords", {}):
+        for slug in (kw_data.get("keywords") or {}):
             tokens.append(f"{{keyword:{slug}}}")
-        for slug in kw_data.get("pools", {}):
+        for slug in (kw_data.get("pools") or {}):
             tokens.append(f"{{pool:{slug}}}")
         maps_data = self._maps_tab.to_dict()
-        for slug in maps_data.get("maps", {}):
+        for slug in (maps_data.get("maps") or {}):
             tokens.append(f"{{map:{slug}}}")
         tokens.append("{i}")
         return tokens
@@ -322,7 +322,7 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _save_map_files(config: dict, base_dir: Path) -> None:
-        maps_data = config.pop("_maps_data", None)
+        maps_data: dict = config.pop("_maps_data", None) or {}
         if not maps_data or "maps" not in config:
             return
         maps_dir = base_dir / "maps"
@@ -340,7 +340,7 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _load_map_files(raw: dict, base_dir: Path) -> None:
-        maps_config = raw.get("maps")
+        maps_config: dict = raw.get("maps") or {}
         if not maps_config:
             return
         maps_data: dict = {}
