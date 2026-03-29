@@ -20,7 +20,7 @@ class ExcelButtonRow(QWidget):
     label : str            — 섹션 이름 (예: "계정", "키워드")
     default_filename : str — 저장 다이얼로그 기본 파일명
     import_fn : callable(path) -> data  — 엑셀 읽기 함수
-    export_fn : callable(path, data)    — 엑셀 쓰기 ���수
+    export_fn : callable(path, data)    -- 엑셀 쓰기 함수
     template_fn : callable(path)        — 빈 템플릿 생성 함수
     get_data : callable() -> data       — 현재 탭 데이터 조회
     set_data : callable(data, append)   — 탭에 데이터 적용

@@ -40,7 +40,7 @@ class RunTab(QWidget):
         basic_group.setLayout(basic_form)
 
         # ── 고급 설정 (접힘) ──
-        self._parallel = QCheckBox("계정별 병렬 실��")
+        self._parallel = QCheckBox("계정별 병렬 실행")
         self._parallel.setChecked(False)
 
         self._max_workers = QSpinBox()

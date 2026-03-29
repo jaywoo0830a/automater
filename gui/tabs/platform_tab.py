@@ -1,4 +1,4 @@
-"""플랫폼 + 세션 저장소 + ���업 디렉토리 + 이미지 설정 탭."""
+"""플랫폼 + 세션 저장소 + 작업 디렉토리 + 이미지 설정 탭."""
 
 from __future__ import annotations
 
@@ -56,12 +56,12 @@ class PlatformTab(QWidget):
         img_widget.setLayout(img_row)
 
         form = QFormLayout()
-        form.addRow("플��폼:", self._platform)
+        form.addRow("플랫폼:", self._platform)
         form.addRow("작업 디렉토리:", ws_widget)
         form.addRow("이미지 디렉토리:", img_widget)
 
         # Session store
-        self._store_file = QRadioButton("파일 (기��)")
+        self._store_file = QRadioButton("파일 (기본)")
         self._store_redis = QRadioButton("Redis")
         self._store_file.setChecked(True)
 
@@ -79,7 +79,7 @@ class PlatformTab(QWidget):
         store_row.addWidget(self._store_redis)
         store_row.addWidget(self._redis_url)
 
-        store_group = QGroupBox("��션 저장소")
+        store_group = QGroupBox("세션 저장소")
         store_group.setLayout(store_row)
 
         # 고급: EXIF
@@ -98,14 +98,14 @@ class PlatformTab(QWidget):
 
     def _browse_workspace(self) -> None:
         path = QFileDialog.getExistingDirectory(
-            self, "작업 디렉토리 선���", self._workspace.text(),
+            self, "작업 디렉토리 선택", self._workspace.text(),
         )
         if path:
             self._workspace.setText(path)
 
     def _browse_images(self) -> None:
         path = QFileDialog.getExistingDirectory(
-            self, "이미지 ���렉토리 선택", self._images_dir.text() or self._workspace.text(),
+            self, "이미지 디렉토리 선택", self._images_dir.text() or self._workspace.text(),
         )
         if path:
             self._images_dir.setText(path)
