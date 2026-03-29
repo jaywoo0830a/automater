@@ -128,11 +128,14 @@ class MainWindow(QMainWindow):
             self._btn_dryrun, self._btn_execute,
         ]
 
+        from gui.theme import SP_SM, SP_MD, SP_LG
+
         btn_row = QHBoxLayout()
+        btn_row.setSpacing(SP_SM)
         btn_row.addWidget(btn_load)
         btn_row.addWidget(btn_save)
         btn_row.addWidget(btn_refresh)
-        btn_row.addSpacing(20)
+        btn_row.addSpacing(SP_LG)
         for btn in self._workflow_buttons:
             btn_row.addWidget(btn)
         btn_row.addWidget(self._btn_stop)
@@ -145,6 +148,8 @@ class MainWindow(QMainWindow):
         splitter.setStretchFactor(1, 2)
 
         layout = QVBoxLayout()
+        layout.setContentsMargins(SP_SM, SP_SM, SP_SM, SP_SM)
+        layout.setSpacing(SP_SM)
         layout.addWidget(splitter)
         layout.addLayout(btn_row)
 

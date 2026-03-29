@@ -35,9 +35,13 @@ class TokenInsertButton(QPushButton):
         token_source: Callable[[], list[str]] | None = None,
         parent: QWidget | None = None,
     ) -> None:
-        super().__init__("{...}", parent)
-        self.setFixedWidth(40)
+        from gui.theme import BASE, SP_XS, rem
+        super().__init__("{..}", parent)
+        self.setFixedWidth(rem(2.5))
         self.setToolTip("토큰 삽입")
+        self.setStyleSheet(
+            f"QPushButton {{ font-size: {BASE - 2}px; padding: {SP_XS}px; }}"
+        )
         self._target = target
         self._token_source = token_source or (lambda: [])
         self.clicked.connect(self._show_menu)
