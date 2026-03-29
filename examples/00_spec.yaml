@@ -18,6 +18,33 @@
 # platform: naver
 
 # ═══════════════════════════════════════════════════════════
+# browser (선택) — 브라우저 환경 + 핑거프린트 위장
+# ═══════════════════════════════════════════════════════════
+#
+# browser:
+#   viewport: [1920, 1080]                    # 화면 크기 (기본 1920x1080)
+#   user_agent: "Mozilla/5.0 ..."             # User-Agent (기본 Playwright 기본값)
+#   locale: ko-KR                             # 브라우저 locale (기본 ko-KR)
+#   timezone: Asia/Seoul                      # 시간대 (기본 Asia/Seoul)
+#   color_scheme: light                       # light | dark (기본 light)
+#   device_scale_factor: 1                    # DPI 배율 (기본 1)
+#   geolocation: [37.497, 127.027]            # 위치 위장 [위도, 경도]
+#
+#   fingerprint:                              # 안티 봇 탐지 위장
+#     webdriver: false                        # navigator.webdriver 위장 (기본 false)
+#     plugins: true                           # navigator.plugins 위장 (기본 true)
+#     chrome_runtime: true                    # window.chrome.runtime 위장 (기본 true)
+#     languages: true                         # navigator.languages 위장 (기본 true)
+#
+# 계정별 오버라이드:
+#   accounts:
+#     - username: id
+#       browser:                              # 이 계정만 다른 fingerprint
+#         viewport: [1440, 900]
+#         user_agent: "Mozilla/5.0 (Macintosh; ...) ..."
+#         geolocation: [37.517, 127.047]
+
+# ═══════════════════════════════════════════════════════════
 # accounts (필수) — 인증 정보 + 분배 설정. 최소 1개
 # ═══════════════════════════════════════════════════════════
 #

@@ -223,17 +223,19 @@ def _build_live_executor(
         _session_cache[username] = state
         return state
 
+    # ── 브라우저 설정 (글로벌 + 계정별 머지) ──
+    from automator.browser import build_context, merge_browser_config
+    global_browser_cfg = config.get("browser", {})
+
     def editor_factory(account: dict[str, Any]):
         from automator.smart_editor import SmartEditorOne
 
         state = _get_session(account)
+        account_browser_cfg = account.get("browser")
+        merged_cfg = merge_browser_config(global_browser_cfg, account_browser_cfg)
 
         browser = pw.chromium.launch(headless=headless, slow_mo=slow_mo)
-        ctx = browser.new_context(
-            storage_state=state,
-            locale="ko-KR",
-            timezone_id="Asia/Seoul",
-        )
+        ctx = build_context(browser, merged_cfg, storage_state=state)
         page = ctx.new_page()
         blog_id = account.get("blog_id", account["username"])
         write_url = f"https://blog.naver.com/{blog_id}?Redirect=Write&"
