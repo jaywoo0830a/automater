@@ -123,8 +123,9 @@ BlockTone = Literal["informational", "review", "story", "promotional"]
 @dataclass(frozen=True)
 class HeadingBlock:
     """H1–H6 제목 블록."""
-    level: Literal[1, 2, 3, 4, 5, 6]
-    text:  str
+    level:   Literal[1, 2, 3, 4, 5, 6]
+    text:    str
+    wait_ms: int = 0
 
 
 @dataclass(frozen=True)
@@ -139,6 +140,7 @@ class ParagraphBlock:
     """
     prompt:   str = ""
     newlines: int = 2
+    wait_ms:  int = 0
 
 
 @dataclass(frozen=True)
@@ -198,6 +200,7 @@ class ImageBlock:
     exif_gps_lng:       float | None = None
     filename_keyword:   str        = ""
     effects:            list[RegionalEffect] = field(default_factory=list)
+    wait_ms:            int        = 0
 
 
 @dataclass(frozen=True)
@@ -238,6 +241,7 @@ class FeaturedImageBlock:
     exif_gps_lng:           float | None = None
     filename_keyword:       str        = ""
     effects:                list[RegionalEffect] = field(default_factory=list)
+    wait_ms:                int        = 0
 
 
 @dataclass(frozen=True)
@@ -251,8 +255,9 @@ class TextBlock:
                 "plain" (기본) — 줄바꿈 기준으로 <p> 분리.
                 "html"         — 파일 내용 그대로 삽입.
     """
-    file:   str = ""
-    format: str = "plain"
+    file:    str = ""
+    format:  str = "plain"
+    wait_ms: int = 0
 
 
 @dataclass(frozen=True)
@@ -260,18 +265,21 @@ class ListBlock:
     """순서 있는/없는 목록 블록."""
     items:   tuple[str, ...]  = field(default_factory=tuple)
     ordered: bool             = False
+    wait_ms: int              = 0
 
 
 @dataclass(frozen=True)
 class QuoteBlock:
     """인용문 블록."""
-    text:        str      = ""
-    attribution: str      = ""
+    text:        str = ""
+    attribution: str = ""
+    wait_ms:     int = 0
 
 
 @dataclass(frozen=True)
 class DividerBlock:
     """구분선 블록. 내용 없음."""
+    wait_ms: int = 0
 
 
 # Sealed union — isinstance 분기에 사용

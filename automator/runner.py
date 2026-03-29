@@ -68,6 +68,7 @@ class JobRunner:
                     editor.move_cursor("end")
 
                 step.execute(editor)
+                step.wait()
 
                 if isinstance(step, (ImageStep, FeaturedImageStep)):
                     if isinstance(step, FeaturedImageStep):

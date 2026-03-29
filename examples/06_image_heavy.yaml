@@ -57,4 +57,3 @@ publish:
 run:
   interval: 90s
   headless: true
-  upload_delay: 2000ms

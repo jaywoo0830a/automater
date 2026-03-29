@@ -85,7 +85,7 @@ class ParagraphHandler(BlockHandler):
 
     def to_steps(self, block: ParagraphBlock, ctx: ContentContext) -> list[PostStep]:
         text = ctx.text_gen.generate(block.prompt)
-        return [ParagraphStep(text=text, newlines=block.newlines)]
+        return [ParagraphStep(text=text, newlines=block.newlines, wait_ms=block.wait_ms)]
 
 
 class TextHandler(BlockHandler):
@@ -109,7 +109,7 @@ class TextHandler(BlockHandler):
                     paragraphs.append(f"<p>{inner}</p>")
             text = "\n".join(paragraphs)
 
-        return [TextStep(text=text, is_html=(block.format == "html"))]
+        return [TextStep(text=text, is_html=(block.format == "html"), wait_ms=block.wait_ms)]
 
 
 def _build_filename(role: str, keyword: str) -> str:
@@ -140,7 +140,7 @@ class ImageHandler(BlockHandler):
             processed = ctx.img_proc.process(raw, block)
             name = _build_filename("preview", block.filename_keyword)
             path = _save_temp(processed, name, ctx)
-        return [ImageStep(path=path, link=block.link)]
+        return [ImageStep(path=path, link=block.link, wait_ms=block.wait_ms)]
 
 
 class FeaturedImageHandler(BlockHandler):
@@ -153,14 +153,14 @@ class FeaturedImageHandler(BlockHandler):
             processed = ctx.img_proc.process(raw, block)
             name = _build_filename("featured", block.filename_keyword)
             path = _save_temp(processed, name, ctx)
-        return [FeaturedImageStep(path=path, link=block.link)]
+        return [FeaturedImageStep(path=path, link=block.link, wait_ms=block.wait_ms)]
 
 
 class HeadingHandler(BlockHandler):
     """HeadingBlock -> [HeadingStep]"""
 
     def to_steps(self, block: HeadingBlock, ctx: ContentContext) -> list[PostStep]:
-        return [HeadingStep(level=block.level, text=block.text)]
+        return [HeadingStep(level=block.level, text=block.text, wait_ms=block.wait_ms)]
 
 
 class ListHandler(BlockHandler):
@@ -173,7 +173,7 @@ class ListHandler(BlockHandler):
         for i, item in enumerate(block.items, 1):
             prefix = f"{i}. " if block.ordered else "- "
             lines.append(f"{prefix}{item}")
-        return [ListStep(text="\n".join(lines))]
+        return [ListStep(text="\n".join(lines), wait_ms=block.wait_ms)]
 
 
 class QuoteHandler(BlockHandler):
@@ -185,14 +185,14 @@ class QuoteHandler(BlockHandler):
         text = block.text
         if block.attribution:
             text += f"\n— {block.attribution}"
-        return [QuoteStep(text=text)]
+        return [QuoteStep(text=text, wait_ms=block.wait_ms)]
 
 
 class DividerHandler(BlockHandler):
     """DividerBlock -> [DividerStep]"""
 
     def to_steps(self, block: DividerBlock, ctx: ContentContext) -> list[PostStep]:
-        return [DividerStep()]
+        return [DividerStep(wait_ms=block.wait_ms)]
 
 
 # ---------------------------------------------------------------------------

@@ -186,11 +186,14 @@ def _parse_block(
     if when and not evaluate_condition(str(when), values):
         return None
 
-    # Find block_type: first key that isn't "when"
+    # Parse wait annotation
+    wait_ms = _parse_wait(entry.get("wait"))
+
+    # Find block_type: first key that isn't "when" or "wait"
     block_type = None
     value = None
     for k, v in entry.items():
-        if k != "when":
+        if k not in ("when", "wait"):
             block_type = k
             value = v
             break
@@ -203,28 +206,28 @@ def _parse_block(
     if heading_match:
         level = int(heading_match.group(1))
         text = interpolate(str(value), values, pools, index, maps=maps)
-        return HeadingBlock(level=level, text=text)
+        return HeadingBlock(level=level, text=text, wait_ms=wait_ms)
 
     if block_type == "paragraph":
-        return _parse_paragraph(value, values, pools, index, maps)
+        return _parse_paragraph(value, values, pools, index, maps, wait_ms)
 
     if block_type == "text":
-        return _parse_text(value, values, pools, images_dir, index, maps)
+        return _parse_text(value, values, pools, images_dir, index, maps, wait_ms)
 
     if block_type == "image":
-        return _parse_image(value, values, pools, images_dir, index, exif_opt, maps)
+        return _parse_image(value, values, pools, images_dir, index, exif_opt, maps, wait_ms)
 
     if block_type == "featured_image":
-        return _parse_featured_image(value, values, pools, images_dir, index, exif_opt, maps)
+        return _parse_featured_image(value, values, pools, images_dir, index, exif_opt, maps, wait_ms)
 
     if block_type == "quote":
-        return _parse_quote(value, values, pools, index, maps)
+        return _parse_quote(value, values, pools, index, maps, wait_ms)
 
     if block_type == "list":
-        return _parse_list(value, values, pools, index, maps)
+        return _parse_list(value, values, pools, index, maps, wait_ms)
 
     if block_type == "divider":
-        return DividerBlock()
+        return DividerBlock(wait_ms=wait_ms)
 
     return None  # Unknown block type — skip silently
 
@@ -239,9 +242,10 @@ def _parse_paragraph(
     pools: dict[str, list[str]],
     index: int,
     maps: dict[str, str] | None = None,
+    wait_ms: int = 0,
 ) -> ParagraphBlock:
     prompt = interpolate(str(value), values, pools, index, maps=maps)
-    return ParagraphBlock(prompt=prompt)
+    return ParagraphBlock(prompt=prompt, wait_ms=wait_ms)
 
 
 def _parse_text(
@@ -251,6 +255,7 @@ def _parse_text(
     images_dir: str,
     index: int,
     maps: dict[str, str] | None = None,
+    wait_ms: int = 0,
 ) -> TextBlock:
     """Parse text block — file content insertion, no AI.
 
@@ -262,7 +267,7 @@ def _parse_text(
     if isinstance(value, str):
         filename = interpolate(value, values, pools, index, maps=maps)
         path = _resolve_path(images_dir, filename)
-        return TextBlock(file=path, format="plain")
+        return TextBlock(file=path, format="plain", wait_ms=wait_ms)
 
     if isinstance(value, dict):
         cfg = interpolate_deep(dict(value), values, pools, index, maps=maps)
@@ -271,9 +276,55 @@ def _parse_text(
         fmt = str(cfg.get("format", "plain"))
         if fmt not in ("plain", "html"):
             fmt = "plain"
-        return TextBlock(file=path, format=fmt)
+        # wait inside dict form overrides entry-level wait
+        inner_wait = _parse_wait(cfg.get("wait"))
+        return TextBlock(file=path, format=fmt, wait_ms=inner_wait or wait_ms)
 
     return TextBlock()
+
+
+_WAIT_RE = re.compile(r"(\d+(?:\.\d+)?)\s*([smh]?)(?:\s*~\s*(\d+(?:\.\d+)?)\s*([smh]?))?")
+
+_WAIT_UNIT = {"": 1000, "s": 1000, "ms": 1, "m": 60_000, "h": 3_600_000}
+
+
+def _parse_wait(raw: Any) -> int:
+    """Parse wait annotation → milliseconds.
+
+        "2s"         → 2000
+        "1500ms"     → 1500
+        "1s ~ 3s"    → random 1000~3000
+        None / 0     → 0
+    """
+    if raw is None or raw == 0:
+        return 0
+    if isinstance(raw, (int, float)):
+        return int(raw * 1000)  # bare number treated as seconds
+
+    s = str(raw).strip().lower()
+    if s.endswith("ms"):
+        # handle "500ms" or "500ms ~ 1500ms"
+        parts = s.replace("ms", "").split("~")
+        if len(parts) == 2:
+            lo, hi = float(parts[0].strip()), float(parts[1].strip())
+            return random.randint(int(lo), int(hi))
+        return int(float(parts[0].strip()))
+
+    m = _WAIT_RE.match(s)
+    if not m:
+        return 0
+
+    lo_val = float(m.group(1))
+    lo_unit = m.group(2) or "s"
+    lo_ms = int(lo_val * _WAIT_UNIT.get(lo_unit, 1000))
+
+    if m.group(3):
+        hi_val = float(m.group(3))
+        hi_unit = m.group(4) or lo_unit
+        hi_ms = int(hi_val * _WAIT_UNIT.get(hi_unit, 1000))
+        return random.randint(min(lo_ms, hi_ms), max(lo_ms, hi_ms))
+
+    return lo_ms
 
 
 def _parse_effects(raw: Any) -> list[RegionalEffect]:
@@ -304,21 +355,24 @@ def _parse_image(
     index: int,
     exif_opt: bool = True,
     maps: dict[str, str] | None = None,
+    wait_ms: int = 0,
 ) -> ImageBlock:
     if isinstance(value, str):
         filename = interpolate(value, values, pools, index, maps=maps)
         path = _resolve_path(images_dir, filename)
-        return ImageBlock(path=path, exif_optimization=exif_opt)
+        return ImageBlock(path=path, exif_optimization=exif_opt, wait_ms=wait_ms)
 
     if isinstance(value, dict):
         cfg = interpolate_deep(dict(value), values, pools, index, maps=maps)
         path = _resolve_path(images_dir, str(cfg.get("path", "")))
+        inner_wait = _parse_wait(cfg.get("wait"))
         return ImageBlock(
             path=path,
             alt=str(cfg.get("alt", "")),
             link=str(cfg.get("link", "")),
             exif_optimization=exif_opt,
             effects=_parse_effects(cfg.get("effects")),
+            wait_ms=inner_wait or wait_ms,
         )
 
     return ImageBlock(exif_optimization=exif_opt)
@@ -332,11 +386,12 @@ def _parse_featured_image(
     index: int,
     exif_opt: bool = True,
     maps: dict[str, str] | None = None,
+    wait_ms: int = 0,
 ) -> FeaturedImageBlock:
     if isinstance(value, str):
         filename = interpolate(value, values, pools, index, maps=maps)
         path = _resolve_path(images_dir, filename)
-        return FeaturedImageBlock(path=path, exif_optimization=exif_opt)
+        return FeaturedImageBlock(path=path, exif_optimization=exif_opt, wait_ms=wait_ms)
 
     if isinstance(value, dict):
         cfg = interpolate_deep(dict(value), values, pools, index, maps=maps)
@@ -346,6 +401,7 @@ def _parse_featured_image(
         gps_lat = gps[0] if isinstance(gps, (list, tuple)) and len(gps) >= 2 else None
         gps_lng = gps[1] if isinstance(gps, (list, tuple)) and len(gps) >= 2 else None
 
+        inner_wait = _parse_wait(cfg.get("wait"))
         return FeaturedImageBlock(
             path=path,
             overlay_text=cfg.get("overlay_text", ""),
@@ -359,6 +415,7 @@ def _parse_featured_image(
             exif_gps_lng=gps_lng,
             filename_keyword=str(cfg.get("filename_keyword", "")),
             effects=_parse_effects(cfg.get("effects")),
+            wait_ms=inner_wait or wait_ms,
         )
 
     return FeaturedImageBlock(exif_optimization=exif_opt)
@@ -370,16 +427,18 @@ def _parse_quote(
     pools: dict[str, list[str]],
     index: int,
     maps: dict[str, str] | None = None,
+    wait_ms: int = 0,
 ) -> QuoteBlock:
     if isinstance(value, str):
         text = interpolate(value, values, pools, index, maps=maps)
-        return QuoteBlock(text=text)
+        return QuoteBlock(text=text, wait_ms=wait_ms)
 
     if isinstance(value, dict):
         cfg = interpolate_deep(dict(value), values, pools, index, maps=maps)
         return QuoteBlock(
             text=str(cfg.get("text", "")),
             attribution=str(cfg.get("attribution", "")),
+            wait_ms=wait_ms,
         )
 
     return QuoteBlock()
@@ -391,12 +450,13 @@ def _parse_list(
     pools: dict[str, list[str]],
     index: int,
     maps: dict[str, str] | None = None,
+    wait_ms: int = 0,
 ) -> ListBlock:
     if isinstance(value, list):
         items = tuple(
             interpolate(str(item), values, pools, index, maps=maps) for item in value
         )
-        return ListBlock(items=items)
+        return ListBlock(items=items, wait_ms=wait_ms)
     return ListBlock()
 
 

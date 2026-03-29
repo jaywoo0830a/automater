@@ -19,15 +19,8 @@ class RunTab(QWidget):
         self._interval.setValue(60)
         self._interval.setSuffix(" 초")
 
-        self._upload_delay = QSpinBox()
-        self._upload_delay.setRange(0, 30000)
-        self._upload_delay.setValue(1500)
-        self._upload_delay.setSuffix(" ms")
-        self._upload_delay.setSingleStep(500)
-
         timing_form = QFormLayout()
         timing_form.addRow("포스트 간 대기:", self._interval)
-        timing_form.addRow("이미지 업로드 딜레이:", self._upload_delay)
 
         timing_group = QGroupBox("타이밍")
         timing_group.setLayout(timing_form)
@@ -61,9 +54,6 @@ class RunTab(QWidget):
         interval = self._interval.value()
         if interval != 60:
             run["interval"] = f"{interval}s"
-        upload_delay = self._upload_delay.value()
-        if upload_delay != 1500:
-            run["upload_delay"] = f"{upload_delay}ms"
         if not self._headless.isChecked():
             run["headless"] = False
         on_failure = self._FAIL_MAP.get(self._on_failure.currentText(), "stop")
@@ -77,9 +67,6 @@ class RunTab(QWidget):
 
         interval_raw = str(run.get("interval", "60s"))
         self._interval.setValue(int(interval_raw.rstrip("s")))
-
-        delay_raw = str(run.get("upload_delay", "1500ms"))
-        self._upload_delay.setValue(int(delay_raw.rstrip("ms")))
 
         self._headless.setChecked(run.get("headless", True))
 

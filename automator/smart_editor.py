@@ -54,12 +54,11 @@ class SmartEditorOne(BlogEditor):
     browser_actions functions. No selector strings are hardcoded here.
 
     Args:
-        page:            An authenticated Playwright Page.
-        write_url:       Blog write page URL (e.g. "https://blog.naver.com/{blog_id}?Redirect=Write&").
-        dry_run:         If True (default), publish() is a no-op.
-        upload_delay_ms: Delay in ms between image uploads (default 1500).
-        sel_source:      Optional SelectorSource for dependency injection.
-                         When None, loads selectors/naver/editor.yaml directly.
+        page:       An authenticated Playwright Page.
+        write_url:  Blog write page URL (e.g. "https://blog.naver.com/{blog_id}?Redirect=Write&").
+        dry_run:    If True (default), publish() is a no-op.
+        sel_source: Optional SelectorSource for dependency injection.
+                    When None, loads selectors/naver/editor.yaml directly.
     """
 
     def __init__(
@@ -67,10 +66,9 @@ class SmartEditorOne(BlogEditor):
         page: Page,
         write_url: str,
         dry_run: bool = True,
-        upload_delay_ms: int = 1500,
         sel_source: SelectorSource | None = None,
     ) -> None:
-        super().__init__(dry_run=dry_run, upload_delay_ms=upload_delay_ms)
+        super().__init__(dry_run=dry_run)
         self._page       = page
         self._write_url  = write_url
         self._sel_source = sel_source
@@ -365,9 +363,6 @@ class SmartEditorOne(BlogEditor):
         sel.locator(frame, "editor_image").last.wait_for(
             state="visible", timeout=10_000
         )
-
-        if self._upload_delay_ms > 0:
-            time.sleep(self._upload_delay_ms / 1000)
 
     def insert_link(self, url: str) -> None:
         """

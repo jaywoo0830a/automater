@@ -2,7 +2,6 @@
 tests/test_post_step.py
 ------------------------
 PostStep.execute() — each step calls the correct BlogEditor primitive.
-PostStep properties — needs_upload_delay.
 """
 
 import pytest

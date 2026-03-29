@@ -57,4 +57,3 @@ run:
   interval: 60s
   on_failure: stop
   headless: true
-  upload_delay: 1500ms

@@ -27,6 +27,7 @@ Each step carries data + execute(editor).  No isinstance anywhere.
 
 from __future__ import annotations
 
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -53,25 +54,17 @@ class BlogEditor(ABC):
     New block types never require new methods here.
 
     Args:
-        dry_run:         If True (default), publish() prepares everything but
-                         skips the final confirm — the post is never actually published.
-        upload_delay_ms: Delay in ms between consecutive file uploads.
-                         Platform-specific default; 0 = no delay.
+        dry_run: If True (default), publish() prepares everything but
+                 skips the final confirm — the post is never actually published.
     """
 
-    def __init__(self, *, dry_run: bool = True, upload_delay_ms: int = 0) -> None:
+    def __init__(self, *, dry_run: bool = True) -> None:
         self._dry_run = dry_run
-        self._upload_delay_ms = upload_delay_ms
 
     @property
     def dry_run(self) -> bool:
         """Whether this editor is in dry-run mode."""
         return self._dry_run
-
-    @property
-    def upload_delay_ms(self) -> int:
-        """Delay in ms between consecutive file uploads."""
-        return self._upload_delay_ms
 
     @abstractmethod
     def open(self) -> None:
@@ -130,11 +123,21 @@ class BlogEditor(ABC):
 # ---------------------------------------------------------------------------
 
 class PostStep(ABC):
-    """Abstract command that knows how to execute itself on a BlogEditor."""
+    """Abstract command that knows how to execute itself on a BlogEditor.
+
+    Subclasses must define ``wait_ms: int = 0`` field.
+    After execute(), the runner should call ``wait()`` to honour the delay.
+    """
 
     @abstractmethod
     def execute(self, editor: BlogEditor) -> None:
         """Execute this step on the given editor."""
+
+    def wait(self) -> None:
+        """Block for wait_ms if set. Called by runner after execute()."""
+        ms = getattr(self, "wait_ms", 0)
+        if ms > 0:
+            time.sleep(ms / 1000)
 
 
 # ---------------------------------------------------------------------------
@@ -146,6 +149,7 @@ class ParagraphStep(PostStep):
     """Insert a paragraph of text."""
     text:     str
     newlines: int = 2
+    wait_ms:  int = 0
 
     def execute(self, editor: BlogEditor) -> None:
         editor.insert_text(self.text, self.newlines)
@@ -154,8 +158,9 @@ class ParagraphStep(PostStep):
 @dataclass(frozen=True)
 class ImageStep(PostStep):
     """Upload a body image, optionally attaching a link."""
-    path: str
-    link: str = ""
+    path:    str
+    link:    str = ""
+    wait_ms: int = 0
 
     def execute(self, editor: BlogEditor) -> None:
         editor.upload_file(self.path)
@@ -166,8 +171,9 @@ class ImageStep(PostStep):
 @dataclass(frozen=True)
 class FeaturedImageStep(PostStep):
     """Upload a featured image, optionally attaching a link."""
-    path: str
-    link: str = ""
+    path:    str
+    link:    str = ""
+    wait_ms: int = 0
 
     def execute(self, editor: BlogEditor) -> None:
         editor.upload_file(self.path)
@@ -178,8 +184,9 @@ class FeaturedImageStep(PostStep):
 @dataclass(frozen=True)
 class TextStep(PostStep):
     """Insert raw text content (from file). No AI generation."""
-    text: str
+    text:    str
     is_html: bool = False
+    wait_ms: int = 0
 
     def execute(self, editor: BlogEditor) -> None:
         editor.insert_text(self.text, 2)
@@ -188,8 +195,9 @@ class TextStep(PostStep):
 @dataclass(frozen=True)
 class HeadingStep(PostStep):
     """Insert a heading with editor-native formatting."""
-    level: int
-    text:  str
+    level:   int
+    text:    str
+    wait_ms: int = 0
 
     def execute(self, editor: BlogEditor) -> None:
         editor.insert_heading(self.text, self.level)
@@ -198,7 +206,8 @@ class HeadingStep(PostStep):
 @dataclass(frozen=True)
 class ListStep(PostStep):
     """Insert a list as formatted text."""
-    text: str
+    text:    str
+    wait_ms: int = 0
 
     def execute(self, editor: BlogEditor) -> None:
         editor.insert_text(self.text, 2)
@@ -207,7 +216,8 @@ class ListStep(PostStep):
 @dataclass(frozen=True)
 class QuoteStep(PostStep):
     """Insert a quote with editor-native formatting."""
-    text: str
+    text:    str
+    wait_ms: int = 0
 
     def execute(self, editor: BlogEditor) -> None:
         editor.insert_quote(self.text)
@@ -216,6 +226,7 @@ class QuoteStep(PostStep):
 @dataclass(frozen=True)
 class DividerStep(PostStep):
     """Insert a horizontal divider."""
+    wait_ms: int = 0
 
     def execute(self, editor: BlogEditor) -> None:
         editor.insert_divider()
