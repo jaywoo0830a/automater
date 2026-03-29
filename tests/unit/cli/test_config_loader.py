@@ -45,7 +45,7 @@ FULL = {
     ],
     "images": "./images",
     "publish": {"schedule": "now + 15m ~ 30m", "tags": ["교육"], "visibility": "public"},
-    "run": {"interval": "60s", "max_daily": 10, "headless": True},
+    "run": {"interval": "60s", "headless": True},
 }
 
 

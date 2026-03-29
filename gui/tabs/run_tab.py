@@ -1,4 +1,4 @@
-"""실행 설정 탭 — 간격, 일일 최대, 브라우저 설정."""
+"""실행 설정 탭 — 간격, 브라우저 설정."""
 
 from __future__ import annotations
 
@@ -19,11 +19,6 @@ class RunTab(QWidget):
         self._interval.setValue(60)
         self._interval.setSuffix(" 초")
 
-        self._max_daily = QSpinBox()
-        self._max_daily.setRange(1, 1000)
-        self._max_daily.setValue(10)
-        self._max_daily.setSuffix(" 개")
-
         self._upload_delay = QSpinBox()
         self._upload_delay.setRange(0, 30000)
         self._upload_delay.setValue(1500)
@@ -32,7 +27,6 @@ class RunTab(QWidget):
 
         timing_form = QFormLayout()
         timing_form.addRow("포스트 간 대기:", self._interval)
-        timing_form.addRow("일일 최대 포스트:", self._max_daily)
         timing_form.addRow("이미지 업로드 딜레이:", self._upload_delay)
 
         timing_group = QGroupBox("타이밍")
@@ -67,9 +61,6 @@ class RunTab(QWidget):
         interval = self._interval.value()
         if interval != 60:
             run["interval"] = f"{interval}s"
-        max_daily = self._max_daily.value()
-        if max_daily != 10:
-            run["max_daily"] = max_daily
         upload_delay = self._upload_delay.value()
         if upload_delay != 1500:
             run["upload_delay"] = f"{upload_delay}ms"
@@ -86,8 +77,6 @@ class RunTab(QWidget):
 
         interval_raw = str(run.get("interval", "60s"))
         self._interval.setValue(int(interval_raw.rstrip("s")))
-
-        self._max_daily.setValue(int(run.get("max_daily", 10)))
 
         delay_raw = str(run.get("upload_delay", "1500ms"))
         self._upload_delay.setValue(int(delay_raw.rstrip("ms")))

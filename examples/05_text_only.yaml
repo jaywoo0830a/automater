@@ -30,5 +30,4 @@ publish:
 
 run:
   interval: 30s
-  max_daily: 20
   headless: true

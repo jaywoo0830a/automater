@@ -9,7 +9,6 @@ Public interface
     TitleOption         — title template + pools
     Section             — block container (role, tone)
     PublishOption       — schedule, tags, visibility
-    RunSetting          — throttling, failure handling
 
 Block types (inside Section.blocks)
 ------------------------------------
@@ -335,21 +334,3 @@ class PublishOption:
     visibility: Visibility = "public"
 
 
-# ---------------------------------------------------------------------------
-# RunSetting
-# ---------------------------------------------------------------------------
-
-OnFailure = Literal["stop", "switch_account"]
-
-
-@dataclass(frozen=True)
-class RunSetting:
-    """Runtime behaviour: throttling, failure handling, browser."""
-    scheduled:         bool      = True
-    schedule_interval: int       = 12
-    post_interval:     int       = 60
-    max_daily_posts:   int       = 10
-    on_failure:        OnFailure = "stop"
-    headless:          bool      = True
-    slow_mo:           int       = 0
-    upload_delay_ms:   int       = 1500   # 이미지 업로드 간 대기 (ms)

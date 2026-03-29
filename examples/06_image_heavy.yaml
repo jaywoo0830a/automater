@@ -56,6 +56,5 @@ publish:
 
 run:
   interval: 90s
-  max_daily: 8
   headless: true
   upload_delay: 2000ms

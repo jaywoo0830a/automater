@@ -30,7 +30,6 @@ from automator.options import (
     PublishOption,
     QuoteBlock,
     RegionalEffect,
-    RunSetting,
     Section,
     TextBlock,
     TitleOption,
@@ -564,33 +563,3 @@ def merge_account_run(
     return merged
 
 
-def _build_run(run_config: dict[str, Any]) -> RunSetting:
-    if not run_config:
-        return RunSetting()
-
-    interval = _parse_duration(run_config.get("interval", "60s"))
-    upload_delay = _parse_duration(run_config.get("upload_delay", "1500ms"))
-
-    return RunSetting(
-        post_interval=interval,
-        max_daily_posts=int(run_config.get("max_daily", 10)),
-        on_failure=run_config.get("on_failure", "stop"),
-        headless=bool(run_config.get("headless", True)),
-        upload_delay_ms=upload_delay,
-    )
-
-
-def _parse_duration(value: Any) -> int:
-    if isinstance(value, (int, float)):
-        return int(value)
-    s = str(value).strip().lower()
-    if s.endswith("ms"):
-        return int(s[:-2])
-    if s.endswith("min"):
-        return int(s[:-3]) * 60
-    if s.endswith("s"):
-        return int(s[:-1])
-    try:
-        return int(s)
-    except ValueError:
-        return 60
