@@ -32,6 +32,7 @@ from automator.options import (
     RegionalEffect,
     RunSetting,
     Section,
+    TextBlock,
     TitleOption,
 )
 
@@ -208,6 +209,9 @@ def _parse_block(
     if block_type == "paragraph":
         return _parse_paragraph(value, values, pools, index, maps)
 
+    if block_type == "text":
+        return _parse_text(value, values, pools, images_dir, index, maps)
+
     if block_type == "image":
         return _parse_image(value, values, pools, images_dir, index, exif_opt, maps)
 
@@ -239,6 +243,38 @@ def _parse_paragraph(
 ) -> ParagraphBlock:
     prompt = interpolate(str(value), values, pools, index, maps=maps)
     return ParagraphBlock(prompt=prompt)
+
+
+def _parse_text(
+    value: Any,
+    values: dict[str, str],
+    pools: dict[str, list[str]],
+    images_dir: str,
+    index: int,
+    maps: dict[str, str] | None = None,
+) -> TextBlock:
+    """Parse text block — file content insertion, no AI.
+
+        - text: "{i}.txt"
+        - text:
+            file: "{keyword:region}/{i}.txt"
+            format: html
+    """
+    if isinstance(value, str):
+        filename = interpolate(value, values, pools, index, maps=maps)
+        path = _resolve_path(images_dir, filename)
+        return TextBlock(file=path, format="plain")
+
+    if isinstance(value, dict):
+        cfg = interpolate_deep(dict(value), values, pools, index, maps=maps)
+        filename = str(cfg.get("file", ""))
+        path = _resolve_path(images_dir, filename)
+        fmt = str(cfg.get("format", "plain"))
+        if fmt not in ("plain", "html"):
+            fmt = "plain"
+        return TextBlock(file=path, format=fmt)
+
+    return TextBlock()
 
 
 def _parse_effects(raw: Any) -> list[RegionalEffect]:

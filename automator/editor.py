@@ -176,6 +176,16 @@ class FeaturedImageStep(PostStep):
 
 
 @dataclass(frozen=True)
+class TextStep(PostStep):
+    """Insert raw text content (from file). No AI generation."""
+    text: str
+    is_html: bool = False
+
+    def execute(self, editor: BlogEditor) -> None:
+        editor.insert_text(self.text, 2)
+
+
+@dataclass(frozen=True)
 class HeadingStep(PostStep):
     """Insert a heading with editor-native formatting."""
     level: int

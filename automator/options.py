@@ -242,6 +242,21 @@ class FeaturedImageBlock:
 
 
 @dataclass(frozen=True)
+class TextBlock:
+    """
+    외부 파일 내용을 그대로 삽입하는 블록. AI를 거치지 않는다.
+
+    Attributes:
+        file:   읽을 파일 경로. 토큰 치환 후 resolve된 경로.
+        format: 파일 내용 해석 방식.
+                "plain" (기본) — 줄바꿈 기준으로 <p> 분리.
+                "html"         — 파일 내용 그대로 삽입.
+    """
+    file:   str = ""
+    format: str = "plain"
+
+
+@dataclass(frozen=True)
 class ListBlock:
     """순서 있는/없는 목록 블록."""
     items:   tuple[str, ...]  = field(default_factory=tuple)
@@ -264,6 +279,7 @@ class DividerBlock:
 Block = Union[
     HeadingBlock,
     ParagraphBlock,
+    TextBlock,
     ImageBlock,
     FeaturedImageBlock,
     ListBlock,

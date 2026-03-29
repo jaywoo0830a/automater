@@ -23,6 +23,7 @@ from typing import Any, TYPE_CHECKING
 from automator.editor import (
     PostStep,
     ParagraphStep,
+    TextStep,
     ImageStep,
     FeaturedImageStep,
     HeadingStep,
@@ -33,6 +34,7 @@ from automator.editor import (
 from automator.options import (
     Block,
     ParagraphBlock,
+    TextBlock,
     ImageBlock,
     FeaturedImageBlock,
     HeadingBlock,
@@ -84,6 +86,30 @@ class ParagraphHandler(BlockHandler):
     def to_steps(self, block: ParagraphBlock, ctx: ContentContext) -> list[PostStep]:
         text = ctx.text_gen.generate(block.prompt)
         return [ParagraphStep(text=text, newlines=block.newlines)]
+
+
+class TextHandler(BlockHandler):
+    """TextBlock -> [TextStep]. 외부 파일 읽기 — AI 없음."""
+
+    def to_steps(self, block: TextBlock, ctx: ContentContext) -> list[PostStep]:
+        path = Path(block.file)
+        if not path.exists():
+            raise FileNotFoundError(f"Text file not found: {path}")
+        raw = path.read_text(encoding="utf-8")
+
+        if block.format == "html":
+            text = raw
+        else:
+            # plain: 빈 줄 기준으로 <p> 분리, 단일 줄바꿈은 <br>
+            paragraphs = []
+            for chunk in raw.split("\n\n"):
+                chunk = chunk.strip()
+                if chunk:
+                    inner = chunk.replace("\n", "<br>")
+                    paragraphs.append(f"<p>{inner}</p>")
+            text = "\n".join(paragraphs)
+
+        return [TextStep(text=text, is_html=(block.format == "html"))]
 
 
 def _build_filename(role: str, keyword: str) -> str:
@@ -175,6 +201,7 @@ class DividerHandler(BlockHandler):
 
 HANDLERS: dict[type[Block], BlockHandler] = {
     ParagraphBlock:     ParagraphHandler(),
+    TextBlock:          TextHandler(),
     ImageBlock:         ImageHandler(),
     FeaturedImageBlock: FeaturedImageHandler(),
     HeadingBlock:       HeadingHandler(),
