@@ -66,6 +66,11 @@ def main(argv: list[str] | None = None) -> int:
         _print_plan(plan)
         return 0
 
+    # --resume flag overrides on_resume to skip
+    if args.resume:
+        config.setdefault("run", {})["on_resume"] = "skip"
+        log.info("Resume mode - skipping completed combos")
+
     # Execute
     if args.execute:
         executor = _build_live_executor(config, args)
@@ -94,6 +99,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--prepare", action="store_true", help="Prepare sessions (manual login).")
     p.add_argument("--limit", type=int, default=None, help="Max combinations.")
     p.add_argument("--account", action="append", default=[], help="Filter account (repeatable).")
+    p.add_argument("--resume", action="store_true", help="Resume: skip completed combos.")
     p.add_argument("--headless", action="store_true", default=None)
     p.add_argument("--no-headless", action="store_true")
     p.add_argument("-v", "--verbose", action="store_true")

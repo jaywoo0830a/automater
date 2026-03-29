@@ -40,6 +40,7 @@ def load_config(path: str) -> dict[str, Any]:
     raw = _read_file(path)
     config = _normalize(raw)
     config["_base_dir"] = str(Path(path).resolve().parent)
+    config["_config_path"] = str(Path(path).resolve())
     _validate(config)
     return config
 

@@ -14,7 +14,7 @@ from pathlib import Path
 
 import yaml
 from PySide6.QtCore import Qt, Signal, QObject
-from PySide6.QtGui import QTextCursor
+from PySide6.QtGui import QTextCursor, QCloseEvent
 from PySide6.QtWidgets import (
     QMainWindow,
     QTabWidget,
@@ -116,6 +116,11 @@ class MainWindow(QMainWindow):
         self._btn_execute.setStyleSheet("QPushButton { font-weight: bold; }")
         self._btn_execute.clicked.connect(self._run_execute)
 
+        self._btn_stop = QPushButton("중단")
+        self._btn_stop.setStyleSheet("QPushButton { color: red; font-weight: bold; }")
+        self._btn_stop.clicked.connect(self._stop_execution)
+        self._btn_stop.setVisible(False)
+
         self._workflow_buttons = [
             self._btn_validate, self._btn_prepare, self._btn_preview_plan,
             self._btn_dryrun, self._btn_execute,
@@ -128,6 +133,7 @@ class MainWindow(QMainWindow):
         btn_row.addSpacing(20)
         for btn in self._workflow_buttons:
             btn_row.addWidget(btn)
+        btn_row.addWidget(self._btn_stop)
 
         # ── Layout ──
         splitter = QSplitter(Qt.Orientation.Vertical)
@@ -149,11 +155,51 @@ class MainWindow(QMainWindow):
 
         self._last_saved_path: str = ""
         self._running = False
+        self._proc: subprocess.Popen | None = None
 
         # ── CLI signal bridge ──
         self._cli_signals = _CliSignals()
         self._cli_signals.output.connect(self._on_cli_output)
         self._cli_signals.finished.connect(self._on_cli_finished)
+
+    # ------------------------------------------------------------------
+    # Close event
+    # ------------------------------------------------------------------
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        if self._running and self._proc is not None:
+            reply = QMessageBox.question(
+                self,
+                "작업 실행 중",
+                "현재 작업이 실행 중입니다. 종료하시겠습니까?\n\n"
+                "종료하면 실행 중인 작업이 중단됩니다.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                event.ignore()
+                return
+
+            # 자식 프로세스 정리
+            self._kill_proc()
+
+        event.accept()
+
+    def _kill_proc(self) -> None:
+        """실행 중인 CLI 프로세스를 종료한다."""
+        proc = self._proc
+        if proc is None:
+            return
+        try:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=3)
+        except Exception:
+            pass
+        self._proc = None
+        self._running = False
 
     # ------------------------------------------------------------------
     # Build config
@@ -294,6 +340,17 @@ class MainWindow(QMainWindow):
         self._running = running
         for btn in self._workflow_buttons:
             btn.setEnabled(not running)
+        self._btn_stop.setVisible(running)
+
+    def _stop_execution(self) -> None:
+        """실행 중인 CLI 프로세스를 중단한다."""
+        if not self._running:
+            return
+        self._kill_proc()
+        self._log.moveCursor(QTextCursor.MoveOperation.End)
+        self._log.insertPlainText("\n\n-- 사용자에 의해 중단됨 --\n")
+        self._set_running(False)
+        self._status.showMessage("중단됨", 5000)
 
     def _run_cli(self, *args: str, label: str = "") -> None:
         """Run CLI command in background thread."""
@@ -313,7 +370,7 @@ class MainWindow(QMainWindow):
 
         def _worker():
             try:
-                proc = subprocess.Popen(
+                self._proc = subprocess.Popen(
                     cmd,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
@@ -322,12 +379,13 @@ class MainWindow(QMainWindow):
                     errors="replace",
                     env=env,
                 )
-                for line in proc.stdout:
+                for line in self._proc.stdout:
                     self._cli_signals.output.emit(line)
-                proc.wait()
+                self._proc.wait()
             except Exception as exc:
                 self._cli_signals.output.emit(f"\n[ERROR] {exc}\n")
             finally:
+                self._proc = None
                 self._cli_signals.finished.emit(label)
 
         thread = threading.Thread(target=_worker, daemon=True)
@@ -358,11 +416,47 @@ class MainWindow(QMainWindow):
         self._run_cli(label="Dry-run")
 
     def _run_execute(self) -> None:
-        reply = QMessageBox.question(
-            self, "캠페인 실행",
-            f"캠페인을 실제로 실행합니까?\n\n{self._last_saved_path}",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        )
-        if reply != QMessageBox.StandardButton.Yes:
+        if not self._ensure_saved():
             return
-        self._run_cli("--execute", label="실행")
+
+        # 이전 진행 기록이 있는지 확인
+        has_progress = self._check_progress()
+
+        if has_progress:
+            msg = QMessageBox(self)
+            msg.setWindowTitle("캠페인 실행")
+            msg.setText("이전 실행에서 진행 기록이 있습니다.")
+            msg.setInformativeText("어떻게 실행하시겠습니까?")
+            btn_restart = msg.addButton("처음부터", QMessageBox.ButtonRole.AcceptRole)
+            btn_skip = msg.addButton("이어서", QMessageBox.ButtonRole.AcceptRole)
+            btn_cancel = msg.addButton("취소", QMessageBox.ButtonRole.RejectRole)
+            msg.exec()
+
+            clicked = msg.clickedButton()
+            if clicked == btn_cancel:
+                return
+            elif clicked == btn_skip:
+                self._run_cli("--execute", "--resume", label="실행 (이어서)")
+            else:
+                self._run_cli("--execute", label="실행")
+        else:
+            reply = QMessageBox.question(
+                self, "캠페인 실행",
+                f"캠페인을 실제로 실행합니까?\n\n{self._last_saved_path}",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+            self._run_cli("--execute", label="실행")
+
+    def _check_progress(self) -> bool:
+        """이전 실행의 진행 기록이 있는지 확인."""
+        if not self._last_saved_path:
+            return False
+        try:
+            from cli.progress import ProgressTracker
+            base_dir = str(Path(self._last_saved_path).parent)
+            pt = ProgressTracker(self._last_saved_path, base_dir)
+            return pt.completed_count > 0
+        except Exception:
+            return False

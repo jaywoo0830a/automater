@@ -232,6 +232,13 @@
 # run:
 #   interval: 60s
 #   on_failure: stop              # stop | switch_account
+#   on_resume: skip               # restart(기본) | skip
 #   headless: true
 #   parallel: true                # 계정별 병렬 실행 (기본 false)
 #   max_workers: 3                # 동시 실행 계정 수 (기본 = 계정 수)
+#
+# on_resume 옵션:
+#   restart  — 중단 후 재실행 시 처음부터 다시 (기본)
+#   skip     — 완료된 조합은 건너뛰고 나머지만 실행
+#
+#   진행 기록은 workspace/progress/ 에 자동 저장됩니다.

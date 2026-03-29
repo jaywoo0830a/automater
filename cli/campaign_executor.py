@@ -284,18 +284,30 @@ class CampaignExecutor:
             dry_run: If True, build specs but skip runner.run().
             limit:   Max combos to process.
         """
+        from cli.progress import ProgressTracker
+
         combos = self._build_combos(config, limit)
         assignments = assign_weighted(combos, config["accounts"])
         result = ExecutionResult()
 
         global_run = config.get("run", {})
+        on_resume = global_run.get("on_resume", "restart")
         parallel = bool(global_run.get("parallel", False))
         max_workers = int(global_run.get("max_workers", len(assignments)))
 
+        # Progress tracking
+        config_path = config.get("_config_path", "campaign")
+        base_dir = config.get("_base_dir", ".")
+        progress = ProgressTracker(config_path, base_dir)
+
+        if on_resume == "restart" and not dry_run:
+            progress.reset()
+        progress.set_total(len(combos))
+
         if parallel and not dry_run and len(assignments) > 1:
-            self._execute_parallel(assignments, config, global_run, max_workers, result)
+            self._execute_parallel(assignments, config, global_run, max_workers, result, progress, on_resume)
         else:
-            self._execute_serial(assignments, config, global_run, dry_run, result)
+            self._execute_serial(assignments, config, global_run, dry_run, result, progress, on_resume)
 
         return result
 
@@ -306,6 +318,8 @@ class CampaignExecutor:
         global_run: dict[str, Any],
         dry_run: bool,
         result: ExecutionResult,
+        progress=None,
+        on_resume: str = "restart",
     ) -> None:
         for account, assigned_combos in assignments:
             account_idx = config["accounts"].index(account)
@@ -318,6 +332,8 @@ class CampaignExecutor:
                 dry_run=dry_run,
                 interval=interval,
                 result=result,
+                progress=progress,
+                on_resume=on_resume,
             )
 
     def _execute_parallel(
@@ -327,6 +343,8 @@ class CampaignExecutor:
         global_run: dict[str, Any],
         max_workers: int,
         result: ExecutionResult,
+        progress=None,
+        on_resume: str = "restart",
     ) -> None:
         logger.info(
             "병렬 실행: %d 계정, max_workers=%d",
@@ -344,6 +362,8 @@ class CampaignExecutor:
                 dry_run=False,
                 interval=interval,
                 result=result,
+                progress=progress,
+                on_resume=on_resume,
             )
 
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
@@ -380,6 +400,8 @@ class CampaignExecutor:
         dry_run: bool,
         interval: int,
         result: ExecutionResult,
+        progress=None,
+        on_resume: str = "restart",
     ) -> None:
         from cli.session_manager import is_session_error
 
@@ -398,6 +420,13 @@ class CampaignExecutor:
                 return
 
         for i, combo in enumerate(combos):
+            combo_index = combo.index - 1  # 0-based global index
+
+            # skip 모드: 이미 완료된 조합 건너뛰기
+            if on_resume == "skip" and progress and progress.is_done(combo_index):
+                logger.info("[SKIP] %s | combo %d (already done)", username, combo.index)
+                continue
+
             try:
                 spec = build_spec(combo, config, account_idx)
 
@@ -417,6 +446,10 @@ class CampaignExecutor:
                 editor = self._run_with_recovery(
                     spec, editor, account, result,
                 )
+
+                # 성공 시 진행 기록
+                if progress and result.total_succeeded > 0:
+                    progress.mark_done(combo_index)
 
             except Exception as exc:
                 result.record_failure(str(exc))
