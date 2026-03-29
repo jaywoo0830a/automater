@@ -25,6 +25,9 @@ post:
       overlay_text: "{keyword:region} 과외 #{i}"
       overlay_background: 0.4
       overlay_position: bottom
+      effects:
+        - effect: "hue:0.0 ~ 0.05"
+        - effect: "brightness:0.9 ~ 1.1"
 
 images: ./asset/images
 

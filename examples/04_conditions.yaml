@@ -41,6 +41,9 @@ post:
       overlay_text: "{keyword:region} {keyword:subject} 과외"
       overlay_background: 0.6
       overlay_position: bottom
+      effects:
+        - effect: "hue:0.0 ~ 0.03"
+        - effect: "saturation:0.7 ~ 1.3"
 
 images: ./images
 

@@ -27,6 +27,12 @@ post:
       overlay_background: 0.6
       overlay_position: bottom
       gps: [37.517, 127.047]
+      effects:
+        - effect: "hue:0.0 ~ 0.03"
+        - effect: "saturation:0.7 ~ 1.3"
+        - effect: "brightness:0.95 ~ 1.05"
+        - region: "border:5% ~ 10%"
+          effect: "blur:2 ~ 5"
   - h2: "{keyword:region} {keyword:category} 소개"
   - paragraph: "{keyword:region} {keyword:category}를 소개하는 글을 300자 이상 써줘"
   - image: {path: photo_1.jpg, alt: "{keyword:region} {keyword:category} 외관"}

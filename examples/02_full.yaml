@@ -41,6 +41,10 @@ post:
       overlay_color: "#FFFFFF"
       overlay_background: 0.5
       overlay_position: bottom
+      effects:
+        - effect: "hue:0.0 ~ 0.03"
+        - effect: "saturation:0.7 ~ 1.3"
+        - effect: "brightness:0.95 ~ 1.05"
 
 images: ./images
 
