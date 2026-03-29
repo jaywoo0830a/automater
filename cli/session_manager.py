@@ -26,10 +26,8 @@ from automator.browser import build_context, merge_browser_config
 log = logging.getLogger(__name__)
 
 LOGIN_URL = "https://nid.naver.com/nidlogin.login"
-NAVER_HOME = "https://www.naver.com"
-
-# 로그인 상태 확인용 셀렉터
-_LOGGED_IN_SELECTORS = ".MyView, .sc_login, #minime"
+# 로그인 필요한 페이지 — 비로그인 시 nidlogin으로 리다이렉트됨
+_AUTH_CHECK_URL = "https://blog.naver.com/MyBlog.naver"
 
 # 세션 만료 판단용 URL 패턴
 SESSION_EXPIRED_PATTERNS = ("nidlogin", "sso/cross-domain", "login")
@@ -99,18 +97,19 @@ class SessionManager:
         return self.ensure(account)
 
     def validate(self, state: dict, browser_config: dict[str, Any] | None = None) -> bool:
-        """세션이 아직 유효한지 headless로 확인."""
+        """세션이 아직 유효한지 headless로 확인.
+
+        로그인 필요한 페이지에 접속 → 리다이렉트 여부로 판단.
+        리다이렉트 안 되면 로그인 상태, nidlogin으로 가면 만료.
+        """
         try:
             browser = self._pw.chromium.launch(headless=True)
             ctx = build_context(browser, browser_config, storage_state=state)
             page = ctx.new_page()
-            page.goto(NAVER_HOME, wait_until="domcontentloaded", timeout=15_000)
+            page.goto(_AUTH_CHECK_URL, wait_until="domcontentloaded", timeout=15_000)
 
-            logged_in = False
-            try:
-                logged_in = page.locator(_LOGGED_IN_SELECTORS).first.is_visible(timeout=5_000)
-            except Exception:
-                pass
+            # nidlogin이 URL에 없으면 로그인 상태
+            logged_in = "nidlogin" not in page.url
 
             page.close()
             ctx.close()
