@@ -6,6 +6,7 @@ Main window - DSL builder + campaign workflow.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import threading
@@ -308,6 +309,7 @@ class MainWindow(QMainWindow):
         self._status.showMessage(f"{label} running...", 0)
 
         cmd = [sys.executable, "-m", "cli", self._last_saved_path, *args]
+        env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
 
         def _worker():
             try:
@@ -318,6 +320,7 @@ class MainWindow(QMainWindow):
                     text=True,
                     encoding="utf-8",
                     errors="replace",
+                    env=env,
                 )
                 for line in proc.stdout:
                     self._cli_signals.output.emit(line)
