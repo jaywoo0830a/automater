@@ -69,7 +69,7 @@ def main(argv: list[str] | None = None) -> int:
     # Execute
     if args.execute:
         executor = _build_live_executor(config, args)
-        log.info("LIVE mode — posts will be published!")
+        log.info("LIVE mode - posts will be published!")
     else:
         log.info("Dry-run mode (use --execute for live)")
 
@@ -146,7 +146,7 @@ def _prepare_sessions(config: dict[str, Any]) -> int:
         print(f"  [{i}/{total}] {username}")
         try:
             mgr.ensure(account)
-            print(f"          ✓ 준비 완료")
+            print(f"          [OK] 준비 완료")
         except Exception as exc:
             log.error("  [FAIL] %s: %s", username, exc)
             failed += 1

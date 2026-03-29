@@ -461,13 +461,13 @@ class CampaignExecutor:
                     break
 
                 logger.warning(
-                    "[%s] 세션 만료 감지 (시도 %d/%d) — 복구 중...",
+                    "[%s] 세션 만료 감지 (시도 %d/%d) - 복구 중...",
                     username, attempt + 1, _MAX_SESSION_RETRIES,
                 )
                 try:
                     editor = self._session_recovery(account)
                     result.record_recovery()
-                    logger.info("[%s] 세션 복구 완료 — 재시도", username)
+                    logger.info("[%s] 세션 복구 완료 - 재시도", username)
                 except Exception as recovery_exc:
                     logger.error("[%s] 세션 복구 실패: %s", username, recovery_exc)
                     break

@@ -4,11 +4,11 @@ cli/session_manager.py
 세션 생명주기 관리.
 
 책임:
-    validate   — 세션 유효성 확인 (headless 네이버 접속)
-    auto_login — 자동 로그인 시도 (캡챠 없을 때)
-    manual_login — headless=false 브라우저 열어 사람 개입
-    ensure     — validate → auto_login → manual_login 순차 시도
-    recover    — 작업 중 세션 만료 시 복구
+    validate   -세션 유효성 확인 (headless 네이버 접속)
+    auto_login -자동 로그인 시도 (캡챠 없을 때)
+    manual_login -headless=false 브라우저 열어 사람 개입
+    ensure     -validate → auto_login → manual_login 순차 시도
+    recover    -작업 중 세션 만료 시 복구
 
 사용:
     mgr = SessionManager(session_store, playwright, browser_config)
@@ -26,7 +26,7 @@ from automator.browser import build_context, merge_browser_config
 log = logging.getLogger(__name__)
 
 LOGIN_URL = "https://nid.naver.com/nidlogin.login"
-# 로그인 필요한 페이지 — 비로그인 시 nidlogin으로 리다이렉트됨
+# 로그인 필요한 페이지 -비로그인 시 nidlogin으로 리다이렉트됨
 _AUTH_CHECK_URL = "https://blog.naver.com/MyBlog.naver"
 
 # 세션 만료 판단용 URL 패턴
@@ -68,13 +68,13 @@ class SessionManager:
         # 1. 기존 세션 로드
         state = self._load(account)
         if state and self.validate(state, cfg):
-            log.info("[%s] 세션 유효 — 재사용", username)
+            log.info("[%s] 세션 유효 -재사용", username)
             return state
 
         if state:
-            log.info("[%s] 세션 만료 — 갱신 필요", username)
+            log.info("[%s] 세션 만료 -갱신 필요", username)
         else:
-            log.info("[%s] 세션 없음 — 로그인 필요", username)
+            log.info("[%s] 세션 없음 -로그인 필요", username)
 
         # 2. 자동 로그인 시도
         state = self.auto_login(account, cfg)
@@ -84,7 +84,7 @@ class SessionManager:
             return state
 
         # 3. 수동 로그인 (캡챠 등)
-        log.info("[%s] 자동 로그인 실패 — 수동 로그인 필요", username)
+        log.info("[%s] 자동 로그인 실패 -수동 로그인 필요", username)
         state = self.manual_login(account, cfg)
         self._save(account, state)
         log.info("[%s] 수동 로그인 완료", username)
@@ -93,7 +93,7 @@ class SessionManager:
     def recover(self, account: dict[str, Any]) -> dict:
         """작업 중 세션 만료 시 복구. ensure와 동일하지만 로그 메시지가 다르다."""
         username = account["username"]
-        log.warning("[%s] 세션 만료 감지 — 복구 시도", username)
+        log.warning("[%s] 세션 만료 감지 -복구 시도", username)
         return self.ensure(account)
 
     def validate(self, state: dict, browser_config: dict[str, Any] | None = None) -> bool:
@@ -160,7 +160,7 @@ class SessionManager:
 
     def manual_login(self, account: dict[str, Any], browser_config: dict[str, Any] | None = None) -> dict:
         """headless=false 브라우저를 열어 사람이 로그인할 때까지 대기."""
-        print(f"          → 브라우저를 엽니다. 로그인을 완료해주세요. ({account['username']})")
+        print(f"          >> 브라우저를 엽니다. 로그인을 완료해주세요. ({account['username']})")
 
         browser = self._pw.chromium.launch(headless=False)
         ctx = build_context(browser, browser_config)
