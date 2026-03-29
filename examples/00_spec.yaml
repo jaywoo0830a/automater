@@ -189,6 +189,8 @@
 # run:
 #   interval: 60s
 #   max_daily: 10
-#   on_failure: stop
+#   on_failure: stop              # stop | switch_account
 #   headless: true
 #   upload_delay: 1500ms
+#   parallel: true                # 계정별 병렬 실행 (기본 false)
+#   max_workers: 3                # 동시 실행 계정 수 (기본 = 계정 수)

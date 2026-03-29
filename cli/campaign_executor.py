@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import logging
 import random
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, TypeVar
@@ -51,12 +53,32 @@ class ExecutionPlan:
 
 @dataclass
 class ExecutionResult:
-    """Outcome of execute()."""
+    """Outcome of execute(). Thread-safe via lock."""
     total_attempted:    int = 0
     total_succeeded:    int = 0
     total_failed:       int = 0
     session_recoveries: int = 0
     errors:             list[str] = field(default_factory=list)
+    _lock:              threading.Lock = field(default_factory=threading.Lock, repr=False)
+
+    def record_success(self) -> None:
+        with self._lock:
+            self.total_attempted += 1
+            self.total_succeeded += 1
+
+    def record_failure(self, error: str) -> None:
+        with self._lock:
+            self.total_attempted += 1
+            self.total_failed += 1
+            self.errors.append(error)
+
+    def record_attempt(self) -> None:
+        with self._lock:
+            self.total_attempted += 1
+
+    def record_recovery(self) -> None:
+        with self._lock:
+            self.session_recoveries += 1
 
 
 # ---------------------------------------------------------------------------
@@ -267,7 +289,24 @@ class CampaignExecutor:
         result = ExecutionResult()
 
         global_run = config.get("run", {})
+        parallel = bool(global_run.get("parallel", False))
+        max_workers = int(global_run.get("max_workers", len(assignments)))
 
+        if parallel and not dry_run and len(assignments) > 1:
+            self._execute_parallel(assignments, config, global_run, max_workers, result)
+        else:
+            self._execute_serial(assignments, config, global_run, dry_run, result)
+
+        return result
+
+    def _execute_serial(
+        self,
+        assignments: list[tuple[Any, list[Combo]]],
+        config: dict[str, Any],
+        global_run: dict[str, Any],
+        dry_run: bool,
+        result: ExecutionResult,
+    ) -> None:
         for account, assigned_combos in assignments:
             account_idx = config["accounts"].index(account)
             merged_run = merge_account_run(global_run, account)
@@ -281,7 +320,43 @@ class CampaignExecutor:
                 result=result,
             )
 
-        return result
+    def _execute_parallel(
+        self,
+        assignments: list[tuple[Any, list[Combo]]],
+        config: dict[str, Any],
+        global_run: dict[str, Any],
+        max_workers: int,
+        result: ExecutionResult,
+    ) -> None:
+        logger.info(
+            "병렬 실행: %d 계정, max_workers=%d",
+            len(assignments), max_workers,
+        )
+
+        def _run_account(account, assigned_combos):
+            account_idx = config["accounts"].index(account)
+            merged_run = merge_account_run(global_run, account)
+            interval = self._parse_interval(merged_run)
+            self._execute_batch(
+                combos=assigned_combos,
+                config=config,
+                account_idx=account_idx,
+                dry_run=False,
+                interval=interval,
+                result=result,
+            )
+
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {
+                pool.submit(_run_account, account, combos): account["username"]
+                for account, combos in assignments
+            }
+            for future in as_completed(futures):
+                username = futures[future]
+                try:
+                    future.result()
+                except Exception as exc:
+                    logger.error("[PARALLEL] %s 스레드 에러: %s", username, exc)
 
     # ------------------------------------------------------------------
     # Internal
@@ -319,14 +394,10 @@ class CampaignExecutor:
             except Exception as exc:
                 logger.error("[FAIL] %s | editor init: %s", username, exc)
                 for _ in combos:
-                    result.total_attempted += 1
-                    result.total_failed += 1
-                    result.errors.append(str(exc))
+                    result.record_failure(str(exc))
                 return
 
         for i, combo in enumerate(combos):
-            result.total_attempted += 1
-
             try:
                 spec = build_spec(combo, config, account_idx)
 
@@ -334,20 +405,21 @@ class CampaignExecutor:
                 spec = self._resolve_sequential(spec, i, config)
 
                 if dry_run:
+                    result.record_attempt()
                     title = generate_title(spec.title)
                     at_label = spec.schedule_at.strftime("%H:%M") if spec.schedule_at else "-"
                     logger.info("[DRY-RUN] %s | %s (at=%s)", username, title, at_label)
-                    result.total_succeeded += 1
+                    with result._lock:
+                        result.total_succeeded += 1
                     continue
 
                 # 실행 + 세션 만료 시 복구 재시도
-                self._run_with_recovery(
+                editor = self._run_with_recovery(
                     spec, editor, account, result,
                 )
 
             except Exception as exc:
-                result.total_failed += 1
-                result.errors.append(str(exc))
+                result.record_failure(str(exc))
                 logger.error("[FAIL] %s | %s", username, str(exc))
 
             if not dry_run and i < len(combos) - 1 and interval > 0:
@@ -359,8 +431,8 @@ class CampaignExecutor:
         editor: BlogEditor | None,
         account: dict[str, Any],
         result: ExecutionResult,
-    ) -> None:
-        """spec 실행. 세션 만료 감지 시 복구 후 재시��."""
+    ) -> BlogEditor | None:
+        """spec 실행. 세션 만료 감지 시 복구 후 재시도. 현재 editor를 반환."""
         from cli.session_manager import is_session_error
 
         username = account["username"]
@@ -369,8 +441,8 @@ class CampaignExecutor:
         for attempt in range(_MAX_SESSION_RETRIES + 1):
             try:
                 self._run_spec(spec, editor)
-                result.total_succeeded += 1
-                return
+                result.record_success()
+                return editor
             except Exception as exc:
                 last_exc = exc
                 error_msg = str(exc)
@@ -394,16 +466,16 @@ class CampaignExecutor:
                 )
                 try:
                     editor = self._session_recovery(account)
-                    result.session_recoveries += 1
+                    result.record_recovery()
                     logger.info("[%s] 세션 복구 완료 — 재시도", username)
                 except Exception as recovery_exc:
                     logger.error("[%s] 세션 복구 실패: %s", username, recovery_exc)
                     break
 
         # 모든 시도 실패
-        result.total_failed += 1
-        result.errors.append(str(last_exc))
+        result.record_failure(str(last_exc))
         logger.error("[FAIL] %s | %s", username, str(last_exc))
+        return editor
 
     def _run_spec(self, spec: PostingSpec, editor: BlogEditor) -> None:
         if self._runner is None:
