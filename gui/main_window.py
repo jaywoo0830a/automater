@@ -1,17 +1,18 @@
 """
 gui/main_window.py
 -------------------
-Main window — DSL builder + campaign workflow.
+Main window - DSL builder + campaign workflow.
 """
 
 from __future__ import annotations
 
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 import yaml
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal, QObject
 from PySide6.QtWidgets import (
     QMainWindow,
     QTabWidget,
@@ -37,11 +38,21 @@ from gui.tabs.publish_tab import PublishTab
 from gui.tabs.run_tab import RunTab
 
 
+# ---------------------------------------------------------------------------
+# Signal bridge - thread -> GUI
+# ---------------------------------------------------------------------------
+
+class _CliSignals(QObject):
+    """Signals emitted from background CLI thread."""
+    output = Signal(str)    # stdout + stderr line
+    finished = Signal(str)  # label when done
+
+
 class MainWindow(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("캠페인 빌더")
+        self.setWindowTitle("Campaign Builder")
         self.setMinimumSize(1000, 750)
 
         # ── Builder tabs ──
@@ -56,66 +67,63 @@ class MainWindow(QMainWindow):
         self._publish_tab = PublishTab()
         self._run_tab = RunTab()
 
-        self._tabs.addTab(self._platform_tab, "플랫폼")
-        self._tabs.addTab(self._accounts_tab, "계정")
-        self._tabs.addTab(self._browser_tab, "브라우저")
-        self._tabs.addTab(self._titles_tab, "제목")
-        self._tabs.addTab(self._keywords_tab, "키워드 / 풀")
-        self._tabs.addTab(self._maps_tab, "맵")
-        self._tabs.addTab(self._post_tab, "포스트 블록")
-        self._tabs.addTab(self._publish_tab, "발행")
-        self._tabs.addTab(self._run_tab, "실행 설정")
+        self._tabs.addTab(self._platform_tab, "Platform")
+        self._tabs.addTab(self._accounts_tab, "Accounts")
+        self._tabs.addTab(self._browser_tab, "Browser")
+        self._tabs.addTab(self._titles_tab, "Titles")
+        self._tabs.addTab(self._keywords_tab, "Keywords")
+        self._tabs.addTab(self._maps_tab, "Maps")
+        self._tabs.addTab(self._post_tab, "Post")
+        self._tabs.addTab(self._publish_tab, "Publish")
+        self._tabs.addTab(self._run_tab, "Run")
 
-        # ── Bottom panel — YAML preview / execution log ──
+        # ── Bottom panel ──
         self._bottom_tabs = QTabWidget()
 
         self._preview = QTextEdit()
         self._preview.setReadOnly(True)
-        self._preview.setPlaceholderText("YAML 미리보기가 여기에 표시됩니다...")
+        self._preview.setPlaceholderText("YAML preview...")
 
         self._log = QTextEdit()
         self._log.setReadOnly(True)
-        self._log.setPlaceholderText("실행 결과가 여기에 표시됩니다...")
+        self._log.setPlaceholderText("Execution log...")
 
-        self._bottom_tabs.addTab(self._preview, "YAML 미리보기")
-        self._bottom_tabs.addTab(self._log, "실행 로그")
+        self._bottom_tabs.addTab(self._preview, "YAML")
+        self._bottom_tabs.addTab(self._log, "Log")
 
-        # ── File buttons (left) ──
-        btn_load = QPushButton("불러오기")
+        # ── File buttons ──
+        btn_load = QPushButton("Load")
         btn_load.clicked.connect(self._load_yaml)
-        btn_save = QPushButton("저장")
+        btn_save = QPushButton("Save")
         btn_save.clicked.connect(self._save_yaml)
-
-        # ── Workflow buttons (center) ──
-        btn_validate = QPushButton("검증")
-        btn_validate.clicked.connect(self._run_validate)
-        btn_prepare = QPushButton("세션 준비")
-        btn_prepare.clicked.connect(self._run_prepare)
-        btn_preview_plan = QPushButton("미리보기")
-        btn_preview_plan.clicked.connect(self._run_preview)
-        btn_dryrun = QPushButton("Dry-run")
-        btn_dryrun.clicked.connect(self._run_dryrun)
-
-        # ── Execute button (right) ──
-        btn_execute = QPushButton("▶ 실행")
-        btn_execute.setStyleSheet("QPushButton { font-weight: bold; }")
-        btn_execute.clicked.connect(self._run_execute)
-
-        # ── YAML preview refresh ──
-        btn_refresh = QPushButton("YAML 갱신")
+        btn_refresh = QPushButton("Refresh YAML")
         btn_refresh.clicked.connect(self._refresh_preview)
+
+        # ── Workflow buttons ──
+        self._btn_validate = QPushButton("Validate")
+        self._btn_validate.clicked.connect(self._run_validate)
+        self._btn_prepare = QPushButton("Prepare")
+        self._btn_prepare.clicked.connect(self._run_prepare)
+        self._btn_preview_plan = QPushButton("Preview")
+        self._btn_preview_plan.clicked.connect(self._run_preview)
+        self._btn_dryrun = QPushButton("Dry-run")
+        self._btn_dryrun.clicked.connect(self._run_dryrun)
+        self._btn_execute = QPushButton("Execute")
+        self._btn_execute.setStyleSheet("QPushButton { font-weight: bold; }")
+        self._btn_execute.clicked.connect(self._run_execute)
+
+        self._workflow_buttons = [
+            self._btn_validate, self._btn_prepare, self._btn_preview_plan,
+            self._btn_dryrun, self._btn_execute,
+        ]
 
         btn_row = QHBoxLayout()
         btn_row.addWidget(btn_load)
         btn_row.addWidget(btn_save)
         btn_row.addWidget(btn_refresh)
         btn_row.addSpacing(20)
-        btn_row.addWidget(btn_validate)
-        btn_row.addWidget(btn_prepare)
-        btn_row.addWidget(btn_preview_plan)
-        btn_row.addWidget(btn_dryrun)
-        btn_row.addStretch()
-        btn_row.addWidget(btn_execute)
+        for btn in self._workflow_buttons:
+            btn_row.addWidget(btn)
 
         # ── Layout ──
         splitter = QSplitter(Qt.Orientation.Vertical)
@@ -136,9 +144,15 @@ class MainWindow(QMainWindow):
         self.setStatusBar(self._status)
 
         self._last_saved_path: str = ""
+        self._running = False
+
+        # ── CLI signal bridge ──
+        self._cli_signals = _CliSignals()
+        self._cli_signals.output.connect(self._on_cli_output)
+        self._cli_signals.finished.connect(self._on_cli_finished)
 
     # ------------------------------------------------------------------
-    # Build config dict from all tabs
+    # Build config
     # ------------------------------------------------------------------
 
     def _build_config(self) -> dict:
@@ -172,14 +186,14 @@ class MainWindow(QMainWindow):
         try:
             self._preview.setPlainText(self._to_yaml())
             self._bottom_tabs.setCurrentIndex(0)
-            self._status.showMessage("YAML 갱신됨", 3000)
+            self._status.showMessage("YAML refreshed", 3000)
         except Exception as e:
-            QMessageBox.warning(self, "미리보기 오류", str(e))
+            QMessageBox.warning(self, "Preview error", str(e))
 
     def _save_yaml(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
-            self, "캠페인 YAML 저장", self._last_saved_path or "campaign.yaml",
-            "YAML 파일 (*.yaml *.yml)",
+            self, "Save YAML", self._last_saved_path or "campaign.yaml",
+            "YAML (*.yaml *.yml)",
         )
         if not path:
             return
@@ -194,14 +208,14 @@ class MainWindow(QMainWindow):
             )
             Path(path).write_text(text, encoding="utf-8")
             self._last_saved_path = path
-            self._status.showMessage(f"저장 완료: {path}", 5000)
+            self._status.showMessage(f"Saved: {path}", 5000)
         except Exception as e:
-            QMessageBox.critical(self, "저장 오류", str(e))
+            QMessageBox.critical(self, "Save error", str(e))
 
     def _load_yaml(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "캠페인 YAML 불러오기", "",
-            "YAML 파일 (*.yaml *.yml)",
+            self, "Load YAML", "",
+            "YAML (*.yaml *.yml)",
         )
         if not path:
             return
@@ -218,10 +232,10 @@ class MainWindow(QMainWindow):
             self._publish_tab.from_dict(raw)
             self._run_tab.from_dict(raw)
             self._last_saved_path = path
-            self._status.showMessage(f"불러옴: {path}", 5000)
+            self._status.showMessage(f"Loaded: {path}", 5000)
             self._refresh_preview()
         except Exception as e:
-            QMessageBox.critical(self, "불러오기 오류", str(e))
+            QMessageBox.critical(self, "Load error", str(e))
 
     @staticmethod
     def _save_map_files(config: dict, base_dir: Path) -> None:
@@ -262,53 +276,86 @@ class MainWindow(QMainWindow):
         raw["_maps_data"] = maps_data
 
     # ------------------------------------------------------------------
-    # Workflow actions — CLI 파이프라인 순서
+    # CLI execution (background thread)
     # ------------------------------------------------------------------
 
     def _ensure_saved(self) -> bool:
-        """YAML 저장 확인. 저장 안 됐으면 저장 유도. 실패 시 False."""
         if not self._last_saved_path:
-            QMessageBox.information(self, "저장 필요", "먼저 YAML 파일을 저장하세요.")
+            QMessageBox.information(self, "Save required", "Save YAML first.")
             self._save_yaml()
         return bool(self._last_saved_path)
 
+    def _set_running(self, running: bool) -> None:
+        self._running = running
+        for btn in self._workflow_buttons:
+            btn.setEnabled(not running)
+
     def _run_cli(self, *args: str, label: str = "") -> None:
-        """CLI 명령 실행 후 결과를 실행 로그 탭에 표시."""
+        """Run CLI command in background thread."""
+        if self._running:
+            return
         if not self._ensure_saved():
             return
-        try:
-            python = sys.executable
-            cmd = [python, "-m", "cli", self._last_saved_path, *args]
-            result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=600,
-            )
-            output = result.stdout + result.stderr
-            self._log.setPlainText(f"# {label or ' '.join(args)}\n\n{output}")
-            self._bottom_tabs.setCurrentIndex(1)  # 실행 로그 탭으로 전환
-            self._status.showMessage(f"{label} 완료", 5000)
-        except subprocess.TimeoutExpired:
-            QMessageBox.warning(self, "시간 초과", f"{label} 시간 초과 (10분)")
-        except Exception as e:
-            QMessageBox.critical(self, "실행 오류", str(e))
+
+        self._set_running(True)
+        self._log.clear()
+        self._log.setPlainText(f"# {label} ...\n")
+        self._bottom_tabs.setCurrentIndex(1)
+        self._status.showMessage(f"{label} running...", 0)
+
+        cmd = [sys.executable, "-m", "cli", self._last_saved_path, *args]
+
+        def _worker():
+            try:
+                proc = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                )
+                for line in proc.stdout:
+                    self._cli_signals.output.emit(line)
+                proc.wait()
+            except Exception as exc:
+                self._cli_signals.output.emit(f"\n[ERROR] {exc}\n")
+            finally:
+                self._cli_signals.finished.emit(label)
+
+        thread = threading.Thread(target=_worker, daemon=True)
+        thread.start()
+
+    def _on_cli_output(self, line: str) -> None:
+        self._log.moveCursor(self._log.textCursor().End)
+        self._log.insertPlainText(line)
+
+    def _on_cli_finished(self, label: str) -> None:
+        self._set_running(False)
+        self._status.showMessage(f"{label} done", 5000)
+
+    # ------------------------------------------------------------------
+    # Workflow buttons
+    # ------------------------------------------------------------------
 
     def _run_validate(self) -> None:
-        self._run_cli("--validate", label="검증")
+        self._run_cli("--validate", label="Validate")
 
     def _run_prepare(self) -> None:
-        self._run_cli("--prepare", label="세션 준비")
+        self._run_cli("--prepare", label="Prepare")
 
     def _run_preview(self) -> None:
-        self._run_cli("--preview", label="미리보기")
+        self._run_cli("--preview", label="Preview")
 
     def _run_dryrun(self) -> None:
         self._run_cli(label="Dry-run")
 
     def _run_execute(self) -> None:
         reply = QMessageBox.question(
-            self, "캠페인 실행",
-            f"캠페인을 실제로 실행합니까?\n\n{self._last_saved_path}",
+            self, "Execute",
+            f"Execute campaign?\n\n{self._last_saved_path}",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply != QMessageBox.StandardButton.Yes:
             return
-        self._run_cli("--execute", label="실행")
+        self._run_cli("--execute", label="Execute")
