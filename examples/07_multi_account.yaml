@@ -1,8 +1,19 @@
 # ── 다중 계정 캠페인 ────────────────────────────────────
-# 계정별 분배: weight(비율), min_posts(최소 보장), max_posts(상한)
-# 적용 순서: min_posts 보장 → 나머지를 weight로 분배 → max_posts 캡
+# 계정별 분배 + 계정별 browser 오버라이드 + 병렬 실행 예제.
+#
+# 분배 순서: min_posts 보장 → 나머지를 weight로 분배 → max_posts 캡
 
 platform: naver
+
+browser:
+  viewport: [1920, 1080]
+  locale: ko-KR
+  timezone: Asia/Seoul
+  fingerprint:
+    webdriver: false
+    plugins: true
+    chrome_runtime: true
+    languages: true
 
 accounts:
   - username: main_account
@@ -12,6 +23,9 @@ accounts:
     proxy: 1.2.3.4:8080
     weight: 3
     max_posts: 60
+    browser:                           # 계정별 fingerprint 오버라이드
+      user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      geolocation: [37.497, 127.027]   # 강남
 
   - username: sub_account
     password: pw2
@@ -19,6 +33,10 @@ accounts:
     weight: 1
     min_posts: 10
     max_posts: 25
+    browser:
+      viewport: [1440, 900]
+      user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      geolocation: [37.517, 127.047]   # 잠실
 
 titles:
   - "{keyword:region} {keyword:subject} 과외 {pool:cta}"
@@ -36,7 +54,9 @@ post:
   - image:
       path: body.jpg
       link: "tel:01012345678"
+      wait: 3s
   - quote: {text: "배움에는 끝이 없다", attribution: "공자"}
+  - text: "{keyword:region} {keyword:subject} 과외는 1:1 맞춤 수업으로 학생의 눈높이에 맞는 지도를 약속합니다."
   - paragraph: "{keyword:region} {keyword:subject} 과외 후기를 감성적으로 써줘"
   - divider
   - paragraph: "{keyword:region} {keyword:subject} 과외 홍보 마무리. 행동 유도 포함"
@@ -50,6 +70,7 @@ post:
         - effect: "hue:0.0 ~ 0.03"
         - effect: "saturation:0.7 ~ 1.3"
         - effect: "brightness:0.95 ~ 1.05"
+      wait: 3s
 
 images: ./images
 
@@ -61,3 +82,5 @@ run:
   interval: 60s
   on_failure: stop
   headless: true
+  parallel: true
+  max_workers: 2

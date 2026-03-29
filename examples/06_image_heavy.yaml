@@ -1,6 +1,15 @@
 # ── 이미지 중심 캠페인 ───────────────────────────────────
+# 다양한 이미지 effects + wait + browser 설정 예제.
 
 platform: naver
+
+browser:
+  viewport: [1920, 1080]
+  geolocation: [37.517, 127.047]
+  fingerprint:
+    webdriver: false
+    plugins: true
+    chrome_runtime: true
 
 accounts:
   - username: photo_blog
@@ -33,11 +42,23 @@ post:
         - effect: "brightness:0.95 ~ 1.05"
         - region: "border:5% ~ 10%"
           effect: "blur:2 ~ 5"
+      wait: 5s
   - h2: "{keyword:region} {keyword:category} 소개"
   - paragraph: "{keyword:region} {keyword:category}를 소개하는 글을 300자 이상 써줘"
-  - image: {path: photo_1.jpg, alt: "{keyword:region} {keyword:category} 외관"}
+  - image:
+      path: photo_1.jpg
+      alt: "{keyword:region} {keyword:category} 외관"
+      effects:
+        - region: "bottom:20%"
+          effect: "brightness:0.6"
+      wait: 3s
   - paragraph: "{keyword:region} {keyword:category}의 대표 메뉴를 리뷰해줘"
-  - image: {path: photo_2.jpg, alt: "{keyword:region} {keyword:category} 메뉴"}
+  - image:
+      path: photo_2.jpg
+      alt: "{keyword:region} {keyword:category} 메뉴"
+      effects:
+        - effect: "saturation:1.2 ~ 1.5"
+      wait: 3s
   - paragraph: "{keyword:region} {keyword:category}의 분위기와 서비스를 리뷰해줘"
   - divider
   - h3: "방문 팁"
@@ -46,7 +67,7 @@ post:
     - 예약 필수 (특히 주말)
     - 런치 세트가 가성비 좋음
   - divider
-  - paragraph: "{keyword:region} {keyword:category}를 추천하며 마무리해줘. 방문 유도 톤"
+  - text: "{keyword:region} {keyword:category}에서 특별한 시간을 보내보세요. 자세한 정보는 아래 링크를 참고해주세요."
 
 images: ./photos
 

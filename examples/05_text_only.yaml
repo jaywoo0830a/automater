@@ -1,6 +1,12 @@
 # ── 텍스트 전용 캠페인 ───────────────────────────────────
+# 이미지 없이 AI 생성 + 인라인 텍스트만 사용하는 예제.
 
 platform: naver
+
+browser:
+  viewport: [1440, 900]
+  fingerprint:
+    webdriver: false
 
 accounts:
   - username: writer1
@@ -19,10 +25,11 @@ post:
   - paragraph: "{keyword:city} {keyword:topic}에 대해 정보 전달 위주로 소개해줘"
   - paragraph: "{keyword:city} {keyword:topic}을 직접 방문한 경험담을 1인칭으로 써줘"
   - quote: "여행은 살아있는 교육이다"
+  - text: "{keyword:city} {keyword:topic}은 현지인들에게도 사랑받는 곳으로, 계절마다 색다른 매력을 느낄 수 있습니다."
   - paragraph: "{keyword:city} {keyword:topic} 여행의 감성을 이야기 형식으로 써줘"
   - divider
   - h3: "마무리"
-  - paragraph: "{keyword:city} {keyword:topic}을 추천하며 마무리해줘. 행동 유도 포함"
+  - text: "{keyword:city} {keyword:topic}이 궁금하시다면 지금 바로 방문해보세요. 후회하지 않으실 겁니다."
 
 publish:
   schedule: 'now'

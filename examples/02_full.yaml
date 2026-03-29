@@ -1,6 +1,18 @@
 # ── 풀 캠페인 ───────────────────────────────────────────
+# 모든 주요 기능을 포함하는 종합 예제.
 
 platform: naver
+
+browser:
+  viewport: [1920, 1080]
+  locale: ko-KR
+  timezone: Asia/Seoul
+  geolocation: [37.497, 127.027]
+  fingerprint:
+    webdriver: false
+    plugins: true
+    chrome_runtime: true
+    languages: true
 
 accounts:
   - username: naver_id_1
@@ -30,7 +42,9 @@ post:
   - image:
       path: body.jpg
       link: "tel:01012345678"
+      wait: 3s
   - quote: "교육은 미래를 여는 열쇠다"
+  - text: "{keyword:region}에서 검증된 {keyword:subject} 과외 전문 선생님이 직접 지도합니다."
   - paragraph: "{keyword:region} {keyword:subject} 과외 후기를 학부모 관점에서 200자 이상 써줘"
   - divider
   - paragraph: "{keyword:region} {keyword:subject} 과외 홍보 마무리. 행동 유도 포함"
@@ -45,6 +59,7 @@ post:
         - effect: "hue:0.0 ~ 0.03"
         - effect: "saturation:0.7 ~ 1.3"
         - effect: "brightness:0.95 ~ 1.05"
+      wait: 3s
 
 images: ./images
 

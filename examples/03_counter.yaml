@@ -1,7 +1,13 @@
-# ── {i} 카운터 활용 ──────────────────────────────────────
-# 조합마다 다른 이미지를 매핑하는 경우.
+# ── {i} 카운터 + 수동 글감 ────────────────────────────────
+# 조합마다 다른 이미지와 텍스트 파일을 매핑하는 경우.
+# {i}는 1부터 시작하는 조합 인덱스.
 
 platform: naver
+
+browser:
+  viewport: [1920, 1080]
+  fingerprint:
+    webdriver: false
 
 accounts:
   - username: edu_blog
@@ -17,8 +23,10 @@ keywords:
 
 post:
   - h2: "{keyword:region} {keyword:subject} 과외"
-  - paragraph: "{keyword:region} {keyword:subject} 과외를 소개해줘"
+  - text:
+      file: "{i}.txt"            # 1.txt, 2.txt, 3.txt ...
   - image: "{keyword:region}.jpg"
+    wait: 3s
   - paragraph: "{keyword:region} 지역의 교육 환경을 설명해줘"
   - featured_image:
       path: "{i}.jpg"
@@ -28,6 +36,7 @@ post:
       effects:
         - effect: "hue:0.0 ~ 0.05"
         - effect: "brightness:0.9 ~ 1.1"
+      wait: 3s
 
 images: ./asset/images
 
