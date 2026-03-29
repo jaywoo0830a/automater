@@ -106,15 +106,19 @@
 # ── paragraph (값 = AI 프롬프트)
 #   - paragraph: "{keyword:region} 과외를 소개해줘"
 #
-# ── text (코어: TextBlock — 수동 글감, AI 없음)
-#   - text: "{i}.txt"                            # plain 기본
-#   - text: "{keyword:region}.txt"               # 키워드별 파일
+# ── text (코어: TextBlock — 수동 텍스트, AI 없음)
+#
+#   인라인 모드 — DSL 안에서 직접 작성 (토큰 치환 적용):
+#   - text: "{keyword:region} 중등 수학학원은 대표 전문 학원입니다."
+#
+#   파일 모드 — 외부 파일 내용 삽입:
 #   - text:
 #       file: "{keyword:region}/{i}.txt"
 #       format: html                             # plain(기본) | html
 #
-#   plain: 빈 줄(\\n\\n) 기준 <p> 분리, 단일 줄바꿈은 <br>
-#   html:  파일 내용 그대로 삽입
+#   파일 모드 format:
+#     plain — 빈 줄(\\n\\n) 기준 <p> 분리, 단일 줄바꿈은 <br>
+#     html  — 파일 내용 그대로 삽입
 #   파일 없으면 에러. UTF-8 인코딩.
 #
 # ── image (코어: ImageBlock)

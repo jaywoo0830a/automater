@@ -257,28 +257,34 @@ def _parse_text(
     maps: dict[str, str] | None = None,
     wait_ms: int = 0,
 ) -> TextBlock:
-    """Parse text block — file content insertion, no AI.
+    """Parse text block — inline text or file content, no AI.
 
-        - text: "{i}.txt"
+        - text: "인라인 텍스트 {keyword:region} ..."   # 인라인 모드
         - text:
-            file: "{keyword:region}/{i}.txt"
+            file: "{keyword:region}/{i}.txt"            # 파일 모드
             format: html
     """
     if isinstance(value, str):
-        filename = interpolate(value, values, pools, index, maps=maps)
-        path = _resolve_path(images_dir, filename)
-        return TextBlock(file=path, format="plain", wait_ms=wait_ms)
+        # 인라인 모드 — 토큰 치환 후 content에 저장
+        content = interpolate(value, values, pools, index, maps=maps)
+        return TextBlock(content=content, wait_ms=wait_ms)
 
     if isinstance(value, dict):
         cfg = interpolate_deep(dict(value), values, pools, index, maps=maps)
-        filename = str(cfg.get("file", ""))
-        path = _resolve_path(images_dir, filename)
-        fmt = str(cfg.get("format", "plain"))
-        if fmt not in ("plain", "html"):
-            fmt = "plain"
-        # wait inside dict form overrides entry-level wait
         inner_wait = _parse_wait(cfg.get("wait"))
-        return TextBlock(file=path, format=fmt, wait_ms=inner_wait or wait_ms)
+
+        filename = str(cfg.get("file", ""))
+        if filename:
+            # 파일 모드
+            path = _resolve_path(images_dir, filename)
+            fmt = str(cfg.get("format", "plain"))
+            if fmt not in ("plain", "html"):
+                fmt = "plain"
+            return TextBlock(file=path, format=fmt, wait_ms=inner_wait or wait_ms)
+
+        # dict이지만 file 없음 → content 필드가 있으면 인라인
+        content = str(cfg.get("content", ""))
+        return TextBlock(content=content, wait_ms=inner_wait or wait_ms)
 
     return TextBlock()
 

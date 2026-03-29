@@ -89,27 +89,36 @@ class ParagraphHandler(BlockHandler):
 
 
 class TextHandler(BlockHandler):
-    """TextBlock -> [TextStep]. 외부 파일 읽기 — AI 없음."""
+    """TextBlock -> [TextStep]. 인라인 텍스트 또는 파일 읽기 — AI 없음."""
 
     def to_steps(self, block: TextBlock, ctx: ContentContext) -> list[PostStep]:
-        path = Path(block.file)
-        if not path.exists():
-            raise FileNotFoundError(f"Text file not found: {path}")
-        raw = path.read_text(encoding="utf-8")
+        if block.file:
+            # 파일 모드
+            path = Path(block.file)
+            if not path.exists():
+                raise FileNotFoundError(f"Text file not found: {path}")
+            raw = path.read_text(encoding="utf-8")
 
-        if block.format == "html":
-            text = raw
-        else:
-            # plain: 빈 줄 기준으로 <p> 분리, 단일 줄바꿈은 <br>
-            paragraphs = []
-            for chunk in raw.split("\n\n"):
-                chunk = chunk.strip()
-                if chunk:
-                    inner = chunk.replace("\n", "<br>")
-                    paragraphs.append(f"<p>{inner}</p>")
-            text = "\n".join(paragraphs)
+            if block.format == "html":
+                text = raw
+            else:
+                text = self._plain_to_html(raw)
 
-        return [TextStep(text=text, is_html=(block.format == "html"), wait_ms=block.wait_ms)]
+            return [TextStep(text=text, is_html=(block.format == "html"), wait_ms=block.wait_ms)]
+
+        # 인라인 모드 — content를 그대로 삽입
+        return [TextStep(text=block.content, is_html=False, wait_ms=block.wait_ms)]
+
+    @staticmethod
+    def _plain_to_html(raw: str) -> str:
+        """빈 줄 기준 <p> 분리, 단일 줄바꿈은 <br>."""
+        paragraphs = []
+        for chunk in raw.split("\n\n"):
+            chunk = chunk.strip()
+            if chunk:
+                inner = chunk.replace("\n", "<br>")
+                paragraphs.append(f"<p>{inner}</p>")
+        return "\n".join(paragraphs)
 
 
 def _build_filename(role: str, keyword: str) -> str:
