@@ -1,4 +1,4 @@
-"""실행 설정 탭 — 간격, 브라우저 설정."""
+"""실행 설정 탭 — 간격, 병렬, 브라우저 설정."""
 
 from __future__ import annotations
 
@@ -7,41 +7,51 @@ from PySide6.QtWidgets import (
     QSpinBox, QCheckBox, QComboBox, QLabel,
 )
 
+from gui.collapsible import CollapsibleSection
+
 
 class RunTab(QWidget):
 
     def __init__(self) -> None:
         super().__init__()
 
-        # ── 실행 간격 ──
+        # ── 기본 설정 ──
         self._interval = QSpinBox()
         self._interval.setRange(0, 3600)
         self._interval.setValue(60)
         self._interval.setSuffix(" 초")
 
-        timing_form = QFormLayout()
-        timing_form.addRow("포스트 간 대기:", self._interval)
-
-        timing_group = QGroupBox("타이밍")
-        timing_group.setLayout(timing_form)
-
-        # ── 브라우저 ──
         self._headless = QCheckBox("헤드리스 모드 (브라우저 창 숨김)")
         self._headless.setChecked(True)
 
         self._on_failure = QComboBox()
-        self._on_failure.addItems(["중단 (stop)", "계정 전환 (switch_account)"])
+        self._on_failure.addItems(["중단 (stop)", "계�� 전환 (switch_account)"])
 
-        browser_form = QFormLayout()
-        browser_form.addRow("", self._headless)
-        browser_form.addRow("실패 시:", self._on_failure)
+        basic_form = QFormLayout()
+        basic_form.addRow("포스트 간 대기:", self._interval)
+        basic_form.addRow("", self._headless)
+        basic_form.addRow("실패 시:", self._on_failure)
 
-        browser_group = QGroupBox("브라우저")
-        browser_group.setLayout(browser_form)
+        basic_group = QGroupBox("기본")
+        basic_group.setLayout(basic_form)
+
+        # ── 고급 설정 (접힘) ──
+        self._parallel = QCheckBox("계정별 병렬 실행")
+        self._parallel.setChecked(False)
+
+        self._max_workers = QSpinBox()
+        self._max_workers.setRange(1, 20)
+        self._max_workers.setValue(3)
+        self._max_workers.setEnabled(False)
+        self._parallel.toggled.connect(self._max_workers.setEnabled)
+
+        advanced = CollapsibleSection("병렬 실행")
+        advanced.add_row("", self._parallel)
+        advanced.add_row("동시 실행 계정 수:", self._max_workers)
 
         layout = QVBoxLayout()
-        layout.addWidget(timing_group)
-        layout.addWidget(browser_group)
+        layout.addWidget(basic_group)
+        layout.addWidget(advanced)
         layout.addStretch()
         self.setLayout(layout)
 
@@ -59,6 +69,9 @@ class RunTab(QWidget):
         on_failure = self._FAIL_MAP.get(self._on_failure.currentText(), "stop")
         if on_failure != "stop":
             run["on_failure"] = on_failure
+        if self._parallel.isChecked():
+            run["parallel"] = True
+            run["max_workers"] = self._max_workers.value()
 
         return {"run": run} if run else {}
 
@@ -71,7 +84,10 @@ class RunTab(QWidget):
         self._headless.setChecked(run.get("headless", True))
 
         on_failure = run.get("on_failure", "stop")
-        display = self._FAIL_REV.get(on_failure, "중단 (stop)")
+        display = self._FAIL_REV.get(on_failure, "중�� (stop)")
         idx = self._on_failure.findText(display)
         if idx >= 0:
             self._on_failure.setCurrentIndex(idx)
+
+        self._parallel.setChecked(run.get("parallel", False))
+        self._max_workers.setValue(int(run.get("max_workers", 3)))

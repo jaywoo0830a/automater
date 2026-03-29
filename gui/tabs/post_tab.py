@@ -6,8 +6,10 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QComboBox, QListWidget, QListWidgetItem, QInputDialog,
     QDialog, QDialogButtonBox, QFormLayout, QLineEdit,
-    QLabel, QDoubleSpinBox, QSpinBox, QCheckBox,
+    QLabel, QDoubleSpinBox, QSpinBox, QCheckBox, QTextEdit,
 )
+
+from gui.collapsible import CollapsibleSection
 
 
 _BLOCK_TYPES = [
@@ -279,6 +281,23 @@ class _ImageDialog(QDialog):
             form.addRow("배경 불투명도:", self._overlay_bg)
             form.addRow("텍스트 위치:", self._overlay_pos)
 
+        # ── 고급 설정 (접힘) ──
+        self._wait = QLineEdit()
+        self._wait.setPlaceholderText("2s 또는 1s ~ 3s (생략 시 대기 없음)")
+
+        self._effects = QTextEdit()
+        self._effects.setPlaceholderText(
+            "한 줄에 하나씩:\n"
+            "border:10 ~ 30 | brightness:0.3 ~ 0.7\n"
+            "all | hue:0.0 ~ 0.03\n"
+            "top:30% | blur:3 ~ 8"
+        )
+        self._effects.setMaximumHeight(80)
+
+        advanced = CollapsibleSection("고급 설정")
+        advanced.add_row("대기 (wait):", self._wait)
+        advanced.add_row("효과 (effects):", self._effects)
+
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
@@ -287,6 +306,7 @@ class _ImageDialog(QDialog):
 
         layout = QVBoxLayout()
         layout.addLayout(form)
+        layout.addWidget(advanced)
         layout.addWidget(buttons)
         self.setLayout(layout)
 
@@ -315,6 +335,34 @@ class _ImageDialog(QDialog):
             op = self._overlay_pos.currentText()
             if op != "center":
                 cfg["overlay_position"] = op
+
+        # 고급: wait
+        wait = self._wait.text().strip()
+        if wait:
+            cfg["wait"] = wait
+
+        # 고급: effects
+        effects = self._parse_effects_text()
+        if effects:
+            cfg["effects"] = effects
+
         if len(cfg) == 1 and "path" in cfg:
             return {self._block_type: cfg["path"]}
         return {self._block_type: cfg}
+
+    def _parse_effects_text(self) -> list[dict]:
+        """효과 텍스트 → effects 리스트. 한 줄 = region | effect."""
+        raw = self._effects.toPlainText().strip()
+        if not raw:
+            return []
+        effects = []
+        for line in raw.split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            parts = [p.strip() for p in line.split("|")]
+            if len(parts) == 2:
+                effects.append({"region": parts[0], "effect": parts[1]})
+            elif len(parts) == 1:
+                effects.append({"effect": parts[0]})
+        return effects
