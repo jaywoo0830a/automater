@@ -1,11 +1,11 @@
 """
 gui/collapsible.py
 ------------------
-접을 수 있는 고급 설정 섹션 위젯.
+Collapsible advanced settings section widget.
 
 Usage:
-    advanced = CollapsibleSection("고급 설정")
-    advanced.add_row("라벨:", widget)
+    advanced = CollapsibleSection("Advanced")
+    advanced.add_row("Label:", widget)
     layout.addWidget(advanced)
 """
 
@@ -18,12 +18,12 @@ from PySide6.QtWidgets import (
 
 
 class CollapsibleSection(QWidget):
-    """접을 수 있는 섹션. 기본 접힌 상태."""
+    """Collapsible section. Collapsed by default."""
 
-    def __init__(self, title: str = "고급 설정", parent: QWidget | None = None) -> None:
+    def __init__(self, title: str = "Advanced", parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
-        self._toggle = QPushButton(f"▶ {title}")
+        self._toggle = QPushButton(f"[+] {title}")
         self._toggle.setCheckable(True)
         self._toggle.setChecked(False)
         self._toggle.setStyleSheet(
@@ -54,5 +54,5 @@ class CollapsibleSection(QWidget):
 
     def _on_toggle(self, checked: bool) -> None:
         self._content.setVisible(checked)
-        arrow = "���" if checked else "▶"
-        self._toggle.setText(f"{arrow} {self._title}")
+        prefix = "[-]" if checked else "[+]"
+        self._toggle.setText(f"{prefix} {self._title}")

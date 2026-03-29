@@ -1,11 +1,22 @@
-"""플랫폼 + 세션 저장소 탭."""
+"""Platform + session store + workspace directory tab."""
 
 from __future__ import annotations
+
+import os
+from pathlib import Path
 
 from PySide6.QtWidgets import (
     QWidget, QFormLayout, QComboBox, QLineEdit, QRadioButton,
     QButtonGroup, QHBoxLayout, QGroupBox, QVBoxLayout,
+    QPushButton, QFileDialog,
 )
+
+
+def _default_workspace() -> str:
+    """Return default workspace: ~/Documents/automator."""
+    docs = Path.home() / "Documents" / "automator"
+    docs.mkdir(parents=True, exist_ok=True)
+    return str(docs)
 
 
 class PlatformTab(QWidget):
@@ -13,12 +24,25 @@ class PlatformTab(QWidget):
     def __init__(self) -> None:
         super().__init__()
 
-        # 플랫폼 선택
+        # Platform
         self._platform = QComboBox()
         self._platform.addItems(["naver", "wordpress", "tistory"])
 
-        # 세션 저장소
-        self._store_file = QRadioButton("파일 (기본)")
+        # Workspace directory
+        self._workspace = QLineEdit(_default_workspace())
+        btn_browse = QPushButton("...")
+        btn_browse.setFixedWidth(30)
+        btn_browse.clicked.connect(self._browse_workspace)
+
+        ws_row = QHBoxLayout()
+        ws_row.addWidget(self._workspace)
+        ws_row.addWidget(btn_browse)
+
+        ws_widget = QWidget()
+        ws_widget.setLayout(ws_row)
+
+        # Session store
+        self._store_file = QRadioButton("File (default)")
         self._store_redis = QRadioButton("Redis")
         self._store_file.setChecked(True)
 
@@ -37,17 +61,30 @@ class PlatformTab(QWidget):
         store_row.addWidget(self._store_redis)
         store_row.addWidget(self._redis_url)
 
-        store_group = QGroupBox("세션 저장소")
+        store_group = QGroupBox("Session Store")
         store_group.setLayout(store_row)
 
         form = QFormLayout()
-        form.addRow("플랫폼:", self._platform)
+        form.addRow("Platform:", self._platform)
+        form.addRow("Workspace:", ws_widget)
 
         layout = QVBoxLayout()
         layout.addLayout(form)
         layout.addWidget(store_group)
         layout.addStretch()
         self.setLayout(layout)
+
+    def _browse_workspace(self) -> None:
+        path = QFileDialog.getExistingDirectory(
+            self, "Select workspace directory", self._workspace.text(),
+        )
+        if path:
+            self._workspace.setText(path)
+
+    @property
+    def workspace(self) -> str:
+        """Current workspace directory path."""
+        return self._workspace.text().strip() or _default_workspace()
 
     def to_dict(self) -> dict:
         d: dict = {"platform": self._platform.currentText()}

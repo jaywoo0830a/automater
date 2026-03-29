@@ -42,9 +42,9 @@ class PostTab(QWidget):
         btn_edit.clicked.connect(self._edit_block)
         btn_remove = QPushButton("- 삭제")
         btn_remove.clicked.connect(self._remove_block)
-        btn_up = QPushButton("▲ 위로")
+        btn_up = QPushButton("Up")
         btn_up.clicked.connect(self._move_up)
-        btn_down = QPushButton("▼ 아래로")
+        btn_down = QPushButton("Down")
         btn_down.clicked.connect(self._move_down)
 
         top_row = QHBoxLayout()

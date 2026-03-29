@@ -13,6 +13,7 @@ from pathlib import Path
 
 import yaml
 from PySide6.QtCore import Qt, Signal, QObject
+from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QMainWindow,
     QTabWidget,
@@ -66,6 +67,8 @@ class MainWindow(QMainWindow):
         self._post_tab = PostTab()
         self._publish_tab = PublishTab()
         self._run_tab = RunTab()
+
+        self._accounts_tab.set_platform_tab(self._platform_tab)
 
         self._tabs.addTab(self._platform_tab, "Platform")
         self._tabs.addTab(self._accounts_tab, "Accounts")
@@ -191,8 +194,9 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Preview error", str(e))
 
     def _save_yaml(self) -> None:
+        default = self._last_saved_path or str(Path(self._platform_tab.workspace) / "campaign.yaml")
         path, _ = QFileDialog.getSaveFileName(
-            self, "Save YAML", self._last_saved_path or "campaign.yaml",
+            self, "Save YAML", default,
             "YAML (*.yaml *.yml)",
         )
         if not path:
@@ -214,7 +218,7 @@ class MainWindow(QMainWindow):
 
     def _load_yaml(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Load YAML", "",
+            self, "Load YAML", self._last_saved_path or self._platform_tab.workspace,
             "YAML (*.yaml *.yml)",
         )
         if not path:
@@ -327,7 +331,7 @@ class MainWindow(QMainWindow):
         thread.start()
 
     def _on_cli_output(self, line: str) -> None:
-        self._log.moveCursor(self._log.textCursor().End)
+        self._log.moveCursor(QTextCursor.MoveOperation.End)
         self._log.insertPlainText(line)
 
     def _on_cli_finished(self, label: str) -> None:

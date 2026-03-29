@@ -17,16 +17,15 @@ from openpyxl.utils import get_column_letter
 # ── column definitions ─────────────────────────────────────────────
 
 ACCOUNT_COLUMNS = [
-    ("username", "아이디"),
-    ("password", "비밀번호"),
-    ("blog_id", "블로그 ID"),
-    ("session", "세션 경로"),
-    ("weight", "가중치"),
-    ("min_posts", "최소"),
-    ("max_posts", "최대"),
-    ("proxy", "프록시"),
+    ("username", "Username"),
+    ("password", "Password"),
+    ("blog_id", "Blog ID"),
+    ("weight", "Weight"),
+    ("min_posts", "Min"),
+    ("max_posts", "Max"),
+    ("proxy", "Proxy"),
 ]
-ACCOUNT_DEFAULTS = ["", "", "", "", "1", "0", "0", ""]
+ACCOUNT_DEFAULTS = ["", "", "", "1", "0", "0", ""]
 
 KV_COLUMNS = [
     ("category", "카테고리"),
@@ -120,7 +119,7 @@ def import_accounts(path: str | Path) -> list[dict]:
 
 def template_accounts(path: str | Path) -> None:
     wb = _single_sheet_wb("accounts", ACCOUNT_COLUMNS)
-    wb.active.append(["example_id", "password123", "myblog", "", 1, 0, 0, ""])
+    wb.active.append(["example_id", "password123", "myblog", 1, 0, 0, ""])
     wb.save(str(path))
 
 
