@@ -52,10 +52,11 @@ class ExecutionPlan:
 @dataclass
 class ExecutionResult:
     """Outcome of execute()."""
-    total_attempted: int = 0
-    total_succeeded: int = 0
-    total_failed:    int = 0
-    errors:          list[str] = field(default_factory=list)
+    total_attempted:    int = 0
+    total_succeeded:    int = 0
+    total_failed:       int = 0
+    session_recoveries: int = 0
+    errors:             list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -191,6 +192,9 @@ def _apply_caps(
 # ---------------------------------------------------------------------------
 
 EditorFactory = Callable[[dict[str, Any]], BlogEditor]
+SessionRecovery = Callable[[dict[str, Any]], BlogEditor]
+
+_MAX_SESSION_RETRIES = 2
 
 
 class CampaignExecutor:
@@ -198,17 +202,20 @@ class CampaignExecutor:
     Orchestrate the full campaign pipeline.
 
     Dependencies (optional — defaults support dry-run):
-        runner:         JobRunner for live execution.
-        editor_factory: account_dict → BlogEditor for live execution.
+        runner:           JobRunner for live execution.
+        editor_factory:   account_dict → BlogEditor for live execution.
+        session_recovery: account_dict → BlogEditor (세션 복구 후 에디터 재생성).
     """
 
     def __init__(
         self,
         runner: JobRunner | None = None,
         editor_factory: EditorFactory | None = None,
+        session_recovery: SessionRecovery | None = None,
     ) -> None:
         self._runner = runner
         self._editor_factory = editor_factory
+        self._session_recovery = session_recovery
         self._seq_next_at: datetime | None = None
 
     def preview(
@@ -299,6 +306,8 @@ class CampaignExecutor:
         interval: int,
         result: ExecutionResult,
     ) -> None:
+        from cli.session_manager import is_session_error
+
         account = config["accounts"][account_idx]
         username = account["username"]
 
@@ -331,8 +340,10 @@ class CampaignExecutor:
                     result.total_succeeded += 1
                     continue
 
-                self._run_spec(spec, editor)
-                result.total_succeeded += 1
+                # 실행 + 세션 만료 시 복구 재시도
+                self._run_with_recovery(
+                    spec, editor, account, result,
+                )
 
             except Exception as exc:
                 result.total_failed += 1
@@ -341,6 +352,58 @@ class CampaignExecutor:
 
             if not dry_run and i < len(combos) - 1 and interval > 0:
                 time.sleep(interval)
+
+    def _run_with_recovery(
+        self,
+        spec: PostingSpec,
+        editor: BlogEditor | None,
+        account: dict[str, Any],
+        result: ExecutionResult,
+    ) -> None:
+        """spec 실행. 세션 만료 감지 시 복구 후 재시��."""
+        from cli.session_manager import is_session_error
+
+        username = account["username"]
+        last_exc: Exception | None = None
+
+        for attempt in range(_MAX_SESSION_RETRIES + 1):
+            try:
+                self._run_spec(spec, editor)
+                result.total_succeeded += 1
+                return
+            except Exception as exc:
+                last_exc = exc
+                error_msg = str(exc)
+
+                # 세션 문제가 아니면 바로 실패
+                if not is_session_error(error_msg=error_msg):
+                    break
+
+                # 마지막 시도였으면 탈출
+                if attempt >= _MAX_SESSION_RETRIES:
+                    break
+
+                # 세션 복구 시도
+                if self._session_recovery is None:
+                    logger.warning("[%s] 세션 만료 감지, 복구 불가 (session_recovery 없음)", username)
+                    break
+
+                logger.warning(
+                    "[%s] 세션 만료 감지 (시도 %d/%d) — 복구 중...",
+                    username, attempt + 1, _MAX_SESSION_RETRIES,
+                )
+                try:
+                    editor = self._session_recovery(account)
+                    result.session_recoveries += 1
+                    logger.info("[%s] 세션 복구 완료 — 재시도", username)
+                except Exception as recovery_exc:
+                    logger.error("[%s] 세션 복구 실패: %s", username, recovery_exc)
+                    break
+
+        # 모든 시도 실패
+        result.total_failed += 1
+        result.errors.append(str(last_exc))
+        logger.error("[FAIL] %s | %s", username, str(last_exc))
 
     def _run_spec(self, spec: PostingSpec, editor: BlogEditor) -> None:
         if self._runner is None:
