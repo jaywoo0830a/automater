@@ -70,7 +70,7 @@ def load_maps(
 def resolve_maps(
     loaded_maps: dict[str, dict[str, Any]],
     values: dict[str, str],
-) -> dict[str, str]:
+) -> dict[str, str | list[str]]:
     """
     Resolve all maps to concrete values using the current keyword values.
 
@@ -80,14 +80,18 @@ def resolve_maps(
         3. Find that value in the map data
         4. Fall back to '_default' if not found
 
+    Values can be:
+        str       -> single value (1:1 mapping)
+        list[str] -> multiple values (1:N mapping, block expansion)
+
     Args:
         loaded_maps: Output of load_maps().
-        values:      Current combo's keyword values (slug → value).
+        values:      Current combo's keyword values (slug -> value).
 
     Returns:
-        {map_slug: resolved_value} — ready to pass to interpolate().
+        {map_slug: resolved_value} -- ready to pass to interpolate().
     """
-    resolved = {}
+    resolved: dict[str, str | list[str]] = {}
     for slug, entry in loaded_maps.items():
         by = entry.get("by", "")
         data = entry.get("data", {})
@@ -95,17 +99,25 @@ def resolve_maps(
         # Extract keyword slug from by pattern
         m = _BY_RE.search(by)
         if not m:
-            resolved[slug] = str(data.get("_default", ""))
+            default = data.get("_default", "")
+            resolved[slug] = _normalize_value(default)
             continue
 
         keyword_slug = m.group(1)
         lookup_key = values.get(keyword_slug, "")
 
         if lookup_key in data:
-            resolved[slug] = str(data[lookup_key])
+            resolved[slug] = _normalize_value(data[lookup_key])
         elif "_default" in data:
-            resolved[slug] = str(data["_default"])
+            resolved[slug] = _normalize_value(data["_default"])
         else:
             resolved[slug] = ""
 
     return resolved
+
+
+def _normalize_value(val: Any) -> str | list[str]:
+    """맵 값을 str 또는 list[str]로 정규화."""
+    if isinstance(val, list):
+        return [str(v) for v in val]
+    return str(val)

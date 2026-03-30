@@ -79,9 +79,20 @@
 # ═══════════════════════════════════════════════════════════
 #
 # 맵 파일 (순수 데이터, maps/region_photo.yaml):
-#   강남: gangnam.jpg
-#   서초: seocho.jpg
-#   _default: default.jpg
+#
+#   1:1 매핑 (문자열):
+#     강남: gangnam.jpg
+#     서초: seocho.jpg
+#     _default: default.jpg
+#
+#   1:N 매핑 (리스트 -- 블록 자동 확장):
+#     가경동: [가경점.jpg]
+#     다산동: [다산점1.jpg, 다산점2.jpg, 다산점3.jpg, 다산점4.jpg]
+#     _default: [default.jpg]
+#
+#   1:N일 때 해당 블록이 값 개수만큼 자동 복제됩니다.
+#   예: 다산동 조합 + - image: {path: "{map:photo}"}
+#       -> image 블록 4개 자동 생성
 #
 # 캠페인에서 참조:
 #   maps:
@@ -92,7 +103,7 @@
 #       file: maps/region_link.yaml
 #       by: "{keyword:region}"
 #
-# 사용: {map:photo}, {map:link} — 어디서든 토큰으로 사용
+# 사용: {map:photo}, {map:link} -- 어디서든 토큰으로 사용
 #   - image: {path: "{map:photo}", link: "{map:link}"}
 #   - featured_image: {path: "{map:photo}", link: "{map:link}"}
 

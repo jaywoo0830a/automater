@@ -138,9 +138,13 @@ def _build_body(
     blocks = []
 
     for entry in post:
-        block = _parse_block(entry, values, pools, images_dir, idx, exif_opt, resolved)
-        if block is not None:
-            blocks.append(block)
+        result = _parse_block(entry, values, pools, images_dir, idx, exif_opt, resolved)
+        if result is None:
+            continue
+        if isinstance(result, list):
+            blocks.extend(result)
+        else:
+            blocks.append(result)
 
     return [Section(blocks=tuple(blocks))] if blocks else _build_default_body(combo)
 
@@ -157,6 +161,68 @@ def _build_default_body(combo: Combo) -> list[Section]:
 
 
 # ---------------------------------------------------------------------------
+# Map list expansion (1:N)
+# ---------------------------------------------------------------------------
+
+_MAP_TOKEN_RE = re.compile(r"\{map:(\w+)\}")
+
+
+def _try_expand_map_list(
+    entry: dict,
+    maps: dict[str, str | list[str]],
+) -> list[dict] | None:
+    """entry 안에 {map:slug} 토큰이 있고 해당 맵 값이 리스트면 entry를 복제 확장.
+
+    Returns None if no list expansion needed.
+    """
+    # entry의 모든 문자열 값에서 {map:slug} 찾기
+    entry_str = str(entry)
+    found_slugs = _MAP_TOKEN_RE.findall(entry_str)
+    if not found_slugs:
+        return None
+
+    # 리스트 값을 가진 맵 슬러그 찾기
+    list_slug = None
+    list_values: list[str] = []
+    for slug in found_slugs:
+        val = maps.get(slug)
+        if isinstance(val, list):
+            list_slug = slug
+            list_values = val
+            break
+
+    if list_slug is None:
+        return None
+
+    # 리스트 값 각각에 대해 entry를 복제하고, 맵 토큰을 단일 값으로 치환
+    import copy
+    expanded: list[dict] = []
+    for single_val in list_values:
+        new_entry = copy.deepcopy(entry)
+        _replace_map_token_in_dict(new_entry, list_slug, single_val)
+        expanded.append(new_entry)
+    return expanded
+
+
+def _replace_map_token_in_dict(obj: Any, slug: str, value: str) -> None:
+    """dict/list 내부의 {map:slug} 토큰을 value로 직접 치환."""
+    token = f"{{map:{slug}}}"
+    if isinstance(obj, dict):
+        for k in list(obj.keys()):
+            v = obj[k]
+            if isinstance(v, str) and token in v:
+                obj[k] = v.replace(token, value)
+            elif isinstance(v, (dict, list)):
+                _replace_map_token_in_dict(v, slug, value)
+    elif isinstance(obj, list):
+        for i, item in enumerate(obj):
+            if isinstance(item, str) and token in item:
+                obj[i] = item.replace(token, value)
+            elif isinstance(item, (dict, list)):
+                _replace_map_token_in_dict(item, slug, value)
+
+
+# ---------------------------------------------------------------------------
 # Block parsing — with `when` support
 # ---------------------------------------------------------------------------
 
@@ -167,9 +233,13 @@ def _parse_block(
     images_dir: str,
     index: int,
     exif_opt: bool = True,
-    maps: dict[str, str] | None = None,
+    maps: dict[str, str | list[str]] | None = None,
 ) -> Any:
-    """Parse one post block entry. Returns None if skipped (when=false or unknown)."""
+    """Parse one post block entry.
+
+    Returns None if skipped, a single Block, or a list[Block] when
+    a map value is a list (1:N expansion).
+    """
     maps = maps or {}
 
     # Bare string: "divider"
@@ -185,6 +255,24 @@ def _parse_block(
     when = entry.get("when")
     if when and not evaluate_condition(str(when), values):
         return None
+
+    # 1:N 맵 확장 — entry에 {map:slug}가 있고 해당 맵 값이 리스트면 블록 복제
+    expanded = _try_expand_map_list(entry, maps)
+    if expanded is not None:
+        results = []
+        for expanded_entry in expanded:
+            # 확장된 각 entry에서 리스트 값은 이미 단일 문자열로 치환됨
+            flat_maps = {k: (v if isinstance(v, str) else str(v)) for k, v in maps.items()}
+            block = _parse_block(expanded_entry, values, pools, images_dir, index, exif_opt, flat_maps)
+            if block is not None:
+                if isinstance(block, list):
+                    results.extend(block)
+                else:
+                    results.append(block)
+        return results if results else None
+
+    # 맵 값을 단일 문자열로 정규화 (리스트가 아닌 경우)
+    str_maps: dict[str, str] = {k: (v if isinstance(v, str) else str(v)) for k, v in maps.items()}
 
     # Parse wait annotation
     wait_ms = _parse_wait(entry.get("wait"))
@@ -205,26 +293,26 @@ def _parse_block(
     heading_match = _HEADING_RE.match(block_type)
     if heading_match:
         level = int(heading_match.group(1))
-        text = interpolate(str(value), values, pools, index, maps=maps)
+        text = interpolate(str(value), values, pools, index, maps=str_maps)
         return HeadingBlock(level=level, text=text, wait_ms=wait_ms)
 
     if block_type == "paragraph":
-        return _parse_paragraph(value, values, pools, index, maps, wait_ms)
+        return _parse_paragraph(value, values, pools, index, str_maps, wait_ms)
 
     if block_type == "text":
-        return _parse_text(value, values, pools, images_dir, index, maps, wait_ms)
+        return _parse_text(value, values, pools, images_dir, index, str_maps, wait_ms)
 
     if block_type == "image":
-        return _parse_image(value, values, pools, images_dir, index, exif_opt, maps, wait_ms)
+        return _parse_image(value, values, pools, images_dir, index, exif_opt, str_maps, wait_ms)
 
     if block_type == "featured_image":
-        return _parse_featured_image(value, values, pools, images_dir, index, exif_opt, maps, wait_ms)
+        return _parse_featured_image(value, values, pools, images_dir, index, exif_opt, str_maps, wait_ms)
 
     if block_type == "quote":
-        return _parse_quote(value, values, pools, index, maps, wait_ms)
+        return _parse_quote(value, values, pools, index, str_maps, wait_ms)
 
     if block_type == "list":
-        return _parse_list(value, values, pools, index, maps, wait_ms)
+        return _parse_list(value, values, pools, index, str_maps, wait_ms)
 
     if block_type == "divider":
         return DividerBlock(wait_ms=wait_ms)
