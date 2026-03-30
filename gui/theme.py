@@ -90,7 +90,7 @@ BTN_PAD_H = rem(1)       # 14
 
 def build_stylesheet() -> str:
     return f"""
-* {{
+QWidget {{
     font-family: "Segoe UI", "Malgun Gothic", sans-serif;
     font-size: {BASE}px;
 }}
