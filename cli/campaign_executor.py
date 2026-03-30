@@ -575,7 +575,7 @@ class CampaignExecutor:
         hi = parsed.get("interval_hi", 0) or lo
         interval = random.randint(min(lo, hi), max(lo, hi))
 
-        if index == 0:
+        if self._seq_next_at is None:
             self._seq_next_at = datetime.now(tz=_KST) + timedelta(seconds=interval)
         else:
             self._seq_next_at = self._seq_next_at + timedelta(seconds=interval)
