@@ -159,13 +159,20 @@ class MapsTab(QWidget):
 
     # ── table management ─────────────────────────────────────────────
 
-    def _load_table(self, data: dict[str, str]) -> None:
+    def _load_table(self, data: dict) -> None:
         self._table.setRowCount(0)
         for key, val in data.items():
-            row = self._table.rowCount()
-            self._table.insertRow(row)
-            self._table.setItem(row, 0, QTableWidgetItem(str(key)))
-            self._table.setItem(row, 1, QTableWidgetItem(str(val)))
+            if isinstance(val, list):
+                for i, item in enumerate(val):
+                    row = self._table.rowCount()
+                    self._table.insertRow(row)
+                    self._table.setItem(row, 0, QTableWidgetItem(key if i == 0 else ""))
+                    self._table.setItem(row, 1, QTableWidgetItem(str(item)))
+            else:
+                row = self._table.rowCount()
+                self._table.insertRow(row)
+                self._table.setItem(row, 0, QTableWidgetItem(str(key)))
+                self._table.setItem(row, 1, QTableWidgetItem(str(val)))
 
     def _add_row(self) -> None:
         if not self._current_slug():
@@ -190,26 +197,39 @@ class MapsTab(QWidget):
         slug = self._current_slug()
         if not slug or slug not in self._maps:
             return
-        data: dict[str, str] = {}
+        data: dict[str, str | list[str]] = {}
+        last_key = ""
         for row in range(self._table.rowCount()):
             k_item = self._table.item(row, 0)
             v_item = self._table.item(row, 1)
             key = k_item.text().strip() if k_item else ""
             val = v_item.text().strip() if v_item else ""
+            if not val:
+                continue
             if key:
-                data[key] = val
+                last_key = key
+            if not last_key:
+                continue
+            if last_key in data:
+                existing = data[last_key]
+                if isinstance(existing, list):
+                    existing.append(val)
+                else:
+                    data[last_key] = [existing, val]
+            else:
+                data[last_key] = val
         self._maps[slug]["data"] = data
 
     # ── excel helpers ────────────────────────────────────────────────
 
-    def _get_current_map_data(self) -> dict[str, str]:
+    def _get_current_map_data(self) -> dict[str, str | list[str]]:
         self._sync_table_to_state()
         slug = self._current_slug()
         if not slug or slug not in self._maps:
             return {}
         return self._maps[slug].get("data", {})
 
-    def _set_current_map_data(self, data: dict[str, str], append: bool = False) -> None:
+    def _set_current_map_data(self, data: dict[str, str | list[str]], append: bool = False) -> None:
         slug = self._current_slug()
         if not slug:
             QMessageBox.warning(self, "맵 선택", "먼저 왼쪽에서 맵을 선택하세요.")

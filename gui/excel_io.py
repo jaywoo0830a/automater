@@ -189,29 +189,50 @@ MAP_COLUMNS = [
 ]
 
 
-def export_map(path: str | Path, data: dict[str, str]) -> None:
+def export_map(path: str | Path, data: dict[str, str | list[str]]) -> None:
+    """맵 데이터를 엑셀로 내보내기. 1:N 값은 여러 행으로 확장."""
     wb, ws = _single_sheet_wb("map", MAP_COLUMNS)
     for k, v in data.items():
-        ws.append([k, v])
+        if isinstance(v, list):
+            for i, item in enumerate(v):
+                ws.append([k if i == 0 else "", item])
+        else:
+            ws.append([k, v])
     wb.save(str(path))
 
 
-def import_map(path: str | Path) -> dict[str, str]:
+def import_map(path: str | Path) -> dict[str, str | list[str]]:
+    """맵 엑셀 읽기. 1:N 지원 -- 키가 비어있으면 이전 키에 값 추가."""
     wb = load_workbook(str(path), read_only=True, data_only=True)
     ws = wb[wb.sheetnames[0]]
-    result: dict[str, str] = {}
+    result: dict[str, list[str]] = {}
+    last_key = ""
     for row in _read_rows(ws):
         key = row[0] if len(row) > 0 else ""
         val = row[1] if len(row) > 1 else ""
+        if not val:
+            continue
         if key:
-            result[key] = val
+            last_key = key
+        if not last_key:
+            continue
+        if last_key not in result:
+            result[last_key] = []
+        result[last_key].append(val)
     wb.close()
-    return result
+    # 단일 값은 문자열로, 복수 값은 리스트로
+    final: dict[str, str | list[str]] = {}
+    for k, vals in result.items():
+        final[k] = vals[0] if len(vals) == 1 else vals
+    return final
 
 
 def template_map(path: str | Path) -> None:
     wb, ws = _single_sheet_wb("map", MAP_COLUMNS)
     ws.append(["강남", "gangnam.jpg"])
     ws.append(["서초", "seocho.jpg"])
+    ws.append(["다산동", "다산점1.jpg"])
+    ws.append(["", "다산점2.jpg"])
+    ws.append(["", "다산점3.jpg"])
     ws.append(["_default", "default.jpg"])
     wb.save(str(path))
