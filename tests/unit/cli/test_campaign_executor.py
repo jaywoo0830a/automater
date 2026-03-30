@@ -31,7 +31,7 @@ def _config(n_accounts=2, n_keywords=3):
         "keywords": {"region": [f"kw{i}" for i in range(n_keywords)]},
         "pools": {},
         "post": [{"paragraph": "{keyword:region}"}],
-        "images": ".",
+        "assets": ".",
         "publish": {},
         "run": {"interval": "0s"},
     }

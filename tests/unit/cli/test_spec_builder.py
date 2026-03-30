@@ -35,7 +35,7 @@ FULL_CONFIG = {
         {"paragraph": "{keyword:region} {keyword:subject} 과외 후기를 써줘"},
         {"featured_image": {"path": "thumb.jpg", "overlay_text": "{keyword:region} {keyword:subject} 과외"}},
     ],
-    "images": "./images",
+    "assets": "./images",
     "publish": {"schedule": "immediate", "tags": ["교육"]},
     "run": {"interval": "60s", "headless": True},
 }
@@ -375,13 +375,13 @@ class TestFullLayout:
 class TestImageBaseDir:
 
     def test_prepended(self):
-        config = {**FULL_CONFIG, "images": "./photos", "post": [{"image": "a.jpg"}]}
+        config = {**FULL_CONFIG, "assets": "./photos", "post": [{"image": "a.jpg"}]}
         spec = build_spec(_combo(), config)
         assert spec.body[0].blocks[0].path == "photos/a.jpg"
 
     def test_no_images_dir(self):
         config = {**FULL_CONFIG, "post": [{"image": "a.jpg"}]}
-        del config["images"]
+        del config["assets"]
         spec = build_spec(_combo(), config)
         assert spec.body[0].blocks[0].path == "a.jpg"
 

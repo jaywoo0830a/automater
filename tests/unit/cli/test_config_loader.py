@@ -43,7 +43,7 @@ FULL = {
         {"paragraph": {"keyword": "{keyword:region} {keyword:subject}", "tone": "review"}},
         {"thumbnail": {"src": "thumb.jpg", "overlay": "{keyword:region} {keyword:subject}"}},
     ],
-    "images": "./images",
+    "assets": "./images",
     "publish": {"schedule": "now + 15m ~ 30m", "tags": ["교육"], "visibility": "public"},
     "run": {"interval": "60s", "headless": True},
 }
@@ -100,7 +100,7 @@ class TestLoadFull:
 
     def test_images(self, write_yaml):
         config = load_config(write_yaml(FULL))
-        assert config["images"] == "./images"
+        assert config["assets"] == "./images"
 
     def test_publish(self, write_yaml):
         config = load_config(write_yaml(FULL))

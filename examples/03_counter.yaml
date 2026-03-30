@@ -38,7 +38,7 @@ post:
         - effect: "brightness:0.9 ~ 1.1"
       wait: 3s
 
-images: ./asset/images
+assets: ./asset/images
 
 publish:
   schedule: '++ 15m'

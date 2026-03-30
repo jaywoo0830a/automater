@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QComboBox, QListWidget, QListWidgetItem, QInputDialog,
     QDialog, QDialogButtonBox, QFormLayout, QLineEdit,
     QLabel, QDoubleSpinBox, QSpinBox, QCheckBox, QTextEdit,
-    QGroupBox,
+    QGroupBox, QFileDialog,
 )
 
 from typing import Callable
@@ -575,6 +575,9 @@ class _ImageDialog(QDialog):
         self._path = QLineEdit(str(_val.get("path", "")))
         self._path.setPlaceholderText("photo.jpg 또는 {map:photo}")
         token_btn_path = TokenInsertButton(self._path, ts)
+        btn_browse = QPushButton("...")
+        btn_browse.setFixedWidth(30)
+        btn_browse.clicked.connect(self._browse_file)
 
         self._link = QLineEdit(str(_val.get("link", "")))
         self._link.setPlaceholderText("tel:01012345678 또는 https://...")
@@ -583,6 +586,7 @@ class _ImageDialog(QDialog):
         path_row = QHBoxLayout()
         path_row.addWidget(self._path)
         path_row.addWidget(token_btn_path)
+        path_row.addWidget(btn_browse)
 
         link_row = QHBoxLayout()
         link_row.addWidget(self._link)
@@ -685,6 +689,14 @@ class _ImageDialog(QDialog):
         layout.addWidget(advanced2)
         layout.addWidget(buttons)
         self.setLayout(layout)
+
+    def _browse_file(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "이미지 파일 선택", "",
+            "이미지 (*.jpg *.jpeg *.png *.gif *.webp);;모든 파일 (*)",
+        )
+        if path:
+            self._path.setText(path)
 
     def result(self) -> dict:
         cfg: dict = {}

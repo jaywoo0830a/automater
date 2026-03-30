@@ -76,8 +76,8 @@ class MainWindow(QMainWindow):
         self._tabs.addTab(self._platform_tab, "플랫폼")
         self._tabs.addTab(self._accounts_tab, "계정")
         self._tabs.addTab(self._browser_tab, "브라우저")
-        self._tabs.addTab(self._titles_tab, "제목")
         self._tabs.addTab(self._keywords_tab, "키워드 / 풀")
+        self._tabs.addTab(self._titles_tab, "제목")
         self._tabs.addTab(self._maps_tab, "맵")
         self._tabs.addTab(self._post_tab, "포스트 블록")
         self._tabs.addTab(self._publish_tab, "발행")
@@ -242,7 +242,7 @@ class MainWindow(QMainWindow):
         config.update(self._keywords_tab.to_dict())
         config.update(self._maps_tab.to_dict())
         config.update(self._post_tab.to_dict())
-        config["images"] = platform_data.get("images", "./images")
+        config["assets"] = platform_data.get("assets", "./assets")
         config["exif_optimization"] = platform_data.get("exif_optimization", True)
         if "session_store" in platform_data:
             config["session_store"] = platform_data["session_store"]

@@ -109,7 +109,7 @@ def _normalize(raw: dict[str, Any]) -> dict[str, Any]:
     config = dict(raw)
     config.setdefault("pools", {})
     config.setdefault("post", [])
-    config.setdefault("images", ".")
+    config.setdefault("assets", ".")
     config.setdefault("publish", {})
     config.setdefault("run", {})
     return config

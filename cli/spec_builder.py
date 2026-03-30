@@ -128,7 +128,7 @@ def _build_body(
     values = combo.values
     pools = config.get("pools", {})
     base_dir = config.get("_base_dir", ".")
-    images_dir = config.get("images", ".")
+    images_dir = config.get("assets", ".")
     # Resolve images_dir relative to the YAML file's directory
     if images_dir and not Path(images_dir).is_absolute():
         images_dir = str(Path(base_dir) / images_dir)

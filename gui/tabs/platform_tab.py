@@ -43,22 +43,22 @@ class PlatformTab(QWidget):
         ws_widget.setLayout(ws_row)
 
         # Images directory
-        self._images_dir = QLineEdit()
-        self._images_dir.setPlaceholderText("./images (상대 경로 또는 절대 경로)")
-        btn_browse_img = QPushButton("...")
-        btn_browse_img.setFixedWidth(30)
-        btn_browse_img.clicked.connect(self._browse_images)
+        self._assets_dir = QLineEdit()
+        self._assets_dir.setPlaceholderText("./assets (이미지, 텍스트 파일 등)")
+        btn_browse_assets = QPushButton("...")
+        btn_browse_assets.setFixedWidth(30)
+        btn_browse_assets.clicked.connect(self._browse_assets)
 
-        img_row = QHBoxLayout()
-        img_row.addWidget(self._images_dir)
-        img_row.addWidget(btn_browse_img)
-        img_widget = QWidget()
-        img_widget.setLayout(img_row)
+        assets_row = QHBoxLayout()
+        assets_row.addWidget(self._assets_dir)
+        assets_row.addWidget(btn_browse_assets)
+        assets_widget = QWidget()
+        assets_widget.setLayout(assets_row)
 
         form = QFormLayout()
         form.addRow("플랫폼:", self._platform)
         form.addRow("작업 디렉토리:", ws_widget)
-        form.addRow("이미지 디렉토리:", img_widget)
+        form.addRow("Assets 디렉토리:", assets_widget)
 
         # Session store
         self._store_file = QRadioButton("파일 (기본)")
@@ -103,12 +103,12 @@ class PlatformTab(QWidget):
         if path:
             self._workspace.setText(path)
 
-    def _browse_images(self) -> None:
+    def _browse_assets(self) -> None:
         path = QFileDialog.getExistingDirectory(
-            self, "이미지 디렉토리 선택", self._images_dir.text() or self._workspace.text(),
+            self, "Assets 디렉토리 선택", self._assets_dir.text() or self._workspace.text(),
         )
         if path:
-            self._images_dir.setText(path)
+            self._assets_dir.setText(path)
 
     @property
     def workspace(self) -> str:
@@ -118,7 +118,7 @@ class PlatformTab(QWidget):
         d: dict = {"platform": self._platform.currentText()}
         if self._store_redis.isChecked():
             d["session_store"] = self._redis_url.text().strip() or "redis://localhost:6379"
-        d["images"] = self._images_dir.text().strip() or "./images"
+        d["assets"] = self._assets_dir.text().strip() or "./assets"
         d["exif_optimization"] = self._exif.isChecked()
         return d
 
@@ -136,5 +136,5 @@ class PlatformTab(QWidget):
             self._store_file.setChecked(True)
             self._redis_url.clear()
 
-        self._images_dir.setText(data.get("images", ""))
+        self._assets_dir.setText(data.get("assets", ""))
         self._exif.setChecked(data.get("exif_optimization", True))

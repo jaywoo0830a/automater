@@ -69,7 +69,7 @@ post:
   - divider
   - text: "{keyword:region} {keyword:category}에서 특별한 시간을 보내보세요. 자세한 정보는 아래 링크를 참고해주세요."
 
-images: ./photos
+assets: ./photos
 
 publish:
   schedule: 'now + 30m ~ 60m'
