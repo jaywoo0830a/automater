@@ -31,7 +31,6 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QInputDialog,
     QLabel,
-    QGroupBox,
 )
 
 from gui.tabs.platform_tab import PlatformTab
@@ -44,26 +43,26 @@ from gui.tabs.post_tab import PostTab
 from gui.tabs.publish_tab import PublishTab
 from gui.tabs.run_tab import RunTab
 
+_NAME_ROLE = Qt.ItemDataRole.UserRole  # 캠페인 고유 이름 저장용
+
 
 # ---------------------------------------------------------------------------
 # Signal bridge
 # ---------------------------------------------------------------------------
 
 class _CliSignals(QObject):
-    output = Signal(str, str)     # (campaign_name, line)
-    finished = Signal(str, str)   # (campaign_name, label)
+    output = Signal(str, str)
+    finished = Signal(str, str)
 
 
 class _CampaignState:
-    """하나의 캠페인 상태."""
-
     def __init__(self, name: str) -> None:
         self.name = name
         self.file_path: str = ""
         self.config: dict = {}
         self.proc: subprocess.Popen | None = None
         self.log_lines: list[str] = []
-        self.status: str = ""  # "", "실행 중", "[완료]", "[중단]"
+        self.status: str = ""
 
 
 class MainWindow(QMainWindow):
@@ -73,9 +72,9 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("캠페인 빌더")
         self.setMinimumSize(1100, 750)
 
-        # ── Campaign state ──
         self._campaigns: dict[str, _CampaignState] = {}
         self._current_name: str = ""
+        self._switching = False  # 전환 중 재진입 방지
 
         self._cli_signals = _CliSignals()
         self._cli_signals.output.connect(self._on_cli_output)
@@ -183,7 +182,7 @@ class MainWindow(QMainWindow):
         btn_row.addWidget(self._btn_execute)
         btn_row.addWidget(self._btn_stop)
 
-        # ── Right panel (builder + bottom + buttons) ──
+        # ── Layout ──
         right_splitter = QSplitter(Qt.Orientation.Vertical)
         right_splitter.addWidget(self._tabs)
         right_splitter.addWidget(self._bottom_tabs)
@@ -199,7 +198,6 @@ class MainWindow(QMainWindow):
         right_widget = QWidget()
         right_widget.setLayout(right_layout)
 
-        # ── Main splitter (sidebar | right) ──
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
         main_splitter.addWidget(sidebar_widget)
         main_splitter.addWidget(right_widget)
@@ -218,16 +216,43 @@ class MainWindow(QMainWindow):
         self._status = QStatusBar()
         self.setStatusBar(self._status)
 
-        # 기본 캠페인 하나 생성
         self._new_campaign_internal("새 캠페인")
+
+    # ------------------------------------------------------------------
+    # Sidebar helpers
+    # ------------------------------------------------------------------
+
+    def _item_name(self, item: QListWidgetItem | None) -> str:
+        """아이템에서 캠페인 고유 이름을 가져온다."""
+        if item is None:
+            return ""
+        return item.data(_NAME_ROLE) or ""
+
+    def _find_item(self, name: str) -> QListWidgetItem | None:
+        """이름으로 사이드바 아이템을 찾는다."""
+        for i in range(self._sidebar.count()):
+            item = self._sidebar.item(i)
+            if item and item.data(_NAME_ROLE) == name:
+                return item
+        return None
+
+    def _update_item_display(self, state: _CampaignState) -> None:
+        """사이드바 아이템 표시 텍스트를 상태에 맞게 갱신."""
+        item = self._find_item(state.name)
+        if not item:
+            return
+        if state.proc is not None:
+            item.setText(f"{state.name} *")
+        elif state.status:
+            item.setText(f"{state.status} {state.name}")
+        else:
+            item.setText(state.name)
 
     # ------------------------------------------------------------------
     # Campaign management
     # ------------------------------------------------------------------
 
     def _new_campaign_internal(self, name: str) -> _CampaignState:
-        """캠페인 생성 (내부)."""
-        # 이름 중복 방지
         base = name
         counter = 1
         while name in self._campaigns:
@@ -238,6 +263,7 @@ class MainWindow(QMainWindow):
         self._campaigns[name] = state
 
         item = QListWidgetItem(name)
+        item.setData(_NAME_ROLE, name)
         self._sidebar.addItem(item)
         self._sidebar.setCurrentItem(item)
         return state
@@ -264,7 +290,7 @@ class MainWindow(QMainWindow):
         item = self._sidebar.currentItem()
         if not item:
             return
-        name = item.text()
+        name = self._item_name(item)
         state = self._campaigns.get(name)
         if state and state.proc is not None:
             reply = QMessageBox.question(
@@ -284,42 +310,36 @@ class MainWindow(QMainWindow):
             self._new_campaign_internal("새 캠페인")
 
     def _on_campaign_switched(self, current: QListWidgetItem | None, previous: QListWidgetItem | None) -> None:
-        # 이전 캠페인 데이터 저장
-        if previous:
-            prev_name = previous.text()
-            prev_state = self._campaigns.get(prev_name)
-            if prev_state:
-                prev_state.config = self._build_config()
+        if self._switching:
+            return
+        self._switching = True
+        try:
+            # 이전 캠페인 데이터 저장
+            if previous:
+                prev_name = self._item_name(previous)
+                prev_state = self._campaigns.get(prev_name)
+                if prev_state:
+                    prev_state.config = self._build_config()
 
-        # 새 캠페인 데이터 로드
-        if current:
-            name = current.text()
-            self._current_name = name
-            state = self._campaigns.get(name)
-            if state and state.config:
-                self._apply_config(state.config)
-            elif state and state.file_path:
-                self._load_from_file(state.file_path)
+            # 새 캠페인 데이터 로드
+            if current:
+                name = self._item_name(current)
+                self._current_name = name
+                state = self._campaigns.get(name)
 
-            # 로그 복원 + 중단 버튼 상태
-            self._log.clear()
-            if state:
-                self._log.setPlainText("".join(state.log_lines))
-                self._update_sidebar_label(state)
-                self._btn_stop.setVisible(state.proc is not None)
+                if state and state.config:
+                    self._apply_config(state.config)
+                elif state and state.file_path and not state.config:
+                    self._load_from_file(state.file_path)
 
-    def _update_sidebar_label(self, state: _CampaignState) -> None:
-        """사이드바 아이템 텍스트를 상태에 맞게 갱신."""
-        for i in range(self._sidebar.count()):
-            item = self._sidebar.item(i)
-            if item and item.text().rstrip(" *").rstrip("[완료] ").rstrip("[중단] ") == state.name:
-                if state.proc is not None:
-                    item.setText(f"{state.name} *")
-                elif state.status:
-                    item.setText(f"{state.status} {state.name}")
-                else:
-                    item.setText(state.name)
-                break
+                # 로그 복원 + 중단 버튼
+                self._log.clear()
+                if state:
+                    if state.log_lines:
+                        self._log.setPlainText("".join(state.log_lines))
+                    self._btn_stop.setVisible(state.proc is not None)
+        finally:
+            self._switching = False
 
     def _current_state(self) -> _CampaignState | None:
         return self._campaigns.get(self._current_name)
@@ -521,11 +541,11 @@ class MainWindow(QMainWindow):
             return
 
         state.status = "실행 중"
-        self._btn_stop.setVisible(True)
         state.log_lines = [f"# {label} - {state.name}\n"]
         self._log.setPlainText(state.log_lines[0])
         self._bottom_tabs.setCurrentIndex(1)
-        self._update_sidebar_label(state)
+        self._update_item_display(state)
+        self._btn_stop.setVisible(True)
         self._status.showMessage(f"{state.name}: {label} ...", 0)
 
         cmd = [sys.executable, "-m", "cli", state.file_path, *args]
@@ -561,7 +581,6 @@ class MainWindow(QMainWindow):
         if not state:
             return
         state.log_lines.append(line)
-        # 현재 보고 있는 캠페인이면 로그 표시
         if campaign_name == self._current_name:
             self._log.moveCursor(QTextCursor.MoveOperation.End)
             self._log.insertPlainText(line)
@@ -571,7 +590,7 @@ class MainWindow(QMainWindow):
         if state:
             state.status = "[완료]"
             state.log_lines.append("\n-- 완료 --\n")
-            self._update_sidebar_label(state)
+            self._update_item_display(state)
             if campaign_name == self._current_name:
                 self._log.moveCursor(QTextCursor.MoveOperation.End)
                 self._log.insertPlainText("\n-- 완료 --\n")
@@ -585,7 +604,7 @@ class MainWindow(QMainWindow):
         self._kill_job(state)
         state.status = "[중단]"
         state.log_lines.append("\n-- 사용자에 의해 중단됨 --\n")
-        self._update_sidebar_label(state)
+        self._update_item_display(state)
         self._btn_stop.setVisible(False)
         self._log.moveCursor(QTextCursor.MoveOperation.End)
         self._log.insertPlainText("\n-- 사용자에 의해 중단됨 --\n")
@@ -610,7 +629,6 @@ class MainWindow(QMainWindow):
     def _run_execute(self) -> None:
         if not self._ensure_saved():
             return
-
         state = self._current_state()
         if not state:
             return
