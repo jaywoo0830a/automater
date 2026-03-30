@@ -1,7 +1,7 @@
 """
 gui/main_window.py
 -------------------
-Main window - DSL builder + campaign workflow.
+Main window - DSL builder + multi-campaign workflow.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ import subprocess
 import sys
 import threading
 from pathlib import Path
+from dataclasses import dataclass, field
 
 import yaml
 from PySide6.QtCore import Qt, Signal, QObject
@@ -45,9 +46,17 @@ from gui.tabs.run_tab import RunTab
 # ---------------------------------------------------------------------------
 
 class _CliSignals(QObject):
-    """Signals emitted from background CLI thread."""
-    output = Signal(str)    # stdout + stderr line
-    finished = Signal(str)  # label when done
+    output = Signal(str, str)     # (job_id, line)
+    finished = Signal(str, str)   # (job_id, label)
+
+
+@dataclass
+class _RunningJob:
+    job_id: str
+    label: str
+    proc: subprocess.Popen | None = None
+    log_widget: QTextEdit | None = None
+    tab_index: int = -1
 
 
 class MainWindow(QMainWindow):
@@ -85,17 +94,13 @@ class MainWindow(QMainWindow):
 
         # ── Bottom panel ──
         self._bottom_tabs = QTabWidget()
+        self._bottom_tabs.setTabsClosable(True)
+        self._bottom_tabs.tabCloseRequested.connect(self._on_tab_close_requested)
 
         self._preview = QTextEdit()
         self._preview.setReadOnly(True)
         self._preview.setPlaceholderText("YAML 미리보기...")
-
-        self._log = QTextEdit()
-        self._log.setReadOnly(True)
-        self._log.setPlaceholderText("실행 로그...")
-
         self._bottom_tabs.addTab(self._preview, "YAML 미리보기")
-        self._bottom_tabs.addTab(self._log, "실행 로그")
 
         # ── File buttons ──
         btn_load = QPushButton("불러오기")
@@ -120,15 +125,9 @@ class MainWindow(QMainWindow):
 
         self._btn_stop = QPushButton("중단")
         self._btn_stop.setStyleSheet("QPushButton { color: red; font-weight: bold; }")
-        self._btn_stop.clicked.connect(self._stop_execution)
-        self._btn_stop.setVisible(False)
+        self._btn_stop.clicked.connect(self._stop_current)
 
-        self._workflow_buttons = [
-            self._btn_validate, self._btn_prepare, self._btn_preview_plan,
-            self._btn_dryrun, self._btn_execute,
-        ]
-
-        from gui.theme import SP_SM, SP_MD, SP_LG
+        from gui.theme import SP_SM, SP_LG
 
         btn_row = QHBoxLayout()
         btn_row.setSpacing(SP_SM)
@@ -136,8 +135,11 @@ class MainWindow(QMainWindow):
         btn_row.addWidget(btn_save)
         btn_row.addWidget(btn_refresh)
         btn_row.addSpacing(SP_LG)
-        for btn in self._workflow_buttons:
-            btn_row.addWidget(btn)
+        btn_row.addWidget(self._btn_validate)
+        btn_row.addWidget(self._btn_prepare)
+        btn_row.addWidget(self._btn_preview_plan)
+        btn_row.addWidget(self._btn_dryrun)
+        btn_row.addWidget(self._btn_execute)
         btn_row.addWidget(self._btn_stop)
 
         # ── Layout ──
@@ -161,10 +163,11 @@ class MainWindow(QMainWindow):
         self.setStatusBar(self._status)
 
         self._last_saved_path: str = ""
-        self._running = False
-        self._proc: subprocess.Popen | None = None
 
-        # ── CLI signal bridge ──
+        # ── Multi-job state ──
+        self._jobs: dict[str, _RunningJob] = {}
+        self._job_counter = 0
+
         self._cli_signals = _CliSignals()
         self._cli_signals.output.connect(self._on_cli_output)
         self._cli_signals.finished.connect(self._on_cli_finished)
@@ -174,7 +177,6 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _get_tokens(self) -> list[str]:
-        """현재 등록된 keyword/pool/map 슬러그에서 토큰 목록 생성."""
         tokens: list[str] = []
         kw_data = self._keywords_tab.to_dict()
         for slug in (kw_data.get("keywords") or {}):
@@ -192,26 +194,25 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        if self._running and self._proc is not None:
+        running = [j for j in self._jobs.values() if j.proc is not None]
+        if running:
+            names = ", ".join(j.label for j in running)
             reply = QMessageBox.question(
                 self,
                 "작업 실행 중",
-                "현재 작업이 실행 중입니다. 종료하시겠습니까?\n\n"
-                "종료하면 실행 중인 작업이 중단됩니다.",
+                f"실행 중인 작업이 {len(running)}개 있습니다:\n{names}\n\n"
+                "종료하면 모든 작업이 중단됩니다.",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             )
             if reply != QMessageBox.StandardButton.Yes:
                 event.ignore()
                 return
-
-            # 자식 프로세스 정리
-            self._kill_proc()
-
+            for job in running:
+                self._kill_job(job)
         event.accept()
 
-    def _kill_proc(self) -> None:
-        """실행 중인 CLI 프로세스를 종료한다."""
-        proc = self._proc
+    def _kill_job(self, job: _RunningJob) -> None:
+        proc = job.proc
         if proc is None:
             return
         try:
@@ -223,17 +224,14 @@ class MainWindow(QMainWindow):
                 proc.wait(timeout=3)
         except Exception:
             pass
-        self._proc = None
-        self._running = False
+        job.proc = None
 
     # ------------------------------------------------------------------
     # Build config
     # ------------------------------------------------------------------
 
     def _build_config(self) -> dict:
-        """DSL 스펙 순서대로 config dict를 조합한다."""
         config: dict = {}
-        # DSL 순서: platform > browser > accounts > titles > keywords > pools > maps > post > images > exif > publish > run
         platform_data = self._platform_tab.to_dict()
         config["platform"] = platform_data.get("platform", "naver")
         config.update(self._browser_tab.to_dict())
@@ -254,10 +252,7 @@ class MainWindow(QMainWindow):
         config = self._build_config()
         config.pop("_maps_data", None)
         return yaml.dump(
-            config,
-            allow_unicode=True,
-            default_flow_style=False,
-            sort_keys=False,
+            config, allow_unicode=True, default_flow_style=False, sort_keys=False,
         )
 
     # ------------------------------------------------------------------
@@ -267,28 +262,20 @@ class MainWindow(QMainWindow):
     def _refresh_preview(self) -> None:
         try:
             self._preview.setPlainText(self._to_yaml())
-            self._bottom_tabs.setCurrentIndex(0)
+            self._bottom_tabs.setCurrentWidget(self._preview)
             self._status.showMessage("YAML 갱신됨", 3000)
         except Exception as e:
             QMessageBox.warning(self, "미리보기 오류", str(e))
 
     def _save_yaml(self) -> None:
         default = self._last_saved_path or str(Path(self._platform_tab.workspace) / "campaign.yaml")
-        path, _ = QFileDialog.getSaveFileName(
-            self, "YAML 저장", default,
-            "YAML (*.yaml *.yml)",
-        )
+        path, _ = QFileDialog.getSaveFileName(self, "YAML 저장", default, "YAML (*.yaml *.yml)")
         if not path:
             return
         try:
             config = self._build_config()
             self._save_map_files(config, Path(path).parent)
-            text = yaml.dump(
-                config,
-                allow_unicode=True,
-                default_flow_style=False,
-                sort_keys=False,
-            )
+            text = yaml.dump(config, allow_unicode=True, default_flow_style=False, sort_keys=False)
             Path(path).write_text(text, encoding="utf-8")
             self._last_saved_path = path
             self._status.showMessage(f"저장 완료: {path}", 5000)
@@ -359,7 +346,7 @@ class MainWindow(QMainWindow):
         raw["_maps_data"] = maps_data
 
     # ------------------------------------------------------------------
-    # CLI execution (background thread)
+    # CLI execution (multi-job)
     # ------------------------------------------------------------------
 
     def _ensure_saved(self) -> bool:
@@ -368,41 +355,45 @@ class MainWindow(QMainWindow):
             self._save_yaml()
         return bool(self._last_saved_path)
 
-    def _set_running(self, running: bool) -> None:
-        self._running = running
-        for btn in self._workflow_buttons:
-            btn.setEnabled(not running)
-        self._btn_stop.setVisible(running)
+    def _new_job_id(self) -> str:
+        self._job_counter += 1
+        return f"job_{self._job_counter}"
 
-    def _stop_execution(self) -> None:
-        """실행 중인 CLI 프로세스를 중단한다."""
-        if not self._running:
-            return
-        self._kill_proc()
-        self._log.moveCursor(QTextCursor.MoveOperation.End)
-        self._log.insertPlainText("\n\n-- 사용자에 의해 중단됨 --\n")
-        self._set_running(False)
-        self._status.showMessage("중단됨", 5000)
+    def _run_cli(self, *args: str, label: str = "", config_path: str = "") -> None:
+        """Run CLI command in background thread. Multiple jobs can run simultaneously."""
+        path = config_path or self._last_saved_path
+        if not path:
+            if not self._ensure_saved():
+                return
+            path = self._last_saved_path
 
-    def _run_cli(self, *args: str, label: str = "") -> None:
-        """Run CLI command in background thread."""
-        if self._running:
-            return
-        if not self._ensure_saved():
-            return
+        job_id = self._new_job_id()
+        campaign_name = Path(path).stem
 
-        self._set_running(True)
-        self._log.clear()
-        self._log.setPlainText(f"# {label} ...\n")
-        self._bottom_tabs.setCurrentIndex(1)
-        self._status.showMessage(f"{label} running...", 0)
+        # 로그 탭 생성
+        log_widget = QTextEdit()
+        log_widget.setReadOnly(True)
+        log_widget.setPlainText(f"# {label} - {campaign_name}\n")
+        tab_title = f"{label}: {campaign_name}"
+        tab_index = self._bottom_tabs.addTab(log_widget, tab_title)
+        self._bottom_tabs.setCurrentIndex(tab_index)
 
-        cmd = [sys.executable, "-m", "cli", self._last_saved_path, *args]
+        job = _RunningJob(
+            job_id=job_id,
+            label=tab_title,
+            log_widget=log_widget,
+            tab_index=tab_index,
+        )
+        self._jobs[job_id] = job
+
+        self._status.showMessage(f"{tab_title} ...", 0)
+
+        cmd = [sys.executable, "-m", "cli", path, *args]
         env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
 
         def _worker():
             try:
-                self._proc = subprocess.Popen(
+                proc = subprocess.Popen(
                     cmd,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
@@ -411,25 +402,74 @@ class MainWindow(QMainWindow):
                     errors="replace",
                     env=env,
                 )
-                for line in self._proc.stdout:
-                    self._cli_signals.output.emit(line)
-                self._proc.wait()
+                job.proc = proc
+                for line in proc.stdout:
+                    self._cli_signals.output.emit(job_id, line)
+                proc.wait()
             except Exception as exc:
-                self._cli_signals.output.emit(f"\n[ERROR] {exc}\n")
+                self._cli_signals.output.emit(job_id, f"\n[ERROR] {exc}\n")
             finally:
-                self._proc = None
-                self._cli_signals.finished.emit(label)
+                job.proc = None
+                self._cli_signals.finished.emit(job_id, tab_title)
 
         thread = threading.Thread(target=_worker, daemon=True)
         thread.start()
 
-    def _on_cli_output(self, line: str) -> None:
-        self._log.moveCursor(QTextCursor.MoveOperation.End)
-        self._log.insertPlainText(line)
+    def _on_cli_output(self, job_id: str, line: str) -> None:
+        job = self._jobs.get(job_id)
+        if job and job.log_widget:
+            job.log_widget.moveCursor(QTextCursor.MoveOperation.End)
+            job.log_widget.insertPlainText(line)
 
-    def _on_cli_finished(self, label: str) -> None:
-        self._set_running(False)
-        self._status.showMessage(f"{label} done", 5000)
+    def _on_cli_finished(self, job_id: str, label: str) -> None:
+        job = self._jobs.get(job_id)
+        if job and job.log_widget:
+            job.log_widget.moveCursor(QTextCursor.MoveOperation.End)
+            job.log_widget.insertPlainText(f"\n-- 완료 --\n")
+            # 탭 제목에 완료 표시
+            idx = self._bottom_tabs.indexOf(job.log_widget)
+            if idx >= 0:
+                self._bottom_tabs.setTabText(idx, f"[완료] {label}")
+        self._status.showMessage(f"{label} 완료", 5000)
+
+    def _stop_current(self) -> None:
+        """현재 보고 있는 로그 탭의 작업을 중단한다."""
+        widget = self._bottom_tabs.currentWidget()
+        if widget is self._preview:
+            return
+        for job in self._jobs.values():
+            if job.log_widget is widget and job.proc is not None:
+                self._kill_job(job)
+                job.log_widget.moveCursor(QTextCursor.MoveOperation.End)
+                job.log_widget.insertPlainText("\n\n-- 사용자에 의해 중단됨 --\n")
+                idx = self._bottom_tabs.indexOf(job.log_widget)
+                if idx >= 0:
+                    self._bottom_tabs.setTabText(idx, f"[중단] {job.label}")
+                self._status.showMessage("중단됨", 5000)
+                return
+
+    def _on_tab_close_requested(self, index: int) -> None:
+        """로그 탭 닫기. YAML 미리보기는 닫을 수 없음. 실행 중이면 중단 확인."""
+        widget = self._bottom_tabs.widget(index)
+        if widget is self._preview:
+            return  # YAML 미리보기는 닫지 않음
+
+        # 실행 중인 job인지 확인
+        for job_id, job in self._jobs.items():
+            if job.log_widget is widget:
+                if job.proc is not None:
+                    reply = QMessageBox.question(
+                        self, "작업 실행 중",
+                        f"'{job.label}'이 실행 중입니다. 중단하고 닫으시겠습니까?",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    )
+                    if reply != QMessageBox.StandardButton.Yes:
+                        return
+                    self._kill_job(job)
+                del self._jobs[job_id]
+                break
+
+        self._bottom_tabs.removeTab(index)
 
     # ------------------------------------------------------------------
     # Workflow buttons
@@ -451,7 +491,6 @@ class MainWindow(QMainWindow):
         if not self._ensure_saved():
             return
 
-        # 이전 진행 기록이 있는지 확인
         has_progress = self._check_progress()
 
         if has_progress:
@@ -468,7 +507,7 @@ class MainWindow(QMainWindow):
             if clicked == btn_cancel:
                 return
             elif clicked == btn_skip:
-                self._run_cli("--execute", "--resume", label="실행 (이어서)")
+                self._run_cli("--execute", "--resume", label="실행(이어서)")
             else:
                 self._run_cli("--execute", label="실행")
         else:
@@ -482,7 +521,6 @@ class MainWindow(QMainWindow):
             self._run_cli("--execute", label="실행")
 
     def _check_progress(self) -> bool:
-        """이전 실행의 진행 기록이 있는지 확인."""
         if not self._last_saved_path:
             return False
         try:
