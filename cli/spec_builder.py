@@ -435,8 +435,8 @@ def _parse_effects(raw: Any) -> list[RegionalEffect]:
     for entry in raw:
         if isinstance(entry, dict):
             effects.append(RegionalEffect(
-                region=str(entry.get("region", "all")),
-                effect=str(entry.get("effect", "")),
+                region=str(entry.get("region", "all")).strip("'\""),
+                effect=str(entry.get("effect", "")).strip("'\""),
             ))
     return effects
 

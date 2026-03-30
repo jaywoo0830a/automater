@@ -41,6 +41,7 @@ def apply_regional_effect(
     Returns:
         효과가 적용된 새 이미지 (RGB).
     """
+    region = region.strip().strip("'\"")
     w, h = img.size
     mask = parse_region(region, w, h)
 
@@ -60,7 +61,7 @@ def _resolve_range(param: str) -> float:
 
 def _apply_effect(img: Image.Image, effect: str) -> Image.Image:
     """효과 spec을 파싱하여 이미지 전체에 적용한다."""
-    effect = effect.strip()
+    effect = effect.strip().strip("'\"")  # YAML/GUI에서 따옴표가 포함될 수 있음
 
     if effect == "grayscale":
         return _effect_grayscale(img)

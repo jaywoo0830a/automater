@@ -167,6 +167,7 @@ class MainWindow(QMainWindow):
         self._btn_stop = QPushButton("중단")
         self._btn_stop.setStyleSheet("QPushButton { color: red; font-weight: bold; }")
         self._btn_stop.clicked.connect(self._stop_current)
+        self._btn_stop.setVisible(False)
 
         from gui.theme import SP_SM, SP_LG
 
@@ -300,11 +301,12 @@ class MainWindow(QMainWindow):
             elif state and state.file_path:
                 self._load_from_file(state.file_path)
 
-            # 로그 복원
+            # 로그 복원 + 중단 버튼 상태
             self._log.clear()
             if state:
                 self._log.setPlainText("".join(state.log_lines))
                 self._update_sidebar_label(state)
+                self._btn_stop.setVisible(state.proc is not None)
 
     def _update_sidebar_label(self, state: _CampaignState) -> None:
         """사이드바 아이템 텍스트를 상태에 맞게 갱신."""
@@ -519,6 +521,7 @@ class MainWindow(QMainWindow):
             return
 
         state.status = "실행 중"
+        self._btn_stop.setVisible(True)
         state.log_lines = [f"# {label} - {state.name}\n"]
         self._log.setPlainText(state.log_lines[0])
         self._bottom_tabs.setCurrentIndex(1)
@@ -572,6 +575,7 @@ class MainWindow(QMainWindow):
             if campaign_name == self._current_name:
                 self._log.moveCursor(QTextCursor.MoveOperation.End)
                 self._log.insertPlainText("\n-- 완료 --\n")
+                self._btn_stop.setVisible(False)
         self._status.showMessage(f"{campaign_name}: {label} 완료", 5000)
 
     def _stop_current(self) -> None:
@@ -582,6 +586,7 @@ class MainWindow(QMainWindow):
         state.status = "[중단]"
         state.log_lines.append("\n-- 사용자에 의해 중단됨 --\n")
         self._update_sidebar_label(state)
+        self._btn_stop.setVisible(False)
         self._log.moveCursor(QTextCursor.MoveOperation.End)
         self._log.insertPlainText("\n-- 사용자에 의해 중단됨 --\n")
         self._status.showMessage(f"{state.name}: 중단됨", 5000)
