@@ -258,9 +258,8 @@ class MapsTab(QWidget):
         for slug, entry in self._maps.items():
             by = entry.get("by", "")
             data = entry.get("data", {})
-            if not data:
-                continue
-            maps_config[slug] = {"by": by}
+            # file 경로는 저장 시 _save_map_files에서 채워짐
+            maps_config[slug] = {"by": by, "file": f"maps/{slug}.yaml"}
             maps_data[slug] = data
         if not maps_config:
             return {}
