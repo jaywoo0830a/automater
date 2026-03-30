@@ -104,7 +104,8 @@ class MainWindow(QMainWindow):
 
         sidebar_widget = QWidget()
         sidebar_widget.setLayout(sidebar_layout)
-        sidebar_widget.setMaximumWidth(200)
+        sidebar_widget.setMinimumWidth(180)
+        sidebar_widget.setMaximumWidth(300)
 
         # ── Builder tabs ──
         self._tabs = QTabWidget()
