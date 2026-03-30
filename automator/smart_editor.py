@@ -177,6 +177,7 @@ class SmartEditorOne(BlogEditor):
         Click the last paragraph container and type text.
 
         Uses editor_paragraph_container (p.se-text-paragraph).
+        Text containing newlines is split and Enter is pressed between segments.
         Presses Enter newlines times after typing (default: 2).
         After long text, waits for the editor DOM to catch up.
         """
@@ -185,7 +186,14 @@ class SmartEditorOne(BlogEditor):
         last_para = sel.locator(frame, "editor_paragraph_container").last
         last_para.wait_for(state="visible", timeout=5_000)
         last_para.click()
-        self._page.keyboard.type(text)
+
+        # keyboard.type()는 \n을 Enter로 변환하지 않으므로 직접 처리
+        lines = text.split("\n")
+        for i, line in enumerate(lines):
+            if line:
+                self._page.keyboard.type(line)
+            if i < len(lines) - 1:
+                self._page.keyboard.press("Enter")
 
         # Editor DOM lags behind keyboard.type() on long text.
         # ~1 second per 100 chars, minimum 2s, cap 60s.
