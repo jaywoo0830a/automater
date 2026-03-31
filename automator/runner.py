@@ -60,7 +60,6 @@ class JobRunner:
         editor.write_title(post.title)
 
         image_upload_count = 0
-        rep_index: int | None = None
 
         try:
             for i, step in enumerate(post.steps):
@@ -71,8 +70,8 @@ class JobRunner:
                 step.wait()
 
                 if isinstance(step, (ImageStep, FeaturedImageStep)):
-                    if isinstance(step, FeaturedImageStep):
-                        rep_index = image_upload_count
+                    if isinstance(step, FeaturedImageStep) and hasattr(editor, "set_representative_media"):
+                        editor.set_representative_media(image_upload_count)
                     image_upload_count += 1
 
         finally:
@@ -81,10 +80,6 @@ class JobRunner:
                     Path(path).unlink(missing_ok=True)
                 except OSError:
                     pass
-
-        # Platform-specific: set representative image if supported
-        if rep_index is not None and hasattr(editor, "set_representative_media"):
-            editor.set_representative_media(rep_index)
 
         # Platform-specific: schedule if supported and requested
         if post.schedule_at is not None and hasattr(editor, "schedule"):
