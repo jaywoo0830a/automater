@@ -92,12 +92,9 @@
 #     서초: seocho.jpg
 #     _default: default.jpg
 #
-#   1:N 매핑 (블록 자동 확장):
+#   1:N 매핑 (YAML 리스트 -- 블록 자동 확장):
 #     다산동: [다산점1.jpg, 다산점2.jpg, 다산점3.jpg]
 #     _default: [default.jpg]
-#
-#   콤마 구분 문자열도 자동 변환:
-#     다산동: 다산점1.jpg, 다산점2.jpg, 다산점3.jpg
 #
 # 캠페인에서 참조:
 #   maps:

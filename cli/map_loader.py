@@ -117,16 +117,7 @@ def resolve_maps(
 
 
 def _normalize_value(val: Any) -> str | list[str]:
-    """맵 값을 str 또는 list[str]로 정규화.
-
-    콤마 구분 문자열도 리스트로 처리:
-        "a.jpg, b.jpg, c.jpg" -> ["a.jpg", "b.jpg", "c.jpg"]
-        "a.jpg" -> "a.jpg"  (콤마 없으면 단일 문자열)
-    """
+    """맵 값을 str 또는 list[str]로 정규화."""
     if isinstance(val, list):
         return [str(v).strip() for v in val]
-    s = str(val)
-    if "," in s:
-        items = [v.strip() for v in s.split(",") if v.strip()]
-        return items if len(items) > 1 else s
-    return s
+    return str(val)
