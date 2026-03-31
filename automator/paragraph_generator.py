@@ -135,7 +135,7 @@ def _call_api(prompt: str, count: int, api_key: str, model: str) -> str:
             config=types.GenerateContentConfig(
                 system_instruction=_SYSTEM_PROMPT,
                 temperature=0.8,
-                max_output_tokens=8192,
+                max_output_tokens=65536,
             ),
         )
     except Exception as exc:
