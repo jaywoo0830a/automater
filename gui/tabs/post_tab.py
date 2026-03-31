@@ -84,7 +84,9 @@ class PostTab(QWidget):
         bt = self._selected_block_type()
 
         if bt == "divider":
-            self._append({"divider": None})
+            dlg = _DividerDialog(self)
+            if dlg.exec() == QDialog.DialogCode.Accepted:
+                self._append(dlg.result())
             return
 
         if bt.startswith("h") and bt[1:].isdigit():
@@ -203,9 +205,9 @@ class PostTab(QWidget):
                 existing=block,
             )
 
-        # divider - 수정할 본문은 없지만 when/wait 편집용
+        # divider - when/wait 편집
         elif bt == "divider":
-            return
+            dlg = _DividerDialog(self, existing=block)
 
         if dlg is None:
             return
@@ -782,3 +784,45 @@ class _ImageDialog(QDialog):
             elif len(parts) == 1:
                 effects.append({"effect": parts[0]})
         return effects
+
+
+class _DividerDialog(QDialog):
+    """구분선 편집 -- when/wait만."""
+
+    def __init__(self, parent: QWidget, existing: dict | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("구분선 설정")
+        self.setMinimumWidth(400)
+
+        _when: str = str((existing or {}).get("when", ""))
+        _wait: str = str((existing or {}).get("wait", ""))
+
+        self._when = QLineEdit(_when)
+        self._when.setPlaceholderText('{keyword:region} == 강남')
+        self._wait = QLineEdit(_wait)
+        self._wait.setPlaceholderText("2s 또는 1s ~ 3s")
+
+        form = QFormLayout()
+        form.addRow("조건 (when):", self._when)
+        form.addRow("대기 (wait):", self._wait)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+
+        layout = QVBoxLayout()
+        layout.addLayout(form)
+        layout.addWidget(buttons)
+        self.setLayout(layout)
+
+    def result(self) -> dict:
+        entry: dict = {"divider": None}
+        when = self._when.text().strip()
+        if when:
+            entry["when"] = when
+        wait = self._wait.text().strip()
+        if wait:
+            entry["wait"] = wait
+        return entry
