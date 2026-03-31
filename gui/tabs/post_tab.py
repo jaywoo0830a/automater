@@ -444,6 +444,11 @@ class _TextBlockDialog(QDialog):
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
+        # QTextEdit에서 Enter 키가 개행 대신 OK 버튼을 트리거하지 않도록 설정
+        ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        if ok_btn:
+            ok_btn.setAutoDefault(False)
+            ok_btn.setDefault(False)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
 
