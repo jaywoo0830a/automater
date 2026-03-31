@@ -161,6 +161,10 @@
 # ── divider
 #   - divider
 #
+# ── newline (줄바꿈 -- 지정 횟수만큼 Enter)
+#   - newline: 4                              # Enter 4번
+#   - newline: 8                              # Enter 8번
+#
 # ── effects (image, featured_image 공통)
 #
 #   region:

@@ -290,6 +290,13 @@ class DividerBlock:
     wait_ms: int = 0
 
 
+@dataclass(frozen=True)
+class NewLineBlock:
+    """줄바꿈(Enter) 블록. 지정 횟수만큼 Enter를 입력."""
+    count:   int = 1
+    wait_ms: int = 0
+
+
 # Sealed union — isinstance 분기에 사용
 Block = Union[
     HeadingBlock,
@@ -300,6 +307,7 @@ Block = Union[
     ListBlock,
     QuoteBlock,
     DividerBlock,
+    NewLineBlock,
 ]
 
 

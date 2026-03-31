@@ -232,6 +232,16 @@ class DividerStep(PostStep):
         editor.insert_divider()
 
 
+@dataclass(frozen=True)
+class NewLineStep(PostStep):
+    """Insert N blank line breaks (Enter presses)."""
+    count:   int = 1
+    wait_ms: int = 0
+
+    def execute(self, editor: BlogEditor) -> None:
+        editor.insert_text("", self.count)
+
+
 # ---------------------------------------------------------------------------
 # _PostContent — internal data transfer between generate and execute
 # ---------------------------------------------------------------------------

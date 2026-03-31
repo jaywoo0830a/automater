@@ -29,6 +29,7 @@ from automator.options import (
     FeaturedImageBlock,
     HeadingBlock,
     ListBlock,
+    NewLineBlock,
     QuoteBlock,
     DividerBlock,
 )
@@ -46,6 +47,7 @@ FACTORIES: dict[str, type] = {
     "list":      ListBlock,
     "quote":     QuoteBlock,
     "divider":   DividerBlock,
+    "newline":   NewLineBlock,
 }
 
 _PLACEHOLDER_RE = re.compile(r"\{(\w+)\}")

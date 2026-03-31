@@ -26,6 +26,7 @@ _BLOCK_TYPES = [
     ("인용구", "quote"),
     ("목록", "list"),
     ("구분선", "divider"),
+    ("줄바꿈", "newline"),
 ]
 
 
@@ -85,6 +86,12 @@ class PostTab(QWidget):
 
         if bt == "divider":
             dlg = _DividerDialog(self)
+            if dlg.exec() == QDialog.DialogCode.Accepted:
+                self._append(dlg.result())
+            return
+
+        if bt == "newline":
+            dlg = _NewLineDialog(self)
             if dlg.exec() == QDialog.DialogCode.Accepted:
                 self._append(dlg.result())
             return
@@ -209,6 +216,10 @@ class PostTab(QWidget):
         elif bt == "divider":
             dlg = _DividerDialog(self, existing=block)
 
+        # 줄바꿈
+        elif bt == "newline":
+            dlg = _NewLineDialog(self, existing=block)
+
         if dlg is None:
             return
 
@@ -249,6 +260,8 @@ class PostTab(QWidget):
             return "------- 구분선 -------"
         bt = next(iter(block))
         val = block[bt]
+        if isinstance(val, int):
+            return f"[{bt}]  {val}"
         if isinstance(val, str):
             short = val[:50] + "..." if len(val) > 50 else val
             return f"[{bt}]  {short}"
@@ -552,6 +565,57 @@ class _QuoteDialog(QDialog):
         else:
             entry = {"quote": text}
 
+        when = self._when.text().strip()
+        if when:
+            entry["when"] = when
+        wait = self._wait.text().strip()
+        if wait:
+            entry["wait"] = wait
+        return entry
+
+
+class _NewLineDialog(QDialog):
+    """줄바꿈 설정 -- count + when/wait."""
+
+    def __init__(self, parent: QWidget, existing: dict | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("줄바꿈 설정")
+        self.setMinimumWidth(400)
+
+        _count = int((existing or {}).get("newline", 1) or 1)
+        _when: str = str((existing or {}).get("when", ""))
+        _wait: str = str((existing or {}).get("wait", ""))
+
+        self._count = QSpinBox()
+        self._count.setRange(1, 50)
+        self._count.setValue(_count)
+
+        self._when = QLineEdit(_when)
+        self._when.setPlaceholderText('{keyword:region} == 강남')
+        self._wait = QLineEdit(_wait)
+        self._wait.setPlaceholderText("2s 또는 1s ~ 3s")
+
+        form = QFormLayout()
+        form.addRow("줄바꿈 횟수:", self._count)
+
+        advanced = CollapsibleSection("고급 설정")
+        advanced.add_row("조건 (when):", self._when)
+        advanced.add_row("대기 (wait):", self._wait)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+
+        layout = QVBoxLayout()
+        layout.addLayout(form)
+        layout.addWidget(advanced)
+        layout.addWidget(buttons)
+        self.setLayout(layout)
+
+    def result(self) -> dict:
+        entry: dict = {"newline": self._count.value()}
         when = self._when.text().strip()
         if when:
             entry["when"] = when

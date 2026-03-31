@@ -26,6 +26,7 @@ from automator.options import (
     HeadingBlock,
     ImageBlock,
     ListBlock,
+    NewLineBlock,
     ParagraphBlock,
     PublishOption,
     QuoteBlock,
@@ -317,6 +318,10 @@ def _parse_block(
 
     if block_type == "divider":
         return DividerBlock(wait_ms=wait_ms)
+
+    if block_type == "newline":
+        count = int(value) if value else 1
+        return NewLineBlock(count=count, wait_ms=wait_ms)
 
     return None  # Unknown block type — skip silently
 

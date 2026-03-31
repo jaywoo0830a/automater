@@ -30,6 +30,7 @@ from automator.editor import (
     ListStep,
     QuoteStep,
     DividerStep,
+    NewLineStep,
 )
 from automator.options import (
     Block,
@@ -41,6 +42,7 @@ from automator.options import (
     ListBlock,
     QuoteBlock,
     DividerBlock,
+    NewLineBlock,
 )
 
 if TYPE_CHECKING:
@@ -204,6 +206,13 @@ class DividerHandler(BlockHandler):
         return [DividerStep(wait_ms=block.wait_ms)]
 
 
+class NewLineHandler(BlockHandler):
+    """NewLineBlock -> [NewLineStep]"""
+
+    def to_steps(self, block: NewLineBlock, ctx: ContentContext) -> list[PostStep]:
+        return [NewLineStep(count=block.count, wait_ms=block.wait_ms)]
+
+
 # ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
@@ -217,6 +226,7 @@ HANDLERS: dict[type[Block], BlockHandler] = {
     ListBlock:          ListHandler(),
     QuoteBlock:         QuoteHandler(),
     DividerBlock:       DividerHandler(),
+    NewLineBlock:       NewLineHandler(),
 }
 
 
