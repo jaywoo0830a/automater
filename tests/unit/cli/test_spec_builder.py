@@ -12,7 +12,7 @@ import pytest
 from automator.contracts import PostingSpec
 from automator.options import (
     HeadingBlock, ParagraphBlock, ImageBlock, FeaturedImageBlock,
-    ListBlock, QuoteBlock, DividerBlock, Section,
+    ListBlock, QuoteBlock, DividerBlock, Section, TitleOption,
 )
 
 from cli.combo_builder import Combo
@@ -73,21 +73,29 @@ class TestTitle:
 
     def test_template(self):
         spec = build_spec(_combo(), FULL_CONFIG)
-        assert spec.title.template == "{keyword:region} {keyword:subject} 과외"
+        title = spec.title
+        assert isinstance(title, TitleOption)
+        assert title.template == "{keyword:region} {keyword:subject} 과외"
 
     def test_values(self):
         spec = build_spec(_combo(), FULL_CONFIG)
-        assert spec.title.values == {"region": "강남", "subject": "수학"}
+        title = spec.title
+        assert isinstance(title, TitleOption)
+        assert title.values == {"region": "강남", "subject": "수학"}
 
     def test_pools(self):
         spec = build_spec(_combo(), FULL_CONFIG)
-        assert spec.title.pools == {"prefix": ("검증된",)}
+        title = spec.title
+        assert isinstance(title, TitleOption)
+        assert title.pools == {"prefix": ("검증된",)}
 
     def test_i_in_title(self):
         config = {**FULL_CONFIG, "titles": ["#{i} {keyword:region}"]}
         spec = build_spec(_combo(title_template="#{i} {keyword:region}", index=7), config)
-        assert "7" in spec.title.template
-        assert "{i}" not in spec.title.template
+        title = spec.title
+        assert isinstance(title, TitleOption)
+        assert "7" in title.template
+        assert "{i}" not in title.template
 
 
 # ---------------------------------------------------------------------------

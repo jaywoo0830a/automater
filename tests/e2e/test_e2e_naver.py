@@ -124,12 +124,14 @@ def test_pipeline_text_only(editor: SmartEditorOne, account: AccountOption):
     (1, 38), (2, 34), (3, 30), (4, 28), (5, 24), (6, 19),
 ])
 def test_pipeline_heading_level(editor: SmartEditorOne, account: AccountOption, level: int, size: int):
-    """H1~H6 각 레벨별 소제목 삽입 — 서식 적용 + 일반 단락 복귀."""
+    """H1~H6 각 레벨별 소제목 삽입 -- 서식 적용 + 일반 단락 복귀."""
+    from typing import cast, Literal
+    lvl = cast(Literal[1,2,3,4,5,6], level)
     spec = PostingSpec(
         account=account,
         title=f"H{level} 소제목 테스트 (size {size})",
         body=(Section(blocks=(
-            HeadingBlock(level=level, text=f"H{level} 소제목 — 크기 {size}"),
+            HeadingBlock(level=lvl, text=f"H{level} 소제목 -- 크기 {size}"),
             ParagraphBlock(prompt=f"H{level} 아래 일반 본문"),
         )),),
     )
@@ -276,9 +278,7 @@ def test_pipeline_all_options(editor: SmartEditorOne, account: AccountOption):
 
     blocks: list = [
         ParagraphBlock(
-            prompt="강남 수학 과외 홍보 블로그",
-            keyword="강남 수학 과외",
-            tone="review",
+            prompt="강남 수학 과외 홍보 블로그 글을 리뷰 형식으로 써줘",
         ),
         ParagraphBlock(prompt="후기 형식 마무리"),
     ]
@@ -324,10 +324,9 @@ def test_pipeline_real_publish(page: Page, account: AccountOption, real_run: boo
     thumb = _asset("thumbnails", 0)
 
     blocks: list = [
-        ParagraphBlock(keyword="강남 수학 과외", tone="review",
-                       min_chars=250, max_chars=400),
-        ParagraphBlock(keyword="강남 수학 과외", tone="review"),
-        ParagraphBlock(keyword="강남 수학 과외", tone="promotional"),
+        ParagraphBlock(prompt="강남 수학 과외를 학부모 관점에서 250자 이상 400자 이하로 리뷰해줘"),
+        ParagraphBlock(prompt="강남 수학 과외 후기를 리뷰 형식으로 써줘"),
+        ParagraphBlock(prompt="강남 수학 과외를 홍보하는 글을 써줘. 행동 유도 포함"),
     ]
     if image:
         blocks.insert(0, ImageBlock(path=image))

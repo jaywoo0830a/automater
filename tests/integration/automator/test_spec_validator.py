@@ -18,8 +18,8 @@ from automator.options import (
 )
 
 
-def _account(**kw):
-    defaults = {"username": "id", "password": "pw"}
+def _account(**kw) -> AccountOption:
+    defaults: dict = {"username": "id", "password": "pw"}
     defaults.update(kw)
     return AccountOption(**defaults)
 

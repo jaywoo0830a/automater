@@ -262,7 +262,7 @@ def _parse_block(
         results = []
         for expanded_entry in expanded:
             # 확장된 각 entry에서 리스트 값은 이미 단일 문자열로 치환됨
-            flat_maps = {k: (v if isinstance(v, str) else str(v)) for k, v in maps.items()}
+            flat_maps: dict[str, str | list[str]] = {k: (v if isinstance(v, str) else str(v)) for k, v in maps.items()}
             block = _parse_block(expanded_entry, values, pools, images_dir, index, exif_opt, flat_maps)
             if block is not None:
                 if isinstance(block, list):
@@ -292,7 +292,8 @@ def _parse_block(
     # Heading: h1~h6
     heading_match = _HEADING_RE.match(block_type)
     if heading_match:
-        level = int(heading_match.group(1))
+        from typing import cast, Literal
+        level = cast(Literal[1,2,3,4,5,6], int(heading_match.group(1)))
         text = interpolate(str(value), values, pools, index, maps=str_maps)
         return HeadingBlock(level=level, text=text, wait_ms=wait_ms)
 

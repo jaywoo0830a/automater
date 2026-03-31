@@ -39,7 +39,7 @@ def test_spec_is_frozen():
     """PostingSpec is immutable."""
     spec = PostingSpec(account=_account())
     with pytest.raises(FrozenInstanceError):
-        spec.account = _account()
+        spec.account = _account()  # type: ignore[misc]
 
 
 def test_spec_with_full_body():
