@@ -14,6 +14,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, TypeVar
 
@@ -325,6 +326,13 @@ class CampaignExecutor:
             for err in result.errors[:10]:
                 logger.info("    - %s", err)
         logger.info("=" * 60)
+
+        # 알림 전송
+        from cli.notifier import build_notifier
+        notifier = build_notifier(config.get("notify"))
+        if notifier and not dry_run:
+            campaign_name = Path(config.get("_config_path", "campaign")).stem
+            notifier.send(result, campaign_name)
 
         return result
 

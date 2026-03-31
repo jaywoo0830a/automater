@@ -226,7 +226,23 @@
 #   parallel: false                          # 계정별 병렬
 #   max_workers: 3                           # parallel=true 시
 #
-# CLI:
+# ═══════════════════════════════════════════════════════════
+# notify (선택) -- 캠페인 완료 시 알림
+# ═══════════════════════════════════════════════════════════
+#
+# notify:
+#   on: always                               # complete | fail | always
+#   channels:
+#     - type: telegram
+#       token: "123456:ABC-DEF..."           # Bot API token
+#       chat_id: "987654321"                 # 채팅 ID
+#
+# 알림 내용: 캠페인명, 성공/실패 수, 오류 요약
+
+# ═══════════════════════════════════════════════════════════
+# CLI
+# ═══════════════════════════════════════════════════════════
+#
 #   python -m cli campaign.yaml --validate
 #   python -m cli campaign.yaml --prepare
 #   python -m cli campaign.yaml --preview
