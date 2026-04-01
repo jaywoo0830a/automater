@@ -125,25 +125,40 @@ class SessionManager:
 
     def auto_login(self, account: dict[str, Any], browser_config: dict[str, Any] | None = None) -> dict | None:
         """headless 자동 로그인 시도. 캡챠 시 None 반환."""
+        username = account["username"]
+        blog_id = account.get("blog_id", username)
+        write_url = f"https://blog.naver.com/{blog_id}?Redirect=Write&"
+
         try:
             browser = self._pw.chromium.launch(headless=True)
             ctx = build_context(browser, browser_config)
             page = ctx.new_page()
-            page.goto(LOGIN_URL)
+
+            # 1. 로그인 페이지 로딩
+            page.goto(LOGIN_URL, wait_until="domcontentloaded")
+            page.wait_for_timeout(3_000)
 
             from automator.selector_loader import SelectorLoader
             login_sel = SelectorLoader.load("selectors/naver/login.yaml")
 
+            # 2. ID 입력
             login_sel.locator(page, "naver_login_id").fill(account["username"])
+            page.wait_for_timeout(3_000)
+
+            # 3. PW 입력
             login_sel.locator(page, "naver_login_pw").fill(account["password"])
+            page.wait_for_timeout(3_000)
+
+            # 4. 로그인 버튼 클릭
             login_sel.locator(page, "naver_login_submit").click()
+            page.wait_for_timeout(3_000)
 
-            page.wait_for_url(
-                lambda url: "nidlogin" not in url,
-                timeout=15_000,
-            )
+            # 5. 블로그 글쓰기 URL로 이동 후 로그인 페이지 여부 확인
+            page.goto(write_url, wait_until="domcontentloaded", timeout=15_000)
+            page.wait_for_timeout(3_000)
 
-            if any(p in page.url.lower() for p in ("captcha", "deviceConfirm", "protect")):
+            if "nidlogin" in page.url:
+                log.debug("[%s] auto_login: 블로그 접속 후 로그인 페이지 리다이렉트 (캡챠 또는 인증 필요)", username)
                 page.close()
                 ctx.close()
                 browser.close()
