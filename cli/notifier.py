@@ -33,8 +33,6 @@ def _build_message(campaign: str, result: Any) -> str:
         f"[{campaign}] 캠페인 완료",
         f"성공: {result.total_succeeded} / 실패: {result.total_failed}",
     ]
-    if result.session_recoveries > 0:
-        lines.append(f"세션 복구: {result.session_recoveries}회")
     if result.errors:
         lines.append("오류:")
         for err in result.errors[:5]:

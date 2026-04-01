@@ -58,7 +58,6 @@ class ExecutionResult:
     total_attempted:    int = 0
     total_succeeded:    int = 0
     total_failed:       int = 0
-    session_recoveries: int = 0
     errors:             list[str] = field(default_factory=list)
     _lock:              threading.Lock = field(default_factory=threading.Lock, repr=False)
 
@@ -76,10 +75,6 @@ class ExecutionResult:
     def record_attempt(self) -> None:
         with self._lock:
             self.total_attempted += 1
-
-    def record_recovery(self) -> None:
-        with self._lock:
-            self.session_recoveries += 1
 
 
 # ---------------------------------------------------------------------------
@@ -215,9 +210,6 @@ def _apply_caps(
 # ---------------------------------------------------------------------------
 
 EditorFactory = Callable[[dict[str, Any]], BlogEditor]
-SessionRecovery = Callable[[dict[str, Any]], BlogEditor]
-
-_MAX_SESSION_RETRIES = 2
 
 
 class CampaignExecutor:
@@ -227,18 +219,19 @@ class CampaignExecutor:
     Dependencies (optional — defaults support dry-run):
         runner:           JobRunner for live execution.
         editor_factory:   account_dict → BlogEditor for live execution.
-        session_recovery: account_dict → BlogEditor (세션 복구 후 에디터 재생성).
+
+    Philosophy:
+        어떤 프로세스든 실패하면 즉시 에러를 던지고 다음 조합으로 넘어간다.
+        암묵적·명시적 재시도는 없다.
     """
 
     def __init__(
         self,
         runner: JobRunner | None = None,
         editor_factory: EditorFactory | None = None,
-        session_recovery: SessionRecovery | None = None,
     ) -> None:
         self._runner = runner
         self._editor_factory = editor_factory
-        self._session_recovery = session_recovery
         self._seq_next_at: datetime | None = None
 
     def preview(
@@ -319,8 +312,8 @@ class CampaignExecutor:
 
         logger.info("=" * 60)
         logger.info("  캠페인 실행 완료 (%s)", mode_label)
-        logger.info("  성공: %d | 실패: %d | 세션 복구: %d",
-                     result.total_succeeded, result.total_failed, result.session_recoveries)
+        logger.info("  성공: %d | 실패: %d",
+                     result.total_succeeded, result.total_failed)
         if result.errors:
             logger.info("  오류 목록:")
             for err in result.errors[:10]:
@@ -428,8 +421,6 @@ class CampaignExecutor:
         progress=None,
         on_resume: str = "restart",
     ) -> None:
-        from cli.session_manager import is_session_error
-
         account = config["accounts"][account_idx]
         username = account["username"]
         total = len(combos)
@@ -480,23 +471,18 @@ class CampaignExecutor:
                     succeeded_in_batch += 1
                     continue
 
-                # 실행 + 세션 만료 시 복구 재시도
-                prev_succeeded = result.total_succeeded
-                editor = self._run_with_recovery(
-                    spec, editor, account, result,
-                )
-
-                if result.total_succeeded > prev_succeeded:
-                    succeeded_in_batch += 1
-                    logger.info("%s [DONE] %s | %s -- 성공", progress_label, username, title)
-                    if progress:
-                        progress.mark_done(combo_index)
-                else:
-                    logger.error("%s [FAIL] %s | %s -- 실패", progress_label, username, title)
+                # 실행 — 실패 시 즉시 예외, 재시도 없음
+                self._run_spec(spec, editor)
+                result.record_success()
+                succeeded_in_batch += 1
+                logger.info("%s [DONE] %s | %s -- 성공", progress_label, username, title)
+                if progress:
+                    progress.mark_done(combo_index)
 
             except Exception as exc:
                 result.record_failure(str(exc))
-                logger.error("%s [FAIL] %s | %s", progress_label, username, str(exc))
+                logger.error("%s [FAIL] %s | %s -- 다음 조합으로 건너뜀", progress_label, username, str(exc))
+                continue
 
             if not dry_run and i < len(combos) - 1 and interval > 0:
                 logger.info("[%s] %d초 대기 중...", username, interval)
@@ -505,58 +491,6 @@ class CampaignExecutor:
         logger.info("-" * 50)
         logger.info("[%s] 배치 완료 (%d/%d 성공)", username, succeeded_in_batch, total)
         logger.info("-" * 50)
-
-    def _run_with_recovery(
-        self,
-        spec: PostingSpec,
-        editor: BlogEditor | None,
-        account: dict[str, Any],
-        result: ExecutionResult,
-    ) -> BlogEditor | None:
-        """spec 실행. 세션 만료 감지 시 복구 후 재시도. 현재 editor를 반환."""
-        from cli.session_manager import is_session_error
-
-        username = account["username"]
-        last_exc: Exception | None = None
-
-        for attempt in range(_MAX_SESSION_RETRIES + 1):
-            try:
-                self._run_spec(spec, editor)
-                result.record_success()
-                return editor
-            except Exception as exc:
-                last_exc = exc
-                error_msg = str(exc)
-
-                # 세션 문제가 아니면 바로 실패
-                if not is_session_error(error_msg=error_msg):
-                    break
-
-                # 마지막 시도였으면 탈출
-                if attempt >= _MAX_SESSION_RETRIES:
-                    break
-
-                # 세션 복구 시도
-                if self._session_recovery is None:
-                    logger.warning("[%s] 세션 만료 감지, 복구 불가 (session_recovery 없음)", username)
-                    break
-
-                logger.warning(
-                    "[%s] 세션 만료 감지 (시도 %d/%d) - 복구 중...",
-                    username, attempt + 1, _MAX_SESSION_RETRIES,
-                )
-                try:
-                    editor = self._session_recovery(account)
-                    result.record_recovery()
-                    logger.info("[%s] 세션 복구 완료 - 재시도", username)
-                except Exception as recovery_exc:
-                    logger.error("[%s] 세션 복구 실패: %s", username, recovery_exc)
-                    break
-
-        # 모든 시도 실패
-        result.record_failure(str(last_exc))
-        logger.error("[FAIL] %s | %s", username, str(last_exc))
-        return editor
 
     def _run_spec(self, spec: PostingSpec, editor: BlogEditor) -> None:
         if self._runner is None:

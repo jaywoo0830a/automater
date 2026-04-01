@@ -247,15 +247,9 @@ def _build_live_executor(
         write_url = f"https://blog.naver.com/{blog_id}?Redirect=Write&"
         return SmartEditorOne(page, write_url, dry_run=False)
 
-    def session_recovery(account: dict[str, Any]):
-        """세션 만료 시 호출 — 새 세션으로 에디터 재생성."""
-        _refresh_session(account)
-        return editor_factory(account)
-
     return CampaignExecutor(
         runner=runner,
         editor_factory=editor_factory,
-        session_recovery=session_recovery,
     )
 
 
@@ -285,8 +279,6 @@ def _print_result(result) -> None:
     print(f"  Attempted : {result.total_attempted}")
     print(f"  Succeeded : {result.total_succeeded}")
     print(f"  Failed    : {result.total_failed}")
-    if result.session_recoveries > 0:
-        print(f"  Sessions recovered : {result.session_recoveries}")
     if result.errors:
         print(f"\n  Errors:")
         for e in result.errors:
