@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+from typing import Callable
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QListWidget, QListWidgetItem, QTableWidget, QTableWidgetItem,
     QHeaderView, QPushButton, QInputDialog, QSplitter,
     QLineEdit, QFormLayout, QGroupBox, QMessageBox,
+    QCompleter,
 )
 
 from gui.excel_buttons import ExcelButtonRow
 from gui.excel_io import import_map, export_map, template_map
+from gui.token_insert import TokenInsertButton
 
 
 class MapsTab(QWidget):
@@ -37,8 +41,21 @@ class MapsTab(QWidget):
         self._by_input.setPlaceholderText("{keyword:region}")
         self._by_input.textChanged.connect(self._on_by_changed)
 
+        self._token_source: Callable[[], list[str]] = lambda: []
+        self._by_completer = QCompleter([], self)
+        self._by_completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self._by_completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        self._by_input.setCompleter(self._by_completer)
+        self._by_input.focusInEvent = self._by_focus_wrapper(self._by_input.focusInEvent)
+
+        self._by_token_btn = TokenInsertButton(self._by_input)
+
+        by_row = QHBoxLayout()
+        by_row.addWidget(self._by_input, 1)
+        by_row.addWidget(self._by_token_btn)
+
         by_form = QFormLayout()
-        by_form.addRow("매핑 기준 (by):", self._by_input)
+        by_form.addRow("매핑 기준 (by):", by_row)
 
         left_layout = QVBoxLayout()
         left_layout.addWidget(QLabel("맵 목록"))
@@ -109,6 +126,30 @@ class MapsTab(QWidget):
         # {slug: {"by": str, "data": {key: value}}}
         self._maps: dict[str, dict] = {}
         self._updating = False
+
+    # ── token source (keyword autocomplete for "by" field) ────────────
+
+    def set_token_source(self, fn: Callable[[], list[str]]) -> None:
+        """MainWindow에서 호출. keyword 토큰만 필터링하여 자동완성에 사용."""
+        self._token_source = fn
+        self._by_token_btn._token_source = self._get_keyword_tokens
+
+    def _get_keyword_tokens(self) -> list[str]:
+        """by 필드에 유효한 {keyword:...} 토큰만 반환."""
+        return [t for t in self._token_source() if t.startswith("{keyword:")]
+
+    def _refresh_completer(self) -> None:
+        tokens = self._get_keyword_tokens()
+        from PySide6.QtCore import QStringListModel
+        model = QStringListModel(tokens, self._by_completer)
+        self._by_completer.setModel(model)
+
+    def _by_focus_wrapper(self, original):
+        """by 입력 필드에 포커스가 들어올 때 completer 목록을 갱신."""
+        def wrapped(event):
+            self._refresh_completer()
+            original(event)
+        return wrapped
 
     # ── slug management ──────────────────────────────────────────────
 

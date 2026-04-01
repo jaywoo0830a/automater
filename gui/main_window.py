@@ -120,6 +120,7 @@ class MainWindow(QMainWindow):
 
         self._accounts_tab.set_platform_tab(self._platform_tab)
         self._titles_tab.set_token_source(self._get_tokens)
+        self._maps_tab.set_token_source(self._get_tokens)
         self._post_tab.set_token_source(self._get_tokens)
 
         self._tabs.addTab(self._platform_tab, "플랫폼")
