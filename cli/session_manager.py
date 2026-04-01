@@ -4,11 +4,10 @@ cli/session_manager.py
 세션 생명주기 관리.
 
 책임:
-    validate   -세션 유효성 확인 (headless 네이버 접속)
-    auto_login -자동 로그인 시도 (캡챠 없을 때)
-    manual_login -headless=false 브라우저 열어 사람 개입
-    ensure     -validate → auto_login → manual_login 순차 시도
-    recover    -작업 중 세션 만료 시 복구
+    validate        -세션 유효성 확인 (headless 네이버 접속)
+    assisted_login  -브라우저 열고 ID/PW 복사 툴바 표시 → 사용자가 직접 로그인
+    ensure          -validate → assisted_login 순차 시도
+    recover         -작업 중 세션 만료 시 복구
 
 사용:
     mgr = SessionManager(session_store, playwright, browser_config)
@@ -37,6 +36,55 @@ def is_session_error(url: str = "", error_msg: str = "") -> bool:
     return any(p in text for p in SESSION_EXPIRED_PATTERNS)
 
 
+def _inject_credential_toolbar(page, username: str, password: str) -> None:
+    """로그인 페이지 하단에 ID/PW 복사 툴바를 삽입한다."""
+    js = """
+    ([id, pw]) => {
+        if (document.getElementById('_auto_cred_bar')) return;
+        const bar = document.createElement('div');
+        bar.id = '_auto_cred_bar';
+        bar.style.cssText = `
+            position: fixed; bottom: 0; left: 0; right: 0; z-index: 999999;
+            background: #1a1a2e; color: #eee; font-family: monospace;
+            font-size: 13px; padding: 8px 16px;
+            display: flex; align-items: center; gap: 16px;
+            box-shadow: 0 -2px 8px rgba(0,0,0,.3);
+        `;
+        function makeBtn(label, value) {
+            const wrap = document.createElement('span');
+            wrap.style.cssText = 'display:flex; align-items:center; gap:6px;';
+
+            const lbl = document.createElement('span');
+            lbl.textContent = label;
+            lbl.style.color = '#888';
+
+            const val = document.createElement('code');
+            val.textContent = value;
+            val.style.cssText = 'background:#2d2d44; padding:2px 8px; border-radius:3px;';
+
+            const btn = document.createElement('button');
+            btn.textContent = '복사';
+            btn.style.cssText = `
+                background: #4472C4; color: #fff; border: none;
+                padding: 3px 10px; border-radius: 3px; cursor: pointer;
+                font-size: 12px;
+            `;
+            btn.onclick = () => {
+                navigator.clipboard.writeText(value).then(() => {
+                    btn.textContent = '✓';
+                    setTimeout(() => btn.textContent = '복사', 1500);
+                });
+            };
+            wrap.append(lbl, val, btn);
+            return wrap;
+        }
+        bar.append(makeBtn('ID', id), makeBtn('PW', pw));
+        document.body.appendChild(bar);
+    }
+    """
+    page.evaluate(js, [username, password])
+
+
 class SessionManager:
     """세션 생명주기 관리자."""
 
@@ -58,7 +106,7 @@ class SessionManager:
     def ensure(self, account: dict[str, Any]) -> dict:
         """유효한 세션을 반환한다. 없으면 로그인 과정을 거친다.
 
-        순서: 기존 세션 로드 → 유효성 확인 → 자동 로그인 → 수동 로그인
+        순서: 기존 세션 로드 → 유효성 확인 → assisted_login
         """
         username = account["username"]
         cfg = self._resolve_config(account)
@@ -75,19 +123,14 @@ class SessionManager:
         else:
             log.info("[%s] 세션 없음 -로그인 필요", username)
 
-        # 2. 자동 로그인 시도
-        state = self.auto_login(account, cfg)
+        # 2. 수동 로그인 (브라우저 + ID/PW 복사 툴바)
+        state = self.assisted_login(account, cfg)
         if state and self.validate(state, blog_id, cfg):
             self._save(account, state)
-            log.info("[%s] 자동 로그인 성공", username)
+            log.info("[%s] 로그인 성공", username)
             return state
 
-        # 3. 수동 로그인 (캡챠 등)
-        log.info("[%s] 자동 로그인 실패 -수동 로그인 필요", username)
-        state = self.manual_login(account, cfg)
-        self._save(account, state)
-        log.info("[%s] 수동 로그인 완료", username)
-        return state
+        raise RuntimeError(f"[{username}] 로그인 실패 — 세션을 확보할 수 없습니다")
 
     def recover(self, account: dict[str, Any]) -> dict:
         """작업 중 세션 만료 시 복구. ensure와 동일하지만 로그 메시지가 다르다."""
@@ -123,42 +166,36 @@ class SessionManager:
             log.debug("validate 실패: %s", exc)
             return False
 
-    def auto_login(self, account: dict[str, Any], browser_config: dict[str, Any] | None = None) -> dict | None:
-        """headless 자동 로그인 시도. 캡챠 시 None 반환."""
+    def assisted_login(self, account: dict[str, Any], browser_config: dict[str, Any] | None = None) -> dict | None:
+        """브라우저를 열고 ID/PW 복사 툴바를 표시한 뒤, 사용자가 직접 로그인을 완료한다."""
         username = account["username"]
         blog_id = account.get("blog_id", username)
         write_url = f"https://blog.naver.com/{blog_id}?Redirect=Write&"
 
         try:
-            browser = self._pw.chromium.launch(headless=True)
+            browser = self._pw.chromium.launch(headless=False)
             ctx = build_context(browser, browser_config)
             page = ctx.new_page()
 
-            # 1. 로그인 페이지 로딩
+            # 1. 로그인 페이지 로딩 + ID/PW 복사 툴바 삽입
             page.goto(LOGIN_URL, wait_until="domcontentloaded")
-            page.wait_for_timeout(3_000)
+            _inject_credential_toolbar(page, account["username"], account["password"])
 
-            from automator.selector_loader import SelectorLoader
-            login_sel = SelectorLoader.load("selectors/naver/login.yaml")
+            log.info("[%s] 브라우저 열림 — 직접 로그인해주세요", username)
+            print(f"          >> 브라우저가 열렸습니다. 직접 로그인해주세요. ({username})")
 
-            # 2. ID 입력
-            login_sel.locator(page, "naver_login_id").fill(account["username"])
-            page.wait_for_timeout(3_000)
+            # 2. 사용자가 로그인할 때까지 대기 (최대 5분)
+            page.wait_for_url(
+                lambda url: "nidlogin" not in url and "naver.com" in url,
+                timeout=self._max_manual_wait_ms,
+            )
 
-            # 3. PW 입력
-            login_sel.locator(page, "naver_login_pw").fill(account["password"])
-            page.wait_for_timeout(3_000)
-
-            # 4. 로그인 버튼 클릭
-            login_sel.locator(page, "naver_login_submit").click()
-            page.wait_for_timeout(3_000)
-
-            # 5. 블로그 글쓰기 URL로 이동 후 로그인 페이지 여부 확인
+            # 3. 블로그 글쓰기 URL로 이동하여 세션 확인
             page.goto(write_url, wait_until="domcontentloaded", timeout=15_000)
             page.wait_for_timeout(3_000)
 
             if "nidlogin" in page.url:
-                log.warning("[%s] 자동 로그인 실패: 블로그 접속 후 로그인 페이지로 리다이렉트됨 (url=%s)", username, page.url)
+                log.warning("[%s] 로그인 후 블로그 접속 시 세션 무효 (url=%s)", username, page.url)
                 page.close()
                 ctx.close()
                 browser.close()
@@ -170,40 +207,12 @@ class SessionManager:
             browser.close()
             return state
         except Exception as exc:
-            log.warning("[%s] 자동 로그인 실패: %s", username, exc)
+            log.warning("[%s] 로그인 실패: %s", username, exc)
             try:
                 browser.close()
             except Exception:
                 pass
             return None
-
-    def manual_login(self, account: dict[str, Any], browser_config: dict[str, Any] | None = None) -> dict:
-        """headless=false 브라우저를 열어 사람이 로그인할 때까지 대기."""
-        print(f"          >> 브라우저를 엽니다. 로그인을 완료해주세요. ({account['username']})")
-
-        browser = self._pw.chromium.launch(headless=False)
-        ctx = build_context(browser, browser_config)
-        page = ctx.new_page()
-        page.goto(LOGIN_URL)
-
-        try:
-            page.wait_for_url(
-                lambda url: "nidlogin" not in url and "naver.com" in url,
-                timeout=self._max_manual_wait_ms,
-            )
-        except Exception:
-            page.close()
-            ctx.close()
-            browser.close()
-            raise TimeoutError(
-                f"로그인 시간 초과 ({self._max_manual_wait_ms // 1000}초): {account['username']}"
-            )
-
-        state = ctx.storage_state()
-        page.close()
-        ctx.close()
-        browser.close()
-        return state
 
     # ------------------------------------------------------------------
     # Internal
