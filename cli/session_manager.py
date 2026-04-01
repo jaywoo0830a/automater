@@ -37,52 +37,76 @@ def is_session_error(url: str = "", error_msg: str = "") -> bool:
 
 
 def _inject_credential_toolbar(page, username: str, password: str) -> None:
-    """로그인 페이지 하단에 ID/PW 복사 툴바를 삽입한다."""
-    js = """
-    ([id, pw]) => {
-        if (document.getElementById('_auto_cred_bar')) return;
-        const bar = document.createElement('div');
-        bar.id = '_auto_cred_bar';
-        bar.style.cssText = `
-            position: fixed; bottom: 0; left: 0; right: 0; z-index: 999999;
-            background: #1a1a2e; color: #eee; font-family: monospace;
-            font-size: 13px; padding: 8px 16px;
-            display: flex; align-items: center; gap: 16px;
-            box-shadow: 0 -2px 8px rgba(0,0,0,.3);
-        `;
-        function makeBtn(label, value) {
-            const wrap = document.createElement('span');
-            wrap.style.cssText = 'display:flex; align-items:center; gap:6px;';
+    """로그인 페이지 상단에 ID/PW 복사 툴바를 삽입한다."""
+    # context에 init script 등록 — 페이지 로드/새로고침 시마다 자동 실행
+    page.context.add_init_script(f"""
+    window.__CRED_ID = {repr(username)};
+    window.__CRED_PW = {repr(password)};
+    """)
 
-            const lbl = document.createElement('span');
-            lbl.textContent = label;
-            lbl.style.color = '#888';
+    _toolbar_js = """
+    () => {
+        function inject() {
+            if (document.getElementById('_auto_cred_bar')) return;
+            if (!document.body) { setTimeout(inject, 200); return; }
 
-            const val = document.createElement('code');
-            val.textContent = value;
-            val.style.cssText = 'background:#2d2d44; padding:2px 8px; border-radius:3px;';
+            const id = window.__CRED_ID || '';
+            const pw = window.__CRED_PW || '';
+            if (!id) return;
 
-            const btn = document.createElement('button');
-            btn.textContent = '복사';
-            btn.style.cssText = `
-                background: #4472C4; color: #fff; border: none;
-                padding: 3px 10px; border-radius: 3px; cursor: pointer;
-                font-size: 12px;
+            const bar = document.createElement('div');
+            bar.id = '_auto_cred_bar';
+            bar.style.cssText = `
+                position: fixed; bottom: 0; left: 0; right: 0; z-index: 999999;
+                background: #1a1a2e; color: #eee; font-family: monospace;
+                font-size: 13px; padding: 8px 16px;
+                display: flex; align-items: center; gap: 16px;
+                box-shadow: 0 2px 8px rgba(0,0,0,.3);
             `;
-            btn.onclick = () => {
-                navigator.clipboard.writeText(value).then(() => {
+            function copyText(value) {
+                const ta = document.createElement('textarea');
+                ta.value = value;
+                ta.style.cssText = 'position:fixed;left:-9999px;';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+            }
+            function makeBtn(label, value) {
+                const wrap = document.createElement('span');
+                wrap.style.cssText = 'display:flex; align-items:center; gap:6px;';
+
+                const lbl = document.createElement('span');
+                lbl.textContent = label;
+                lbl.style.color = '#888';
+
+                const val = document.createElement('code');
+                val.textContent = value;
+                val.style.cssText = 'background:#2d2d44; padding:2px 8px; border-radius:3px;';
+
+                const btn = document.createElement('button');
+                btn.textContent = '복사';
+                btn.style.cssText = `
+                    background: #4472C4; color: #fff; border: none;
+                    padding: 3px 10px; border-radius: 3px; cursor: pointer;
+                    font-size: 12px;
+                `;
+                btn.addEventListener('click', () => {
+                    copyText(value);
                     btn.textContent = '✓';
                     setTimeout(() => btn.textContent = '복사', 1500);
                 });
-            };
-            wrap.append(lbl, val, btn);
-            return wrap;
+                wrap.append(lbl, val, btn);
+                return wrap;
+            }
+            bar.append(makeBtn('ID', id), makeBtn('PW', pw));
+            document.body.appendChild(bar);
         }
-        bar.append(makeBtn('ID', id), makeBtn('PW', pw));
-        document.body.appendChild(bar);
+        inject();
     }
     """
-    page.evaluate(js, [username, password])
+    # 현재 페이지에도 즉시 삽입
+    page.evaluate(_toolbar_js)
 
 
 class SessionManager:
