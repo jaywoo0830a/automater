@@ -158,7 +158,7 @@ class SessionManager:
             page.wait_for_timeout(3_000)
 
             if "nidlogin" in page.url:
-                log.debug("[%s] auto_login: 블로그 접속 후 로그인 페이지 리다이렉트 (캡챠 또는 인증 필요)", username)
+                log.warning("[%s] 자동 로그인 실패: 블로그 접속 후 로그인 페이지로 리다이렉트됨 (url=%s)", username, page.url)
                 page.close()
                 ctx.close()
                 browser.close()
@@ -170,7 +170,7 @@ class SessionManager:
             browser.close()
             return state
         except Exception as exc:
-            log.debug("auto_login 실패: %s", exc)
+            log.warning("[%s] 자동 로그인 실패: %s", username, exc)
             try:
                 browser.close()
             except Exception:
