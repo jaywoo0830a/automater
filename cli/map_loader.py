@@ -117,7 +117,15 @@ def resolve_maps(
 
 
 def _normalize_value(val: Any) -> str | list[str]:
-    """맵 값을 str 또는 list[str]로 정규화."""
+    """맵 값을 str 또는 list[str]로 정규화.
+
+    쉼표 구분 문자열("a.jpg, b.jpg")도 리스트로 분리한다.
+    """
     if isinstance(val, list):
-        return [str(v).strip() for v in val]
-    return str(val)
+        return [str(v).strip() for v in val if str(v).strip()]
+    s = str(val)
+    if ", " in s:
+        parts = [p.strip() for p in s.split(", ") if p.strip()]
+        if len(parts) > 1:
+            return parts
+    return s

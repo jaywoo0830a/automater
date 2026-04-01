@@ -168,6 +168,17 @@ def _build_default_body(combo: Combo) -> list[Section]:
 _MAP_TOKEN_RE = re.compile(r"\{map:(\w+)\}")
 
 
+def _flatten_maps(maps: dict[str, str | list[str]]) -> dict[str, str]:
+    """맵 값을 단일 문자열로 정규화. 리스트는 첫 번째 요소만 사용."""
+    result: dict[str, str] = {}
+    for k, v in maps.items():
+        if isinstance(v, list):
+            result[k] = v[0] if v else ""
+        else:
+            result[k] = v
+    return result
+
+
 def _try_expand_map_list(
     entry: dict,
     maps: dict[str, str | list[str]],
@@ -262,8 +273,9 @@ def _parse_block(
     if expanded is not None:
         results = []
         for expanded_entry in expanded:
-            # 확장된 각 entry에서 리스트 값은 이미 단일 문자열로 치환됨
-            flat_maps: dict[str, str | list[str]] = {k: (v if isinstance(v, str) else str(v)) for k, v in maps.items()}
+            # 확장된 각 entry에서 해당 리스트 값은 이미 단일 문자열로 치환됨
+            # 나머지 맵의 리스트 값은 첫 번째 요소만 사용
+            flat_maps = _flatten_maps(maps)
             block = _parse_block(expanded_entry, values, pools, images_dir, index, exif_opt, flat_maps)
             if block is not None:
                 if isinstance(block, list):
@@ -272,8 +284,8 @@ def _parse_block(
                     results.append(block)
         return results if results else None
 
-    # 맵 값을 단일 문자열로 정규화 (리스트가 아닌 경우)
-    str_maps: dict[str, str] = {k: (v if isinstance(v, str) else str(v)) for k, v in maps.items()}
+    # 맵 값을 단일 문자열로 정규화 — 리스트는 첫 번째 요소만 사용
+    str_maps: dict[str, str] = _flatten_maps(maps)
 
     # Parse wait annotation
     wait_ms = _parse_wait(entry.get("wait"))
