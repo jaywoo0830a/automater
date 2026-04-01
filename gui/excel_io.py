@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from openpyxl import Workbook, load_workbook
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
@@ -36,33 +36,17 @@ TITLE_COLUMNS = [
     ("title", "제목 템플릿"),
 ]
 
-# ── styling ────────────────────────────────────────────────────────
-
-_HEADER_FONT = Font(bold=True, color="FFFFFF", size=11)
-_HEADER_FILL = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
-_HEADER_ALIGN = Alignment(horizontal="center", vertical="center")
-_THIN_BORDER = Border(
-    left=Side(style="thin"), right=Side(style="thin"),
-    top=Side(style="thin"), bottom=Side(style="thin"),
-)
+# ── helpers ────────────────────────────────────────────────────────
 
 
-def _style_header(ws, columns: list[tuple[str, str]]) -> None:
-    for col_idx, (_, label) in enumerate(columns, start=1):
-        cell = ws.cell(row=1, column=col_idx, value=label)
-        cell.font = _HEADER_FONT
-        cell.fill = _HEADER_FILL
-        cell.alignment = _HEADER_ALIGN
-        cell.border = _THIN_BORDER
+def _set_column_widths(ws, columns: list[tuple[str, str]]) -> None:
     for col_idx in range(1, len(columns) + 1):
         ws.column_dimensions[get_column_letter(col_idx)].width = 22
 
 
-def _read_rows(ws, skip_header: bool = True) -> list[list[str]]:
+def _read_rows(ws) -> list[list[str]]:
     rows: list[list[str]] = []
-    for i, row in enumerate(ws.iter_rows(values_only=True)):
-        if skip_header and i == 0:
-            continue
+    for row in ws.iter_rows(values_only=True):
         vals = [str(c).strip() if c is not None else "" for c in row]
         if any(vals):
             rows.append(vals)
@@ -73,7 +57,7 @@ def _single_sheet_wb(title: str, columns: list[tuple[str, str]]) -> tuple[Workbo
     wb = Workbook()
     ws: Worksheet = wb.active  # type: ignore[assignment]
     ws.title = title
-    _style_header(ws, columns)
+    _set_column_widths(ws, columns)
     return wb, ws
 
 

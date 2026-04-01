@@ -272,17 +272,30 @@ def _print_plan(plan) -> None:
     print(f"{'='*50}\n")
 
 
+def _format_combo(values: dict[str, str]) -> str:
+    """키워드 조합을 'key=value, ...' 형식으로 포맷."""
+    return ", ".join(f"{k}={v}" for k, v in values.items())
+
+
 def _print_result(result) -> None:
     print(f"\n{'='*50}")
-    print(f"  Execution Result")
+    print(f"  캠페인 실행 결과")
     print(f"{'='*50}")
-    print(f"  Attempted : {result.total_attempted}")
-    print(f"  Succeeded : {result.total_succeeded}")
-    print(f"  Failed    : {result.total_failed}")
-    if result.errors:
-        print(f"\n  Errors:")
-        for e in result.errors:
-            print(f"    - {e}")
+    print(f"  성공 : {result.total_succeeded} / {result.total_attempted}")
+    print(f"  실패 : {result.total_failed} / {result.total_attempted}")
+
+    if result.succeeded_combos:
+        print(f"\n  ✓ 성공한 조합 ({len(result.succeeded_combos)}건):")
+        for rec in result.succeeded_combos:
+            print(f"    [{_format_combo(rec.combo_values)}]")
+
+    if result.failed_combos:
+        print(f"\n  ✗ 실패한 조합 ({len(result.failed_combos)}건):")
+        for rec in result.failed_combos:
+            print(f"    [{_format_combo(rec.combo_values)}]")
+            if rec.error:
+                print(f"      → {rec.error[:120]}")
+
     print(f"{'='*50}\n")
 
 

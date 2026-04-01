@@ -27,18 +27,34 @@ log = logging.getLogger(__name__)
 # Result summary
 # ---------------------------------------------------------------------------
 
+def _format_combo(values: dict[str, str]) -> str:
+    return ", ".join(f"{k}={v}" for k, v in values.items())
+
+
 def _build_message(campaign: str, result: Any) -> str:
     """ExecutionResult에서 알림 메시지를 생성한다."""
     lines = [
-        f"[{campaign}] 캠페인 완료",
+        f"<b>[{campaign}] 캠페인 완료</b>",
         f"성공: {result.total_succeeded} / 실패: {result.total_failed}",
     ]
-    if result.errors:
-        lines.append("오류:")
-        for err in result.errors[:5]:
-            lines.append(f"  - {err[:100]}")
-        if len(result.errors) > 5:
-            lines.append(f"  ... 외 {len(result.errors) - 5}건")
+
+    if result.succeeded_combos:
+        lines.append(f"\n<b>✓ 성공 ({len(result.succeeded_combos)}건)</b>")
+        for rec in result.succeeded_combos[:20]:
+            lines.append(f"  [{_format_combo(rec.combo_values)}]")
+        if len(result.succeeded_combos) > 20:
+            lines.append(f"  ... 외 {len(result.succeeded_combos) - 20}건")
+
+    if result.failed_combos:
+        lines.append(f"\n<b>✗ 실패 ({len(result.failed_combos)}건)</b>")
+        for rec in result.failed_combos[:20]:
+            line = f"  [{_format_combo(rec.combo_values)}]"
+            if rec.error:
+                line += f"\n    → {rec.error[:80]}"
+            lines.append(line)
+        if len(result.failed_combos) > 20:
+            lines.append(f"  ... 외 {len(result.failed_combos) - 20}건")
+
     return "\n".join(lines)
 
 

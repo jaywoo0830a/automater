@@ -52,6 +52,14 @@ class ExecutionPlan:
     sample_titles: list[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class ComboRecord:
+    """하나의 조합 실행 기록."""
+    combo_values: dict[str, str]
+    title:        str
+    error:        str = ""
+
+
 @dataclass
 class ExecutionResult:
     """Outcome of execute(). Thread-safe via lock."""
@@ -59,18 +67,24 @@ class ExecutionResult:
     total_succeeded:    int = 0
     total_failed:       int = 0
     errors:             list[str] = field(default_factory=list)
+    succeeded_combos:   list[ComboRecord] = field(default_factory=list)
+    failed_combos:      list[ComboRecord] = field(default_factory=list)
     _lock:              threading.Lock = field(default_factory=threading.Lock, repr=False)
 
-    def record_success(self) -> None:
+    def record_success(self, combo: ComboRecord | None = None) -> None:
         with self._lock:
             self.total_attempted += 1
             self.total_succeeded += 1
+            if combo:
+                self.succeeded_combos.append(combo)
 
-    def record_failure(self, error: str) -> None:
+    def record_failure(self, error: str, combo: ComboRecord | None = None) -> None:
         with self._lock:
             self.total_attempted += 1
             self.total_failed += 1
             self.errors.append(error)
+            if combo:
+                self.failed_combos.append(combo)
 
     def record_attempt(self) -> None:
         with self._lock:
@@ -453,6 +467,7 @@ class CampaignExecutor:
                 logger.info("%s [SKIP] %s | #%d (이전 실행에서 완료)", progress_label, username, combo.index)
                 continue
 
+            title = ""
             try:
                 spec = build_spec(combo, config, account_idx)
                 title = generate_title(spec.title)
@@ -463,24 +478,25 @@ class CampaignExecutor:
 
                 logger.info("%s [START] %s | %s (예약: %s)", progress_label, username, title, at_label)
 
+                record = ComboRecord(combo_values=combo.values, title=title)
+
                 if dry_run:
-                    result.record_attempt()
+                    result.record_success(record)
                     logger.info("%s [DRY-RUN] %s | %s -- OK", progress_label, username, title)
-                    with result._lock:
-                        result.total_succeeded += 1
                     succeeded_in_batch += 1
                     continue
 
                 # 실행 — 실패 시 즉시 예외, 재시도 없음
                 self._run_spec(spec, editor)
-                result.record_success()
+                result.record_success(record)
                 succeeded_in_batch += 1
                 logger.info("%s [DONE] %s | %s -- 성공", progress_label, username, title)
                 if progress:
                     progress.mark_done(combo_index)
 
             except Exception as exc:
-                result.record_failure(str(exc))
+                record = ComboRecord(combo_values=combo.values, title=title, error=str(exc))
+                result.record_failure(str(exc), record)
                 logger.error("%s [FAIL] %s | %s -- 다음 조합으로 건너뜀", progress_label, username, str(exc))
                 continue
 
