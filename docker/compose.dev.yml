@@ -3,9 +3,7 @@ services:
     build:
       context: ..
       dockerfile: docker/api.Dockerfile
-    ports:
-      - "5000:5000"
-      - "6080-6089:6080-6089"
+    network_mode: host
     env_file:
       - ../.env
     volumes:

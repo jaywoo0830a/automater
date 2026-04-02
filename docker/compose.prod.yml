@@ -4,8 +4,7 @@ services:
       context: ..
       dockerfile: docker/api.Dockerfile
     restart: unless-stopped
-    ports:
-      - "6080-6089:6080-6089"
+    network_mode: host
     env_file:
       - ../.env
     volumes:
