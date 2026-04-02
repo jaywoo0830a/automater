@@ -1,9 +1,31 @@
-const API_KEY = localStorage.getItem("api_key") || "";
+function getApiKey() {
+  return localStorage.getItem("api_key") || "";
+}
+
+export function setApiKey(key) {
+  localStorage.setItem("api_key", key);
+}
+
+export function clearApiKey() {
+  localStorage.removeItem("api_key");
+}
+
+export function isLoggedIn() {
+  return !!getApiKey();
+}
 
 function headers() {
   const h = {};
-  if (API_KEY) h["X-API-Key"] = API_KEY;
+  const key = getApiKey();
+  if (key) h["X-API-Key"] = key;
   return h;
+}
+
+export async function verifyApiKey(key) {
+  const res = await fetch("/campaigns", {
+    headers: { "X-API-Key": key },
+  });
+  return res.ok;
 }
 
 export async function uploadCampaign(file) {
