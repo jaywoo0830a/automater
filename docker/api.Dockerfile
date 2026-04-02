@@ -11,7 +11,6 @@ COPY automator/ automator/
 COPY cli/ cli/
 COPY api/ api/
 COPY selectors/ selectors/
-COPY assets/ assets/
 
 EXPOSE 5000
 
