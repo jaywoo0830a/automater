@@ -1,0 +1,22 @@
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: docker/api.Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      - API_KEY=${API_KEY:-}
+      - ENV=${ENV:-dev}
+    volumes:
+      - ../workspaces:/app/workspaces
+      - ../config:/app/config
+
+  web:
+    build:
+      context: ..
+      dockerfile: docker/web.Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - api

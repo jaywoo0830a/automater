@@ -1,0 +1,18 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt \
+    && playwright install chromium \
+    && playwright install-deps
+
+COPY automator/ automator/
+COPY cli/ cli/
+COPY api/ api/
+COPY selectors/ selectors/
+COPY assets/ assets/
+
+EXPOSE 5000
+
+CMD ["python", "-m", "api", "--host", "0.0.0.0", "--port", "5000"]
