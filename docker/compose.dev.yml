@@ -6,9 +6,8 @@ services:
     ports:
       - "5000:5000"
       - "6080-6089:6080-6089"
-    environment:
-      - API_KEY=${API_KEY:-}
-      - ENV=${ENV:-dev}
+    env_file:
+      - ../.env
     volumes:
       - ../workspaces:/app/workspaces
       - ../config:/app/config
