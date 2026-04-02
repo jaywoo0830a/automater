@@ -153,6 +153,8 @@ class MainWindow(QMainWindow):
         btn_refresh = QPushButton("YAML 갱신")
         btn_refresh.clicked.connect(self._refresh_preview)
 
+        self._btn_pack = QPushButton("패키징")
+        self._btn_pack.clicked.connect(self._run_pack)
         self._btn_validate = QPushButton("검증")
         self._btn_validate.clicked.connect(self._run_validate)
         self._btn_prepare = QPushButton("세션 준비")
@@ -175,6 +177,7 @@ class MainWindow(QMainWindow):
         btn_row.setSpacing(SP_SM)
         btn_row.addWidget(btn_save)
         btn_row.addWidget(btn_refresh)
+        btn_row.addWidget(self._btn_pack)
         btn_row.addSpacing(SP_LG)
         btn_row.addWidget(self._btn_validate)
         btn_row.addWidget(self._btn_prepare)
@@ -614,6 +617,23 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # Workflow buttons
     # ------------------------------------------------------------------
+
+    def _run_pack(self) -> None:
+        if not self._ensure_saved():
+            return
+        state = self._current_state()
+        if not state:
+            return
+
+        default_name = Path(state.file_path).stem + ".zip"
+        default_dir = str(Path(state.file_path).parent)
+        path, _ = QFileDialog.getSaveFileName(
+            self, "패키징 저장", str(Path(default_dir) / default_name), "ZIP (*.zip)",
+        )
+        if not path:
+            return
+
+        self._run_cli("--pack", path, label="패키징")
 
     def _run_validate(self) -> None:
         self._run_cli("--validate", label="검증")

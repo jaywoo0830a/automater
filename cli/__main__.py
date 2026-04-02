@@ -54,6 +54,10 @@ def main(argv: list[str] | None = None) -> int:
         log.info("Validation passed.")
         return 0
 
+    # Pack campaign
+    if args.pack is not None:
+        return _pack_campaign(config, args.pack)
+
     # Export sessions
     if args.export_sessions:
         return _export_sessions(config, args.export_sessions)
@@ -108,6 +112,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--limit", type=int, default=None, help="Max combinations.")
     p.add_argument("--account", action="append", default=[], help="Filter account (repeatable).")
     p.add_argument("--resume", action="store_true", help="Resume: skip completed combos.")
+    p.add_argument("--pack", nargs="?", const="", metavar="OUT", help="Pack campaign + assets into ZIP.")
     p.add_argument("--export-sessions", metavar="DIR", help="Export session files to directory.")
     p.add_argument("--import-sessions", metavar="DIR", help="Import session files from directory.")
     p.add_argument("--headless", action="store_true", default=None)
@@ -174,6 +179,27 @@ def _prepare_sessions(config: dict[str, Any]) -> int:
     print(f"{'='*50}\n")
 
     return 0 if failed == 0 else 1
+
+
+# ---------------------------------------------------------------------------
+# Pack campaign
+# ---------------------------------------------------------------------------
+
+def _pack_campaign(config: dict[str, Any], output: str) -> int:
+    """캠페인 YAML + 관련 파일을 ZIP으로 패키징."""
+    from cli.packer import pack_campaign
+
+    log = logging.getLogger("cli")
+    config_path = config["_config_path"]
+    output_path = output if output else None
+
+    try:
+        zip_path = pack_campaign(config_path, output_path)
+        print(f"\n  패키징 완료 → {zip_path}\n")
+        return 0
+    except Exception as exc:
+        log.error("패키징 실패: %s", exc)
+        return 1
 
 
 # ---------------------------------------------------------------------------
