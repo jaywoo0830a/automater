@@ -174,6 +174,11 @@ class VncLoginSession:
                 }
                 ctx_kwargs["permissions"] = ["geolocation"]
 
+            # 계정별 프록시
+            proxy = self.account.get("proxy") or cfg.get("proxy")
+            if proxy:
+                ctx_kwargs["proxy"] = {"server": str(proxy)}
+
             self._pw = sync_playwright().start()
             self._context = self._pw.chromium.launch_persistent_context(
                 self._user_data_dir,

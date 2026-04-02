@@ -95,6 +95,11 @@ def build_context(
         }
         context_kwargs["permissions"] = ["geolocation"]
 
+    # proxy
+    proxy = cfg.get("proxy")
+    if proxy:
+        context_kwargs["proxy"] = {"server": str(proxy)}
+
     # session state
     if storage_state:
         context_kwargs["storage_state"] = storage_state

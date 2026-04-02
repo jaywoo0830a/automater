@@ -219,13 +219,20 @@ class SessionManager:
         user_data_dir = tempfile.mkdtemp(prefix="login_profile_")
 
         try:
-            ctx = self._pw.chromium.launch_persistent_context(
-                user_data_dir,
-                headless=False,
-                args=[
+            launch_kwargs = {
+                "headless": False,
+                "args": [
                     f"--disable-extensions-except={ext_dir}",
                     f"--load-extension={ext_dir}",
                 ],
+            }
+            proxy = (browser_config or {}).get("proxy")
+            if proxy:
+                launch_kwargs["proxy"] = {"server": str(proxy)}
+
+            ctx = self._pw.chromium.launch_persistent_context(
+                user_data_dir,
+                **launch_kwargs,
             )
             page = ctx.new_page()
 
@@ -271,8 +278,12 @@ class SessionManager:
     # ------------------------------------------------------------------
 
     def _resolve_config(self, account: dict[str, Any]) -> dict[str, Any]:
-        """글로벌 browser config + 계정별 오버라이드 머지."""
-        return merge_browser_config(self._global_browser_cfg, account.get("browser"))
+        """글로벌 browser config + 계정별 오버라이드 머지 + 프록시."""
+        account_cfg = account.get("browser") or {}
+        proxy = account.get("proxy")
+        if proxy:
+            account_cfg = {**account_cfg, "proxy": proxy}
+        return merge_browser_config(self._global_browser_cfg, account_cfg)
 
     def _load(self, account: dict[str, Any]) -> dict | None:
         username = account["username"]

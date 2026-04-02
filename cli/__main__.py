@@ -353,7 +353,13 @@ def _build_live_executor(
         from automator.smart_editor import SmartEditorOne
 
         state = _get_session(account)
-        account_browser_cfg = account.get("browser")
+        account_browser_cfg = account.get("browser") or {}
+
+        # 계정별 프록시를 browser config에 주입
+        proxy = account.get("proxy")
+        if proxy:
+            account_browser_cfg = {**account_browser_cfg, "proxy": proxy}
+
         merged_cfg = merge_browser_config(global_browser_cfg, account_browser_cfg)
 
         browser = pw.chromium.launch(headless=headless, slow_mo=slow_mo)
