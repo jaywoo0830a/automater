@@ -291,20 +291,20 @@ class VncLoginSession:
         self.teardown()
 
     def _save_session(self, state: dict) -> None:
-        """세션을 FileSessionStore에 저장한다."""
-        from cli.session_store import create_session_store
-
-        store_cfg = self.config.get("session_store", "")
-        base_dir = self.config.get("_base_dir", ".")
-        store = create_session_store(store_cfg, base_dir=base_dir)
+        """세션을 워크스페이스 sessions/ 에 저장한다."""
+        import json as _json
 
         username = self.account["username"]
-        explicit = self.account.get("session", "")
+        base_dir = self.config.get("_base_dir", ".")
+        sessions_dir = Path(base_dir)
+        sessions_dir.mkdir(parents=True, exist_ok=True)
 
-        if explicit and hasattr(store, "save_path"):
-            store.save_path(explicit, state)
-        else:
-            store.save(username, state)
+        out_path = sessions_dir / f"{username}_session.json"
+        out_path.write_text(
+            _json.dumps(state, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        log.info("[vnc:%s] session saved: %s", self.id, out_path)
 
     def teardown(self) -> None:
         """모든 프로세스를 정리한다."""
