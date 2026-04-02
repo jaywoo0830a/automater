@@ -153,16 +153,18 @@ class MainWindow(QMainWindow):
         btn_refresh = QPushButton("YAML 갱신")
         btn_refresh.clicked.connect(self._refresh_preview)
 
-        self._btn_pack = QPushButton("패키징")
-        self._btn_pack.clicked.connect(self._run_pack)
         self._btn_validate = QPushButton("검증")
         self._btn_validate.clicked.connect(self._run_validate)
         self._btn_prepare = QPushButton("세션 준비")
         self._btn_prepare.clicked.connect(self._run_prepare)
+        self._btn_clear_sessions = QPushButton("세션 비우기")
+        self._btn_clear_sessions.clicked.connect(self._clear_sessions)
         self._btn_preview_plan = QPushButton("미리보기")
         self._btn_preview_plan.clicked.connect(self._run_preview)
         self._btn_dryrun = QPushButton("Dry-run")
         self._btn_dryrun.clicked.connect(self._run_dryrun)
+        self._btn_pack = QPushButton("패키징")
+        self._btn_pack.clicked.connect(self._run_pack)
         self._btn_execute = QPushButton("실행")
         self._btn_execute.setStyleSheet("QPushButton { font-weight: bold; }")
         self._btn_execute.clicked.connect(self._run_execute)
@@ -177,12 +179,13 @@ class MainWindow(QMainWindow):
         btn_row.setSpacing(SP_SM)
         btn_row.addWidget(btn_save)
         btn_row.addWidget(btn_refresh)
-        btn_row.addWidget(self._btn_pack)
         btn_row.addSpacing(SP_LG)
         btn_row.addWidget(self._btn_validate)
         btn_row.addWidget(self._btn_prepare)
+        btn_row.addWidget(self._btn_clear_sessions)
         btn_row.addWidget(self._btn_preview_plan)
         btn_row.addWidget(self._btn_dryrun)
+        btn_row.addWidget(self._btn_pack)
         btn_row.addWidget(self._btn_execute)
         btn_row.addWidget(self._btn_stop)
 
@@ -285,6 +288,16 @@ class MainWindow(QMainWindow):
         )
         if not path:
             return
+
+        # 이미 열린 파일이면 해당 캠페인으로 전환
+        resolved = str(Path(path).resolve())
+        for name, st in self._campaigns.items():
+            if st.file_path and str(Path(st.file_path).resolve()) == resolved:
+                item = self._find_item(name)
+                if item:
+                    self._sidebar.setCurrentItem(item)
+                return
+
         name = Path(path).stem
         state = self._new_campaign_internal(name)
         state.file_path = path
@@ -458,13 +471,31 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getSaveFileName(self, "YAML 저장", default, "YAML (*.yaml *.yml)")
         if not path:
             return
+
+        is_new_path = state.file_path and Path(path).resolve() != Path(state.file_path).resolve()
+
         try:
             config = self._build_config()
+            # _save_map_files는 _maps_data를 pop하므로 별도 복사본 사용
+            maps_data_backup = config.get("_maps_data")
             self._save_map_files(config, Path(path).parent)
             text = yaml.dump(config, allow_unicode=True, default_flow_style=False, sort_keys=False)
             Path(path).write_text(text, encoding="utf-8")
-            state.file_path = path
-            state.config = config
+
+            # _maps_data 복원 (state.config에 보존)
+            if maps_data_backup is not None:
+                config["_maps_data"] = maps_data_backup
+
+            if is_new_path:
+                # 다른 이름으로 저장 → 새 캠페인으로 분리
+                new_name = Path(path).stem
+                new_state = self._new_campaign_internal(new_name)
+                new_state.file_path = path
+                new_state.config = config
+            else:
+                state.file_path = path
+                state.config = config
+
             self._status.showMessage(f"저장 완료: {path}", 5000)
         except Exception as e:
             QMessageBox.critical(self, "저장 오류", str(e))
@@ -481,6 +512,10 @@ class MainWindow(QMainWindow):
             self._status.showMessage(f"불러옴: {path}", 5000)
             self._refresh_preview()
         except Exception as e:
+            # 로드 실패 시 stale config 방지
+            state = self._current_state()
+            if state:
+                state.config = {}
             QMessageBox.critical(self, "불러오기 오류", str(e))
 
     @staticmethod
@@ -532,7 +567,10 @@ class MainWindow(QMainWindow):
         if not state.file_path:
             QMessageBox.information(self, "저장 필요", "먼저 YAML 파일을 저장하세요.")
             self._save_yaml()
-        return bool(state and state.file_path)
+        # 저장이 취소되었거나 실패했으면 False
+        if not state.file_path or not Path(state.file_path).exists():
+            return False
+        return True
 
     def _run_cli(self, *args: str, label: str = "") -> None:
         state = self._current_state()
@@ -583,7 +621,7 @@ class MainWindow(QMainWindow):
     def _on_cli_output(self, campaign_name: str, line: str) -> None:
         state = self._campaigns.get(campaign_name)
         if not state:
-            return
+            return  # 캠페인이 삭제된 경우 무시
         state.log_lines.append(line)
         if campaign_name == self._current_name:
             self._log.moveCursor(QTextCursor.MoveOperation.End)
@@ -591,14 +629,17 @@ class MainWindow(QMainWindow):
 
     def _on_cli_finished(self, campaign_name: str, label: str) -> None:
         state = self._campaigns.get(campaign_name)
-        if state:
-            state.status = "[완료]"
-            state.log_lines.append("\n-- 완료 --\n")
-            self._update_item_display(state)
-            if campaign_name == self._current_name:
-                self._log.moveCursor(QTextCursor.MoveOperation.End)
-                self._log.insertPlainText("\n-- 완료 --\n")
-                self._btn_stop.setVisible(False)
+        if not state:
+            # 캠페인이 이미 삭제됨 — 프로세스는 _kill_job으로 정리됨
+            self._status.showMessage(f"{campaign_name}: {label} 완료 (삭제됨)", 3000)
+            return
+        state.status = "[완료]"
+        state.log_lines.append("\n-- 완료 --\n")
+        self._update_item_display(state)
+        if campaign_name == self._current_name:
+            self._log.moveCursor(QTextCursor.MoveOperation.End)
+            self._log.insertPlainText("\n-- 완료 --\n")
+            self._btn_stop.setVisible(False)
         self._status.showMessage(f"{campaign_name}: {label} 완료", 5000)
 
     def _stop_current(self) -> None:
@@ -617,6 +658,57 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # Workflow buttons
     # ------------------------------------------------------------------
+
+    def _clear_sessions(self) -> None:
+        """현재 캠페인의 모든 계정 세션 파일을 삭제한다."""
+        if not self._ensure_saved():
+            return
+        state = self._current_state()
+        if not state or not state.file_path:
+            return
+
+        reply = QMessageBox.question(
+            self, "세션 비우기",
+            "모든 계정의 세션 파일을 삭제하시겠습니까?\n삭제 후 세션 준비를 다시 해야 합니다.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        import json as _json
+        config = self._build_config()
+        base_dir = Path(state.file_path).parent
+        accounts = config.get("accounts", [])
+        removed = 0
+
+        from cli.session_store import create_session_store
+        store = create_session_store(config.get("session_store"), base_dir=str(base_dir))
+
+        from cli.session_store import FileSessionStore
+        for acc in accounts:
+            username = acc.get("username", "")
+            if not username:
+                continue
+
+            # 명시적 session 경로
+            explicit = acc.get("session", "")
+            if explicit:
+                p = Path(explicit) if Path(explicit).is_absolute() else base_dir / explicit
+                if p.exists():
+                    p.unlink()
+                    removed += 1
+                    continue
+
+            # store 관례 경로
+            if isinstance(store, FileSessionStore):
+                p = Path(store._key_to_path(username))
+                if not p.is_absolute():
+                    p = base_dir / p
+                if p.exists():
+                    p.unlink()
+                    removed += 1
+
+        self._status.showMessage(f"세션 {removed}개 삭제 완료", 5000)
 
     def _run_pack(self) -> None:
         if not self._ensure_saved():
