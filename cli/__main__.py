@@ -54,6 +54,14 @@ def main(argv: list[str] | None = None) -> int:
         log.info("Validation passed.")
         return 0
 
+    # Export sessions
+    if args.export_sessions:
+        return _export_sessions(config, args.export_sessions)
+
+    # Import sessions
+    if args.import_sessions:
+        return _import_sessions(config, args.import_sessions)
+
     # Prepare sessions
     if args.prepare:
         return _prepare_sessions(config)
@@ -100,6 +108,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--limit", type=int, default=None, help="Max combinations.")
     p.add_argument("--account", action="append", default=[], help="Filter account (repeatable).")
     p.add_argument("--resume", action="store_true", help="Resume: skip completed combos.")
+    p.add_argument("--export-sessions", metavar="DIR", help="Export session files to directory.")
+    p.add_argument("--import-sessions", metavar="DIR", help="Import session files from directory.")
     p.add_argument("--headless", action="store_true", default=None)
     p.add_argument("--no-headless", action="store_true")
     p.add_argument("-v", "--verbose", action="store_true")
@@ -164,6 +174,86 @@ def _prepare_sessions(config: dict[str, Any]) -> int:
     print(f"{'='*50}\n")
 
     return 0 if failed == 0 else 1
+
+
+# ---------------------------------------------------------------------------
+# Session export / import
+# ---------------------------------------------------------------------------
+
+def _export_sessions(config: dict[str, Any], dest_dir: str) -> int:
+    """세션 파일을 지정 디렉터리로 내보내기."""
+    import json
+    from pathlib import Path
+    from cli.session_store import create_session_store
+
+    log = logging.getLogger("cli")
+    store = create_session_store(config.get("session_store"))
+    dest = Path(dest_dir)
+    dest.mkdir(parents=True, exist_ok=True)
+
+    accounts = config["accounts"]
+    exported = 0
+
+    for account in accounts:
+        username = account["username"]
+        explicit_path = account.get("session", "")
+
+        if explicit_path and hasattr(store, "load_path"):
+            state = store.load_path(explicit_path)
+        else:
+            state = store.load(username)
+
+        if not state:
+            log.warning("[%s] 세션 없음 — 건너뜀", username)
+            continue
+
+        out_path = dest / f"{username}.json"
+        out_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+        exported += 1
+        log.info("[%s] → %s", username, out_path)
+
+    print(f"\n  {exported}개 세션 내보내기 완료 → {dest}\n")
+    return 0
+
+
+def _import_sessions(config: dict[str, Any], src_dir: str) -> int:
+    """지정 디렉터리에서 세션 파일을 가져오기."""
+    import json
+    from pathlib import Path
+    from cli.session_store import create_session_store
+
+    log = logging.getLogger("cli")
+    store = create_session_store(config.get("session_store"))
+    src = Path(src_dir)
+
+    if not src.is_dir():
+        log.error("디렉터리 없음: %s", src)
+        return 1
+
+    accounts = config["accounts"]
+    imported = 0
+
+    for account in accounts:
+        username = account["username"]
+        src_path = src / f"{username}.json"
+
+        if not src_path.exists():
+            log.warning("[%s] %s 파일 없음 — 건너뜀", username, src_path)
+            continue
+
+        state = json.loads(src_path.read_text(encoding="utf-8"))
+        explicit_path = account.get("session", "")
+
+        if explicit_path and hasattr(store, "save_path"):
+            store.save_path(explicit_path, state)
+        else:
+            store.save(username, state)
+
+        imported += 1
+        log.info("[%s] ← %s", username, src_path)
+
+    print(f"\n  {imported}개 세션 가져오기 완료 ← {src}\n")
+    return 0
 
 
 # ---------------------------------------------------------------------------

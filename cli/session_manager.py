@@ -19,7 +19,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -203,9 +205,31 @@ class SessionManager:
             log.debug("validate 실패: %s", exc)
             return False
 
+    @staticmethod
+    def _has_display() -> bool:
+        """GUI 브라우저를 띄울 수 있는 환경인지 확인."""
+        if sys.platform == "win32" or sys.platform == "darwin":
+            return True
+        return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+
     def assisted_login(self, account: dict[str, Any], browser_config: dict[str, Any] | None = None) -> dict | None:
         """브라우저를 열고 확장 프로그램으로 ID/PW 복사 툴바를 표시한 뒤, 사용자가 직접 로그인을 완료한다."""
         username = account["username"]
+
+        if not self._has_display():
+            log.error(
+                "[%s] 디스플레이 없음 — assisted_login 불가.\n"
+                "  해결 방법:\n"
+                "    1) 로컬에서 세션 준비 후 서버로 복사:\n"
+                "       python -m cli campaign.yaml --prepare\n"
+                "       python -m cli --export-sessions ./sessions_backup/\n"
+                "       scp -r ./sessions_backup/ server:~/automator/\n"
+                "       python -m cli --import-sessions ./sessions_backup/\n"
+                "    2) X11 포워딩: ssh -X user@server\n"
+                "    3) DISPLAY 환경변수 설정 (VNC/xvfb 사용 시)",
+                username,
+            )
+            return None
         blog_id = account.get("blog_id", username)
         write_url = f"https://blog.naver.com/{blog_id}?Redirect=Write&"
 
