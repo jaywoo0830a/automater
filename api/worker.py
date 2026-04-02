@@ -125,12 +125,19 @@ class Worker:
         campaign.status = Status.RUNNING
         campaign._emit(f"[실행 시작] {campaign.config_path}\n")
 
+        # 프로젝트 루트 = api/ 의 부모
+        project_root = str(Path(__file__).resolve().parent.parent)
+
         cmd = [
             sys.executable, "-m", "cli",
             campaign.config_path,
             "--execute",
         ]
-        env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+        env = {
+            **os.environ,
+            "PYTHONIOENCODING": "utf-8",
+            "PYTHONPATH": project_root,
+        }
 
         try:
             proc = subprocess.Popen(

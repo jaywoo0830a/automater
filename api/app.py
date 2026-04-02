@@ -123,10 +123,9 @@ def stream_logs(ws, campaign_id: str):
     for line in list(campaign.log_lines):
         ws.send(line)
 
-    # 이미 종료된 경우
+    # 이미 종료된 경우 — 로그 전송 후 종료 마커만 보내고 리턴 (자동 close)
     if campaign.status not in (Status.QUEUED, Status.RUNNING):
         ws.send(f"[end] status={campaign.status.value}")
-        ws.close()
         return
 
     # 실시간 스트리밍

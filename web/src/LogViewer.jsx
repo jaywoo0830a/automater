@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { streamLogs } from "./api";
+import { getCampaign, streamLogs } from "./api";
 
 export default function LogViewer({ campaignId }) {
   const [lines, setLines] = useState([]);
@@ -10,10 +10,25 @@ export default function LogViewer({ campaignId }) {
     setLines([]);
     setLive(true);
 
+    let wsReceived = false;
+
     const close = streamLogs(
       campaignId,
-      (line) => setLines((prev) => [...prev, line]),
-      () => setLive(false),
+      (line) => {
+        wsReceived = true;
+        setLines((prev) => [...prev, line]);
+      },
+      () => {
+        setLive(false);
+        // WebSocket에서 로그를 못 받았으면 REST로 가져오기
+        if (!wsReceived) {
+          getCampaign(campaignId).then((data) => {
+            if (data.recent_logs?.length) {
+              setLines(data.recent_logs);
+            }
+          }).catch(() => {});
+        }
+      },
     );
     return close;
   }, [campaignId]);
