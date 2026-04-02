@@ -39,6 +39,7 @@ _MANIFEST_JSON = json.dumps({
     "manifest_version": 3,
     "name": "Login Helper",
     "version": "1.0",
+    "permissions": ["clipboardWrite"],
     "content_scripts": [{
         "matches": ["*://nid.naver.com/*"],
         "js": ["content.js"],
@@ -60,72 +61,42 @@ def _build_login_ext(username: str, password: str) -> str:
     # manifest.json 인라인 생성
     (Path(tmp_dir) / "manifest.json").write_text(_MANIFEST_JSON, encoding="utf-8")
 
-    # content.js에 credentials 주입
+    # content.js — Ctrl+V 순차 붙여넣기: 1회차=ID, 2회차=PW
     content_js = f"""\
 (function() {{
-    if (document.getElementById('_cred_bar')) return;
+    if (window.__loginHelperLoaded) return;
+    window.__loginHelperLoaded = true;
 
-    const CRED_ID = {json.dumps(username)};
-    const CRED_PW = {json.dumps(password)};
+    var creds = [{json.dumps(username)}, {json.dumps(password)}];
+    var pasteCount = 0;
 
-    function waitBody(fn) {{
-        if (document.body) fn();
-        else document.addEventListener('DOMContentLoaded', fn);
+    document.addEventListener('paste', function(e) {{
+        if (pasteCount >= creds.length) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+
+        var value = creds[pasteCount];
+        var el = document.activeElement;
+
+        if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {{
+            // input/textarea — 직접 값 설정 + input 이벤트 발생
+            var nativeSetter = Object.getOwnPropertyDescriptor(
+                window.HTMLInputElement.prototype, 'value'
+            ).set;
+            nativeSetter.call(el, value);
+            el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+            el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+        }} else if (el && el.isContentEditable) {{
+            document.execCommand('insertText', false, value);
+        }}
+
+        pasteCount++;
+    }}, true);
+
+    // 클립보드에 빈 텍스트라도 넣어서 Ctrl+V가 paste 이벤트를 발생시키도록 함
+    if (navigator.clipboard && navigator.clipboard.writeText) {{
+        navigator.clipboard.writeText(' ').catch(function() {{}});
     }}
-
-    waitBody(function() {{
-        const bar = document.createElement('div');
-        bar.id = '_cred_bar';
-        bar.style.cssText = `
-            position: fixed; bottom: 0; left: 0; right: 0; z-index: 2147483647;
-            background: #1a1a2e; color: #eee; font-family: monospace;
-            font-size: 13px; padding: 8px 16px;
-            display: flex; align-items: center; gap: 16px;
-            box-shadow: 0 -2px 8px rgba(0,0,0,.3);
-        `;
-
-        function copyText(value) {{
-            const ta = document.createElement('textarea');
-            ta.value = value;
-            ta.style.cssText = 'position:fixed;left:-9999px;';
-            document.body.appendChild(ta);
-            ta.select();
-            document.execCommand('copy');
-            document.body.removeChild(ta);
-        }}
-
-        function makeBtn(label, value) {{
-            const wrap = document.createElement('span');
-            wrap.style.cssText = 'display:flex; align-items:center; gap:6px;';
-
-            const lbl = document.createElement('span');
-            lbl.textContent = label;
-            lbl.style.color = '#888';
-
-            const val = document.createElement('code');
-            val.textContent = value;
-            val.style.cssText = 'background:#2d2d44; padding:2px 8px; border-radius:3px; user-select:all;';
-
-            const btn = document.createElement('button');
-            btn.textContent = '복사';
-            btn.style.cssText = `
-                background: #4472C4; color: #fff; border: none;
-                padding: 3px 10px; border-radius: 3px; cursor: pointer;
-                font-size: 12px;
-            `;
-            btn.addEventListener('click', function() {{
-                copyText(value);
-                btn.textContent = '\\u2713';
-                setTimeout(function() {{ btn.textContent = '복사'; }}, 1500);
-            }});
-
-            wrap.append(lbl, val, btn);
-            return wrap;
-        }}
-
-        bar.append(makeBtn('ID', CRED_ID), makeBtn('PW', CRED_PW));
-        document.body.appendChild(bar);
-    }});
 }})();
 """
     (Path(tmp_dir) / "content.js").write_text(content_js, encoding="utf-8")

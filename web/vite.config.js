@@ -7,6 +7,7 @@ export default defineConfig({
     port: 3000,
     proxy: {
       "/campaigns": "http://localhost:5000",
+      "/sessions": "http://localhost:5000",
     },
   },
 });

@@ -21,6 +21,7 @@ from flask_sock import Sock
 from api.auth import require_api_key
 from api.workspace import create_workspace, remove_workspace, find_config
 from api.worker import Worker, Status
+from api.vnc_session import create_vnc_session, get_vnc_session, delete_vnc_session
 
 app = Flask(__name__)
 sock = Sock(app)
@@ -99,6 +100,54 @@ def cancel_campaign(campaign_id: str):
 
     worker.cancel(campaign_id)
     return jsonify({"id": campaign_id, "status": "cancelled"})
+
+
+# ---------------------------------------------------------------------------
+# VNC sessions — 원격 로그인
+# ---------------------------------------------------------------------------
+
+@app.post("/sessions/vnc")
+@require_api_key
+def start_vnc_session():
+    """VNC 로그인 세션 시작."""
+    data = request.get_json(silent=True) or {}
+    username = data.get("username", "")
+    password = data.get("password", "")
+
+    if not username or not password:
+        return jsonify({"error": "username, password 필수"}), 400
+
+    account = {
+        "username": username,
+        "password": password,
+        "blog_id": data.get("blog_id", username),
+    }
+    config = {
+        "session_store": data.get("session_store", ""),
+        "_base_dir": data.get("base_dir", "."),
+    }
+
+    session = create_vnc_session(account, config)
+    return jsonify(session.to_dict()), 201
+
+
+@app.get("/sessions/vnc/<session_id>")
+@require_api_key
+def get_vnc(session_id: str):
+    """VNC 세션 상태 조회."""
+    session = get_vnc_session(session_id)
+    if not session:
+        return jsonify({"error": "VNC session not found"}), 404
+    return jsonify(session.to_dict())
+
+
+@app.delete("/sessions/vnc/<session_id>")
+@require_api_key
+def stop_vnc(session_id: str):
+    """VNC 세션 종료."""
+    if delete_vnc_session(session_id):
+        return jsonify({"session_id": session_id, "status": "closed"})
+    return jsonify({"error": "VNC session not found"}), 404
 
 
 # ---------------------------------------------------------------------------

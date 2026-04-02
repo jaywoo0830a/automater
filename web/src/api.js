@@ -67,6 +67,45 @@ export async function cancelCampaign(id) {
   return res.json();
 }
 
+// ---------------------------------------------------------------------------
+// VNC sessions
+// ---------------------------------------------------------------------------
+
+export async function startVncSession(account) {
+  const res = await fetch("/sessions/vnc", {
+    method: "POST",
+    headers: { ...headers(), "Content-Type": "application/json" },
+    body: JSON.stringify(account),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || res.statusText);
+  }
+  return res.json();
+}
+
+export async function getVncSession(sessionId) {
+  const res = await fetch(`/sessions/vnc/${sessionId}`, { headers: headers() });
+  if (!res.ok) throw new Error(res.statusText);
+  return res.json();
+}
+
+export async function deleteVncSession(sessionId) {
+  const res = await fetch(`/sessions/vnc/${sessionId}`, {
+    method: "DELETE",
+    headers: headers(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || res.statusText);
+  }
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Log streaming
+// ---------------------------------------------------------------------------
+
 export function streamLogs(id, onLine, onClose) {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   const ws = new WebSocket(`${proto}//${location.host}/campaigns/${id}/logs`);
