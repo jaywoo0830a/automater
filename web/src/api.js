@@ -68,7 +68,42 @@ export async function cancelCampaign(id) {
 }
 
 // ---------------------------------------------------------------------------
-// VNC sessions
+// Campaign sessions + execution
+// ---------------------------------------------------------------------------
+
+export async function getCampaignSessions(campaignId) {
+  const res = await fetch(`/campaigns/${campaignId}/sessions`, { headers: headers() });
+  if (!res.ok) throw new Error(res.statusText);
+  return res.json();
+}
+
+export async function executeCampaign(campaignId) {
+  const res = await fetch(`/campaigns/${campaignId}/execute`, {
+    method: "POST",
+    headers: headers(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || res.statusText);
+  }
+  return res.json();
+}
+
+export async function startCampaignVnc(campaignId, username) {
+  const res = await fetch(`/campaigns/${campaignId}/sessions/vnc`, {
+    method: "POST",
+    headers: { ...headers(), "Content-Type": "application/json" },
+    body: JSON.stringify({ username }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || res.statusText);
+  }
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Standalone VNC sessions
 // ---------------------------------------------------------------------------
 
 export async function startVncSession(account) {

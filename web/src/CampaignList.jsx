@@ -9,7 +9,7 @@ export default function CampaignList({ refreshKey, onSelect, selected, onRefresh
   }, [refreshKey]);
 
   useEffect(() => {
-    const hasActive = campaigns.some((c) => c.status === "queued" || c.status === "running");
+    const hasActive = campaigns.some((c) => ["queued", "running", "pending_sessions"].includes(c.status));
     if (!hasActive) return;
     const id = setInterval(() => {
       listCampaigns().then(setCampaigns).catch(() => {});
@@ -49,7 +49,7 @@ export default function CampaignList({ refreshKey, onSelect, selected, onRefresh
           {campaigns.map((c) => {
             const rowCls = `campaigns__row${selected === c.id ? " campaigns__row--selected" : ""}`;
             return (
-              <tr key={c.id} className={rowCls} onClick={() => onSelect(c.id)}>
+              <tr key={c.id} className={rowCls} onClick={() => onSelect(c.id, c.status)}>
                 <td className="campaigns__td">
                   <code className="campaigns__id">{c.id}</code>
                 </td>

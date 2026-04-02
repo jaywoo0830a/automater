@@ -1,14 +1,16 @@
 import { useState } from "react";
-import { isLoggedIn, clearApiKey } from "./api";
+import { isLoggedIn, clearApiKey, getCampaign } from "./api";
 import Login from "./Login";
 import Upload from "./Upload";
 import CampaignList from "./CampaignList";
 import LogViewer from "./LogViewer";
+import SessionSetup from "./SessionSetup";
 import VncLogin from "./VncLogin";
 
 export default function App() {
   const [authed, setAuthed] = useState(isLoggedIn());
   const [selected, setSelected] = useState(null);
+  const [selectedStatus, setSelectedStatus] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [showVnc, setShowVnc] = useState(false);
   const refresh = () => setRefreshKey((k) => k + 1);
@@ -17,6 +19,17 @@ export default function App() {
     clearApiKey();
     setAuthed(false);
     setSelected(null);
+  }
+
+  function handleSelect(id, status) {
+    setSelected(id);
+    setSelectedStatus(status);
+  }
+
+  function handleExecuted() {
+    // SessionSetup에서 실행 시작됨 -> 상태 갱신
+    setSelectedStatus("queued");
+    refresh();
   }
 
   if (!authed) {
@@ -48,13 +61,19 @@ export default function App() {
       <section className="app__section">
         <CampaignList
           refreshKey={refreshKey}
-          onSelect={setSelected}
+          onSelect={handleSelect}
           selected={selected}
           onRefresh={refresh}
         />
       </section>
 
-      {selected && (
+      {selected && selectedStatus === "pending_sessions" && (
+        <section className="app__section">
+          <SessionSetup campaignId={selected} onExecuted={handleExecuted} />
+        </section>
+      )}
+
+      {selected && selectedStatus !== "pending_sessions" && (
         <section className="app__section">
           <LogViewer campaignId={selected} />
         </section>

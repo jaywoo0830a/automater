@@ -17,10 +17,13 @@ import time
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
+
+import yaml
 
 
 class Status(str, Enum):
+    PENDING_SESSIONS = "pending_sessions"
     QUEUED = "queued"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -34,7 +37,7 @@ class Campaign:
     id: str
     config_path: str
     workspace: str
-    status: Status = Status.QUEUED
+    status: Status = Status.PENDING_SESSIONS
     log_lines: list[str] = field(default_factory=list)
     exit_code: int | None = None
     created_at: float = field(default_factory=time.time)
@@ -70,6 +73,49 @@ class Campaign:
         }
 
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def parse_campaign_accounts(config_path: str) -> list[dict[str, Any]]:
+    """캠페인 YAML에서 accounts 목록을 추출한다."""
+    raw = yaml.safe_load(Path(config_path).read_text(encoding="utf-8")) or {}
+    return raw.get("accounts", [])
+
+
+def check_sessions(config_path: str, workspace: str) -> dict[str, Any]:
+    """캠페인의 각 계정에 대해 세션 파일 존재 여부를 확인한다."""
+    accounts = parse_campaign_accounts(config_path)
+    sessions_dir = Path(workspace) / "sessions"
+    results = []
+
+    for acc in accounts:
+        username = acc.get("username", "")
+        blog_id = acc.get("blog_id", username)
+        has_session = False
+
+        if sessions_dir.is_dir():
+            for f in sessions_dir.iterdir():
+                if f.is_file() and username in f.stem:
+                    has_session = True
+                    break
+
+        results.append({
+            "username": username,
+            "blog_id": blog_id,
+            "has_session": has_session,
+        })
+
+    return {
+        "accounts": results,
+        "all_ready": all(r["has_session"] for r in results),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Worker
+# ---------------------------------------------------------------------------
+
 class Worker:
     """캠페인 실행 워커. 스레드 기반."""
 
@@ -77,16 +123,28 @@ class Worker:
         self._campaigns: dict[str, Campaign] = {}
         self._lock = threading.Lock()
 
-    def submit(self, campaign_id: str, config_path: str, workspace: str) -> Campaign:
-        """캠페인을 큐에 등록하고 즉시 실행한다."""
+    def register(self, campaign_id: str, config_path: str, workspace: str) -> Campaign:
+        """캠페인을 등록한다. 세션 확인 후 execute로 실행."""
+        # sessions/ 디렉터리 보장
+        (Path(workspace) / "sessions").mkdir(exist_ok=True)
+
         campaign = Campaign(
             id=campaign_id,
             config_path=config_path,
             workspace=workspace,
+            status=Status.PENDING_SESSIONS,
         )
         with self._lock:
             self._campaigns[campaign_id] = campaign
+        return campaign
 
+    def execute(self, campaign_id: str) -> Campaign | None:
+        """세션 준비 완료된 캠페인을 실행한다."""
+        campaign = self._campaigns.get(campaign_id)
+        if not campaign:
+            return None
+
+        campaign.status = Status.QUEUED
         thread = threading.Thread(
             target=self._run,
             args=(campaign,),
@@ -123,23 +181,18 @@ class Worker:
     @staticmethod
     def _patch_session_store(config_path: str) -> None:
         """워크스페이스 내 sessions/ 폴더가 있으면 YAML의 session_store를 패치."""
-        import yaml
         config_file = Path(config_path)
         sessions_dir = config_file.parent / "sessions"
         if not sessions_dir.is_dir():
             return
 
         raw = yaml.safe_load(config_file.read_text(encoding="utf-8")) or {}
-
-        # session_store는 문자열 "file"로 설정
         raw["session_store"] = "file"
 
-        # 계정별 session 경로를 sessions/ 내 파일 절대 경로로 교체
         for acc in raw.get("accounts", []):
             username = acc.get("username", "")
             if not username:
                 continue
-            # sessions/ 안에서 매칭되는 파일 찾기
             for candidate in sessions_dir.iterdir():
                 if candidate.is_file() and username in candidate.stem:
                     acc["session"] = str(candidate.resolve())
@@ -155,10 +208,8 @@ class Worker:
         campaign.status = Status.RUNNING
         campaign._emit(f"[실행 시작] {campaign.config_path}\n")
 
-        # 워크스페이스 내 세션 파일 연결
         self._patch_session_store(campaign.config_path)
 
-        # 프로젝트 루트 = api/ 의 부모
         project_root = str(Path(__file__).resolve().parent.parent)
 
         cmd = [
