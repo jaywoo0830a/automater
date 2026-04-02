@@ -82,8 +82,7 @@ def get_campaign(campaign_id: str):
         return jsonify({"error": "캠페인을 찾을 수 없습니다"}), 404
 
     data = campaign.to_dict()
-    # 최근 50줄
-    data["recent_logs"] = campaign.log_lines[-50:]
+    data["logs"] = campaign.log_lines
     return jsonify(data)
 
 

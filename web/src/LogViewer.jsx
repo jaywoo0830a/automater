@@ -4,50 +4,72 @@ import { getCampaign, streamLogs } from "./api";
 export default function LogViewer({ campaignId }) {
   const [lines, setLines] = useState([]);
   const [live, setLive] = useState(false);
+  const [autoScroll, setAutoScroll] = useState(true);
   const outputRef = useRef();
+  const baseCountRef = useRef(0);
 
   useEffect(() => {
     setLines([]);
     setLive(true);
+    setAutoScroll(true);
+    baseCountRef.current = 0;
 
-    let wsReceived = false;
+    // 1. REST로 전체 로그 가져오기
+    getCampaign(campaignId).then((data) => {
+      const existing = data.logs || [];
+      baseCountRef.current = existing.length;
+      setLines(existing);
+    }).catch(() => {});
 
+    // 2. WebSocket — REST 이후 줄만 추가
+    let wsCount = 0;
     const close = streamLogs(
       campaignId,
       (line) => {
-        wsReceived = true;
-        setLines((prev) => [...prev, line]);
-      },
-      () => {
-        setLive(false);
-        // WebSocket에서 로그를 못 받았으면 REST로 가져오기
-        if (!wsReceived) {
-          getCampaign(campaignId).then((data) => {
-            if (data.recent_logs?.length) {
-              setLines(data.recent_logs);
-            }
-          }).catch(() => {});
+        wsCount++;
+        if (wsCount > baseCountRef.current) {
+          setLines((prev) => [...prev, line]);
         }
       },
+      () => setLive(false),
     );
     return close;
   }, [campaignId]);
 
   useEffect(() => {
     const el = outputRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [lines]);
+    if (el && autoScroll) el.scrollTop = el.scrollHeight;
+  }, [lines, autoScroll]);
+
+  function handleScroll() {
+    const el = outputRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    setAutoScroll(atBottom);
+  }
 
   return (
     <div className="log">
       <div className="log__container">
         <header className="log__header">
           <span className="log__title">
-            <code>{campaignId}</code> 로그
+            <code>{campaignId}</code> log ({lines.length} lines)
           </span>
           {live && <span className="log__live">LIVE</span>}
+          {!autoScroll && (
+            <button
+              className="btn btn--ghost"
+              onClick={() => {
+                setAutoScroll(true);
+                const el = outputRef.current;
+                if (el) el.scrollTop = el.scrollHeight;
+              }}
+            >
+              scroll to bottom
+            </button>
+          )}
         </header>
-        <pre ref={outputRef} className="log__output">
+        <pre ref={outputRef} className="log__output" onScroll={handleScroll}>
           {lines.join("")}
         </pre>
       </div>
