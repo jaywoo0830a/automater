@@ -131,10 +131,10 @@ class Worker:
 
         raw = yaml.safe_load(config_file.read_text(encoding="utf-8")) or {}
 
-        # session_store를 로컬 sessions/ 로 설정
-        raw["session_store"] = {"type": "file", "base_dir": str(sessions_dir)}
+        # session_store는 문자열 "file"로 설정
+        raw["session_store"] = "file"
 
-        # 계정별 명시적 session 경로도 sessions/ 내 파일로 교체
+        # 계정별 session 경로를 sessions/ 내 파일 절대 경로로 교체
         for acc in raw.get("accounts", []):
             username = acc.get("username", "")
             if not username:

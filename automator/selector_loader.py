@@ -107,11 +107,18 @@ class SelectorLoader:
         """
         Load an automator selector file (YAML or JSON).
 
+        상대 경로는 프로젝트 루트(automator/ 패키지의 부모) 기준으로 해석한다.
+
         Raises:
             FileNotFoundError: If the file does not exist.
             ValueError:        If the file cannot be parsed.
         """
         p = Path(path)
+        if not p.is_absolute():
+            project_root = Path(__file__).resolve().parent.parent
+            candidate = project_root / p
+            if candidate.exists():
+                p = candidate
         if not p.exists():
             raise FileNotFoundError(f"Selector file not found: {p}")
 
