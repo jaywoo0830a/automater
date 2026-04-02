@@ -55,8 +55,8 @@ def upload_campaign():
     finally:
         Path(tmp_path).unlink(missing_ok=True)
 
-    config_path = find_config(workspace)
-    campaign = worker.submit(campaign_id, str(config_path), str(workspace))
+    config_path = find_config(workspace).resolve()
+    campaign = worker.submit(campaign_id, str(config_path), str(workspace.resolve()))
 
     return jsonify({
         "id": campaign.id,

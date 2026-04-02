@@ -120,10 +120,43 @@ class Worker:
         campaign._emit("[중단됨]\n")
         return True
 
+    @staticmethod
+    def _patch_session_store(config_path: str) -> None:
+        """워크스페이스 내 sessions/ 폴더가 있으면 YAML의 session_store를 패치."""
+        import yaml
+        config_file = Path(config_path)
+        sessions_dir = config_file.parent / "sessions"
+        if not sessions_dir.is_dir():
+            return
+
+        raw = yaml.safe_load(config_file.read_text(encoding="utf-8")) or {}
+
+        # session_store를 로컬 sessions/ 로 설정
+        raw["session_store"] = {"type": "file", "base_dir": str(sessions_dir)}
+
+        # 계정별 명시적 session 경로도 sessions/ 내 파일로 교체
+        for acc in raw.get("accounts", []):
+            username = acc.get("username", "")
+            if not username:
+                continue
+            # sessions/ 안에서 매칭되는 파일 찾기
+            for candidate in sessions_dir.iterdir():
+                if candidate.is_file() and username in candidate.stem:
+                    acc["session"] = str(candidate.resolve())
+                    break
+
+        config_file.write_text(
+            yaml.dump(raw, allow_unicode=True, default_flow_style=False, sort_keys=False),
+            encoding="utf-8",
+        )
+
     def _run(self, campaign: Campaign) -> None:
         """워커 스레드: subprocess로 CLI를 실행한다."""
         campaign.status = Status.RUNNING
         campaign._emit(f"[실행 시작] {campaign.config_path}\n")
+
+        # 워크스페이스 내 세션 파일 연결
+        self._patch_session_store(campaign.config_path)
 
         # 프로젝트 루트 = api/ 의 부모
         project_root = str(Path(__file__).resolve().parent.parent)
