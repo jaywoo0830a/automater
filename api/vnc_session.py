@@ -243,22 +243,33 @@ class VncLoginSession:
             try:
                 url = self._page.url
                 if "nidlogin" not in url and "naver.com" in url:
-                    # 로그인 성공 — 블로그 접속으로 세션 확인
-                    self._page.goto(write_url, wait_until="domcontentloaded", timeout=15_000)
-                    time.sleep(3)
+                    # 로그인 감지 — 새 탭에서 블로그 접속하여 세션 확인
+                    # (사용자가 보고 있는 페이지는 건드리지 않음)
+                    check_page = self._context.new_page()
+                    try:
+                        check_page.goto(write_url, wait_until="domcontentloaded", timeout=15_000)
+                        time.sleep(2)
 
-                    if "nidlogin" in self._page.url:
-                        log.warning("[vnc:%s] login detected but blog redirect failed", self.id)
-                        continue
+                        if "nidlogin" in check_page.url:
+                            log.debug("[vnc:%s] login page detected but session not valid yet", self.id)
+                            check_page.close()
+                            time.sleep(_POLL_INTERVAL)
+                            continue
 
-                    # 세션 저장
-                    state = self._context.storage_state()
-                    self._save_session(state)
-                    self.status = "logged_in"
-                    log.info("[vnc:%s] login success for %s", self.id, username)
-                    time.sleep(2)
-                    self.teardown()
-                    return
+                        # 세션 유효 — 저장
+                        state = self._context.storage_state()
+                        check_page.close()
+                        self._save_session(state)
+                        self.status = "logged_in"
+                        log.info("[vnc:%s] login success for %s", self.id, username)
+                        time.sleep(2)
+                        self.teardown()
+                        return
+                    except Exception:
+                        try:
+                            check_page.close()
+                        except Exception:
+                            pass
             except Exception:
                 pass
 
