@@ -83,8 +83,12 @@ def parse_campaign_accounts(config_path: str) -> list[dict[str, Any]]:
     return raw.get("accounts", [])
 
 
-def check_sessions(config_path: str, workspace: str) -> dict[str, Any]:
-    """캠페인의 각 계정에 대해 세션 파일 존재 여부를 확인한다."""
+def check_sessions(config_path: str, workspace: str, validate: bool = True) -> dict[str, Any]:
+    """캠페인의 각 계정에 대해 세션 유효성을 확인한다.
+
+    validate=True이면 headless 브라우저로 실제 로그인 상태를 검증한다.
+    validate=False이면 파일 존재 여부만 확인한다.
+    """
     accounts = parse_campaign_accounts(config_path)
     sessions_dir = Path(workspace) / "sessions"
     results = []
@@ -93,12 +97,15 @@ def check_sessions(config_path: str, workspace: str) -> dict[str, Any]:
         username = acc.get("username", "")
         blog_id = acc.get("blog_id", username)
         has_session = False
+        session_file = _find_session_file(sessions_dir, username)
 
-        if sessions_dir.is_dir():
-            for f in sessions_dir.iterdir():
-                if f.is_file() and username in f.stem:
-                    has_session = True
-                    break
+        if session_file and validate:
+            has_session = _validate_session(session_file, blog_id)
+            # 무효한 세션 파일 삭제
+            if not has_session:
+                session_file.unlink(missing_ok=True)
+        elif session_file:
+            has_session = True
 
         results.append({
             "username": username,
@@ -110,6 +117,42 @@ def check_sessions(config_path: str, workspace: str) -> dict[str, Any]:
         "accounts": results,
         "all_ready": all(r["has_session"] for r in results),
     }
+
+
+def _find_session_file(sessions_dir: Path, username: str) -> Path | None:
+    """sessions/ 디렉터리에서 해당 username의 세션 파일을 찾는다."""
+    if not sessions_dir.is_dir():
+        return None
+    for f in sessions_dir.iterdir():
+        if f.is_file() and username in f.stem:
+            return f
+    return None
+
+
+def _validate_session(session_file: Path, blog_id: str) -> bool:
+    """headless 브라우저로 세션의 실제 유효성을 검증한다."""
+    import json as _json
+    try:
+        state = _json.loads(session_file.read_text(encoding="utf-8"))
+    except Exception:
+        return False
+
+    check_url = f"https://blog.naver.com/{blog_id}?Redirect=Write&"
+    try:
+        from playwright.sync_api import sync_playwright
+        pw = sync_playwright().start()
+        browser = pw.chromium.launch(headless=True)
+        ctx = browser.new_context(storage_state=state)
+        page = ctx.new_page()
+        page.goto(check_url, wait_until="domcontentloaded", timeout=15_000)
+        valid = "nidlogin" not in page.url
+        page.close()
+        ctx.close()
+        browser.close()
+        pw.stop()
+        return valid
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------

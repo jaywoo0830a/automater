@@ -298,30 +298,36 @@
 .setup__execute:hover { background: var(--accent-hover); }
 .setup__execute:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.setup__table {
-  font-size: var(--text-sm);
+.setup__accounts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  padding: var(--space-sm);
 }
 
-.setup__th {
-  text-align: left;
-  padding: var(--space-xs) var(--space-sm);
-  border-bottom: 1px solid var(--border-default);
-  color: var(--text-muted);
+.setup__account {
+  padding: var(--space-3xs) var(--space-xs);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
   font-weight: var(--weight-medium);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  border: 1px solid;
 }
 
-.setup__row {}
-
-.setup__td {
-  padding: var(--space-xs) var(--space-sm);
-  border-bottom: 1px solid var(--border-subtle);
+.setup__account--ready {
+  color: var(--status-completed);
+  border-color: var(--status-completed);
 }
 
-.setup__ready { color: var(--status-completed); font-weight: var(--weight-bold); font-size: var(--text-xs); }
-.setup__missing { color: var(--status-failed); font-weight: var(--weight-bold); font-size: var(--text-xs); }
+.setup__account--missing {
+  color: var(--status-failed);
+  border-color: var(--status-failed);
+}
+
+.setup__account--active {
+  color: var(--status-running);
+  border-color: var(--status-running);
+}
 
 .setup__error {
   padding: var(--space-xs) var(--space-sm);
@@ -366,103 +372,6 @@
 }
 
 .setup__viewer {
-  width: 100%;
-  height: calc(100vh - 10rem);
-  min-height: 40rem;
-  border: none;
-  background: #000;
-}
-
-
-/* ─── VNC Login ──────────────────────────────────────────── */
-
-.vnc {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-}
-
-.vnc__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--space-xs) var(--space-sm);
-  background: var(--bg-raised);
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.vnc__title {
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-}
-
-.vnc__form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  padding: var(--space-md);
-}
-
-.vnc__input {
-  padding: var(--space-xs) var(--space-sm);
-  background: var(--bg-inset);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  outline: none;
-}
-
-.vnc__input:focus {
-  border-color: var(--border-focus);
-}
-
-.vnc__submit {
-  padding: var(--space-xs);
-  background: var(--accent);
-  color: var(--accent-text);
-  border: none;
-  border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-  cursor: pointer;
-}
-
-.vnc__submit:hover {
-  background: var(--accent-hover);
-}
-
-.vnc__hint {
-  padding: var(--space-xs) var(--space-sm);
-  background: var(--bg-raised);
-  border-bottom: 1px solid var(--border-subtle);
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-  text-align: center;
-}
-
-.vnc__hint kbd {
-  background: var(--bg-inset);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  padding: var(--space-4xs) var(--space-3xs);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-}
-
-.vnc__status {
-  padding: var(--space-md);
-  text-align: center;
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-}
-
-.vnc__status--success { color: var(--status-completed); }
-.vnc__status--error   { color: var(--status-failed); }
-
-.vnc__viewer {
   width: 100%;
   height: calc(100vh - 10rem);
   min-height: 40rem;

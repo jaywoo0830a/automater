@@ -110,7 +110,7 @@ def execute_campaign(campaign_id: str):
     if campaign.status != Status.PENDING_SESSIONS:
         return jsonify({"error": f"cannot execute: status={campaign.status.value}"}), 400
 
-    sessions = check_sessions(campaign.config_path, campaign.workspace)
+    sessions = check_sessions(campaign.config_path, campaign.workspace, validate=False)
     if not sessions["all_ready"]:
         missing = [a["username"] for a in sessions["accounts"] if not a["has_session"]]
         return jsonify({"error": "sessions not ready", "missing": missing}), 400
@@ -127,7 +127,7 @@ def get_campaign_sessions(campaign_id: str):
     if not campaign:
         return jsonify({"error": "not found"}), 404
 
-    return jsonify(check_sessions(campaign.config_path, campaign.workspace))
+    return jsonify(check_sessions(campaign.config_path, campaign.workspace, validate=False))
 
 
 @app.post("/campaigns/<campaign_id>/sessions/vnc")
@@ -178,32 +178,8 @@ def cancel_campaign(campaign_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Standalone VNC sessions
+# VNC session status/stop (used by frontend polling)
 # ---------------------------------------------------------------------------
-
-@app.post("/sessions/vnc")
-@require_api_key
-def start_vnc_session():
-    data = request.get_json(silent=True) or {}
-    username = data.get("username", "")
-    password = data.get("password", "")
-
-    if not username or not password:
-        return jsonify({"error": "username, password required"}), 400
-
-    account = {
-        "username": username,
-        "password": password,
-        "blog_id": data.get("blog_id", username),
-    }
-    config = {
-        "session_store": data.get("session_store", ""),
-        "_base_dir": data.get("base_dir", "."),
-    }
-
-    session = create_vnc_session(account, config)
-    return jsonify(session.to_dict()), 201
-
 
 @app.get("/sessions/vnc/<session_id>")
 @require_api_key

@@ -103,21 +103,8 @@ export async function startCampaignVnc(campaignId, username) {
 }
 
 // ---------------------------------------------------------------------------
-// Standalone VNC sessions
+// VNC session status/stop
 // ---------------------------------------------------------------------------
-
-export async function startVncSession(account) {
-  const res = await fetch("/sessions/vnc", {
-    method: "POST",
-    headers: { ...headers(), "Content-Type": "application/json" },
-    body: JSON.stringify(account),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || res.statusText);
-  }
-  return res.json();
-}
 
 export async function getVncSession(sessionId) {
   const res = await fetch(`/sessions/vnc/${sessionId}`, { headers: headers() });

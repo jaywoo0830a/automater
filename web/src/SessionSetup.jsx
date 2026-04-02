@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   getCampaignSessions,
   executeCampaign,
@@ -10,60 +10,68 @@ import {
 export default function SessionSetup({ campaignId, onExecuted }) {
   const [accounts, setAccounts] = useState([]);
   const [allReady, setAllReady] = useState(false);
-  const [vncTarget, setVncTarget] = useState(null); // { username, sessionId, wsPort, status }
+  const [currentVnc, setCurrentVnc] = useState(null); // { username, sessionId, wsPort, status }
   const [executing, setExecuting] = useState(false);
   const [error, setError] = useState("");
 
-  // poll session status
-  useEffect(() => {
-    let active = true;
-    async function poll() {
-      try {
-        const data = await getCampaignSessions(campaignId);
-        if (active) {
-          setAccounts(data.accounts || []);
-          setAllReady(data.all_ready);
-        }
-      } catch {}
-    }
-    poll();
-    const id = setInterval(poll, 3000);
-    return () => { active = false; clearInterval(id); };
+  // poll campaign session status
+  const refreshSessions = useCallback(async () => {
+    try {
+      const data = await getCampaignSessions(campaignId);
+      setAccounts(data.accounts || []);
+      setAllReady(data.all_ready);
+      return data;
+    } catch { return null; }
   }, [campaignId]);
 
-  // poll VNC session status
   useEffect(() => {
-    if (!vncTarget?.sessionId) return;
+    refreshSessions();
+    const id = setInterval(refreshSessions, 3000);
+    return () => clearInterval(id);
+  }, [refreshSessions]);
+
+  // 자동 순차 로그인: missing 계정 중 첫 번째를 자동으로 VNC 시작
+  useEffect(() => {
+    if (currentVnc || allReady || accounts.length === 0) return;
+    const next = accounts.find((a) => !a.has_session);
+    if (next) startVnc(next.username);
+  }, [accounts, currentVnc, allReady]);
+
+  // poll VNC session
+  useEffect(() => {
+    if (!currentVnc?.sessionId) return;
     const id = setInterval(async () => {
       try {
-        const data = await getVncSession(vncTarget.sessionId);
-        if (data.status === "ready" && !vncTarget.wsPort) {
-          setVncTarget((prev) => ({ ...prev, wsPort: data.websockify_port, status: "ready" }));
+        const data = await getVncSession(currentVnc.sessionId);
+        if (data.status === "ready" && !currentVnc.wsPort) {
+          setCurrentVnc((prev) => ({ ...prev, wsPort: data.websockify_port, status: "ready" }));
         } else if (data.status === "logged_in") {
-          setVncTarget(null);
+          // 완료 → 다음 계정으로
+          setCurrentVnc(null);
+          refreshSessions();
         } else if (data.status === "failed") {
-          setVncTarget((prev) => ({ ...prev, status: "failed", error: data.error }));
+          setCurrentVnc((prev) => ({ ...prev, status: "failed", error: data.error }));
         }
       } catch {}
     }, 1500);
     return () => clearInterval(id);
-  }, [vncTarget?.sessionId, vncTarget?.wsPort]);
+  }, [currentVnc?.sessionId, currentVnc?.wsPort]);
 
-  async function handleLogin(username) {
+  async function startVnc(username) {
     setError("");
     try {
       const data = await startCampaignVnc(campaignId, username);
-      setVncTarget({ username, sessionId: data.session_id, wsPort: null, status: "starting" });
+      setCurrentVnc({ username, sessionId: data.session_id, wsPort: null, status: "starting" });
     } catch (e) {
       setError(e.message);
     }
   }
 
-  function handleCancelVnc() {
-    if (vncTarget?.sessionId) {
-      deleteVncSession(vncTarget.sessionId).catch(() => {});
+  function handleSkip() {
+    if (currentVnc?.sessionId) {
+      deleteVncSession(currentVnc.sessionId).catch(() => {});
     }
-    setVncTarget(null);
+    setCurrentVnc(null);
   }
 
   async function handleExecute() {
@@ -79,14 +87,19 @@ export default function SessionSetup({ campaignId, onExecuted }) {
     }
   }
 
-  const vncUrl = vncTarget?.wsPort
-    ? `http://${window.location.hostname}:${vncTarget.wsPort}/vnc.html?autoconnect=true&resize=scale`
+  const vncUrl = currentVnc?.wsPort
+    ? `http://${window.location.hostname}:${currentVnc.wsPort}/vnc.html?autoconnect=true&resize=scale`
     : "";
+
+  const doneCount = accounts.filter((a) => a.has_session).length;
+  const totalCount = accounts.length;
 
   return (
     <div className="setup">
       <div className="setup__header">
-        <span className="setup__title">Session Setup</span>
+        <span className="setup__title">
+          Session Setup ({doneCount}/{totalCount})
+        </span>
         {allReady && (
           <button
             className="setup__execute"
@@ -98,64 +111,36 @@ export default function SessionSetup({ campaignId, onExecuted }) {
         )}
       </div>
 
-      <table className="setup__table">
-        <thead>
-          <tr>
-            <th className="setup__th">Account</th>
-            <th className="setup__th">Blog ID</th>
-            <th className="setup__th">Session</th>
-            <th className="setup__th"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {accounts.map((acc) => (
-            <tr key={acc.username} className="setup__row">
-              <td className="setup__td">
-                <code>{acc.username}</code>
-              </td>
-              <td className="setup__td">{acc.blog_id}</td>
-              <td className="setup__td">
-                {acc.has_session ? (
-                  <span className="setup__ready">ready</span>
-                ) : (
-                  <span className="setup__missing">missing</span>
-                )}
-              </td>
-              <td className="setup__td">
-                {!acc.has_session && (
-                  <button
-                    className="btn btn--ghost"
-                    onClick={() => handleLogin(acc.username)}
-                    disabled={!!vncTarget}
-                  >
-                    Login
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {/* 계정 상태 목록 */}
+      <div className="setup__accounts">
+        {accounts.map((acc) => (
+          <span
+            key={acc.username}
+            className={`setup__account ${acc.has_session ? "setup__account--ready" : "setup__account--missing"} ${currentVnc?.username === acc.username ? "setup__account--active" : ""}`}
+          >
+            {acc.username}
+          </span>
+        ))}
+      </div>
 
       {error && <p className="setup__error">{error}</p>}
 
-      {vncTarget && vncTarget.status === "starting" && (
+      {/* VNC 상태 */}
+      {currentVnc && currentVnc.status === "starting" && (
         <div className="setup__vnc-status">
-          Starting browser for {vncTarget.username}...
-          <button className="btn btn--ghost" onClick={handleCancelVnc}>cancel</button>
+          Starting browser for <code>{currentVnc.username}</code>...
         </div>
       )}
 
-      {vncTarget && vncTarget.status === "ready" && (
+      {currentVnc && currentVnc.status === "ready" && (
         <div className="setup__vnc">
           <div className="setup__vnc-header">
-            <span>Logging in: <code>{vncTarget.username}</code></span>
-            <span className="setup__hint">
-              ID field &rarr; <kbd>Ctrl+V</kbd> &rarr;
-              PW field &rarr; <kbd>Ctrl+V</kbd> &rarr;
-              Login
+            <span>
+              <code>{currentVnc.username}</code>
+              {" "}&mdash;{" "}
+              <kbd>Ctrl+V</kbd> (ID) → <kbd>Ctrl+V</kbd> (PW) → Login
             </span>
-            <button className="btn btn--ghost" onClick={handleCancelVnc}>cancel</button>
+            <button className="btn btn--ghost" onClick={handleSkip}>skip</button>
           </div>
           <iframe
             className="setup__viewer"
@@ -167,10 +152,10 @@ export default function SessionSetup({ campaignId, onExecuted }) {
         </div>
       )}
 
-      {vncTarget && vncTarget.status === "failed" && (
+      {currentVnc && currentVnc.status === "failed" && (
         <div className="setup__vnc-status setup__error">
-          Login failed: {vncTarget.error}
-          <button className="btn btn--ghost" onClick={handleCancelVnc}>dismiss</button>
+          Failed: {currentVnc.error}
+          <button className="btn btn--ghost" onClick={() => setCurrentVnc(null)}>retry</button>
         </div>
       )}
     </div>
