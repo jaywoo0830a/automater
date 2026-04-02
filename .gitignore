@@ -13,7 +13,6 @@ campaigns/
 # ── 이미지 에셋 (로컬 전용) ──────────────────────────────
 assets/
 !assets/fonts/
-!assets/login_helper_ext/
 uploads/
 
 # ── 워크스페이스 (API 업로드 데이터) ─────────────────────

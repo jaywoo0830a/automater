@@ -35,8 +35,16 @@ LOGIN_URL = "https://nid.naver.com/nidlogin.login"
 # 세션 만료 판단용 URL 패턴
 SESSION_EXPIRED_PATTERNS = ("nidlogin", "sso/cross-domain", "login")
 
-# 확장 프로그램 템플릿 경로
-_EXT_TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "assets" / "login_helper_ext"
+_MANIFEST_JSON = json.dumps({
+    "manifest_version": 3,
+    "name": "Login Helper",
+    "version": "1.0",
+    "content_scripts": [{
+        "matches": ["*://nid.naver.com/*"],
+        "js": ["content.js"],
+        "run_at": "document_idle",
+    }],
+}, ensure_ascii=False)
 
 
 def is_session_error(url: str = "", error_msg: str = "") -> bool:
@@ -49,8 +57,8 @@ def _build_login_ext(username: str, password: str) -> str:
     """credentials가 포함된 임시 확장 프로그램 디렉터리를 생성하고 경로를 반환한다."""
     tmp_dir = tempfile.mkdtemp(prefix="login_helper_")
 
-    # manifest.json 복사
-    shutil.copy2(_EXT_TEMPLATE_DIR / "manifest.json", tmp_dir)
+    # manifest.json 인라인 생성
+    (Path(tmp_dir) / "manifest.json").write_text(_MANIFEST_JSON, encoding="utf-8")
 
     # content.js에 credentials 주입
     content_js = f"""\
