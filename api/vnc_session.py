@@ -235,23 +235,31 @@ class VncLoginSession:
         write_url = f"https://blog.naver.com/{blog_id}?Redirect=Write&"
 
         deadline = time.time() + _MONITOR_TIMEOUT
+        log.info("[vnc:%s] monitoring login for %s (timeout=%ds)", self.id, username, _MONITOR_TIMEOUT)
 
         while time.time() < deadline:
             if self.status not in ("ready",):
                 return
 
             try:
-                url = self._page.url
+                # page.url 대신 JS로 직접 URL 확인 (VNC 사용자 상호작용 반영)
+                url = self._page.evaluate("window.location.href")
+                log.debug("[vnc:%s] current url: %s", self.id, url)
+
                 if "nidlogin" not in url and "naver.com" in url:
-                    # 로그인 감지 — 새 탭에서 블로그 접속하여 세션 확인
-                    # (사용자가 보고 있는 페이지는 건드리지 않음)
+                    log.info("[vnc:%s] login detected, verifying session...", self.id)
+                    time.sleep(3)  # 쿠키 전파 대기
+
+                    # 새 탭에서 블로그 접속하여 세션 확인
                     check_page = self._context.new_page()
                     try:
                         check_page.goto(write_url, wait_until="domcontentloaded", timeout=15_000)
                         time.sleep(2)
+                        check_url = check_page.evaluate("window.location.href")
+                        log.info("[vnc:%s] verify url: %s", self.id, check_url)
 
-                        if "nidlogin" in check_page.url:
-                            log.debug("[vnc:%s] login page detected but session not valid yet", self.id)
+                        if "nidlogin" in check_url:
+                            log.warning("[vnc:%s] session not valid yet, retrying...", self.id)
                             check_page.close()
                             time.sleep(_POLL_INTERVAL)
                             continue
@@ -265,13 +273,14 @@ class VncLoginSession:
                         time.sleep(2)
                         self.teardown()
                         return
-                    except Exception:
+                    except Exception as exc:
+                        log.warning("[vnc:%s] verify failed: %s", self.id, exc)
                         try:
                             check_page.close()
                         except Exception:
                             pass
-            except Exception:
-                pass
+            except Exception as exc:
+                log.debug("[vnc:%s] monitor error: %s", self.id, exc)
 
             time.sleep(_POLL_INTERVAL)
 
