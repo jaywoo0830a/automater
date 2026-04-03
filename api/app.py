@@ -65,7 +65,8 @@ def upload_campaign():
         Path(tmp_path).unlink(missing_ok=True)
 
     config_path = find_config(workspace).resolve()
-    campaign = worker.register(campaign_id, str(config_path), str(workspace.resolve()))
+    name = request.form.get("name", "") or Path(file.filename).stem
+    campaign = worker.register(campaign_id, str(config_path), str(workspace.resolve()), name=name)
 
     sessions = check_sessions(str(config_path), str(workspace.resolve()))
 

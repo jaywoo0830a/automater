@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { listCampaigns, cancelCampaign } from "./api";
+import { listCampaigns } from "./api";
 
-export default function CampaignList({ refreshKey, onSelect, selected, onRefresh }) {
+export default function CampaignList({ refreshKey, onSelect, onRefresh }) {
   const [campaigns, setCampaigns] = useState([]);
 
   useEffect(() => {
@@ -9,7 +9,9 @@ export default function CampaignList({ refreshKey, onSelect, selected, onRefresh
   }, [refreshKey]);
 
   useEffect(() => {
-    const hasActive = campaigns.some((c) => ["queued", "running", "pending_sessions"].includes(c.status));
+    const hasActive = campaigns.some((c) =>
+      ["queued", "running", "pending_sessions"].includes(c.status)
+    );
     if (!hasActive) return;
     const id = setInterval(() => {
       listCampaigns().then(setCampaigns).catch(() => {});
@@ -17,58 +19,32 @@ export default function CampaignList({ refreshKey, onSelect, selected, onRefresh
     return () => clearInterval(id);
   }, [campaigns]);
 
-  async function handleCancel(e, id) {
-    e.stopPropagation();
-    try {
-      await cancelCampaign(id);
-      onRefresh?.();
-    } catch (err) {
-      alert(err.message);
-    }
-  }
+  const sorted = [...campaigns].sort((a, b) => b.created_at - a.created_at);
 
-  if (!campaigns.length) {
-    return <p className="campaigns__empty">캠페인 없음</p>;
+  if (!sorted.length) {
+    return <p className="campaigns__empty">No campaigns</p>;
   }
 
   return (
     <div className="campaigns">
-      <div className="campaigns__header">
-        <span className="campaigns__count">{campaigns.length}개 캠페인</span>
+      <div className="campaigns__grid">
+        {sorted.map((c) => (
+          <article
+            key={c.id}
+            className="campaigns__card"
+            onClick={() => onSelect(c.id)}
+          >
+            <div className="campaigns__card-header">
+              <span className="campaigns__card-name">{c.name}</span>
+              <span className={`badge badge--${c.status}`}>{c.status}</span>
+            </div>
+            <div className="campaigns__card-meta">
+              <code>{c.id}</code>
+              <span>{c.log_length} lines</span>
+            </div>
+          </article>
+        ))}
       </div>
-      <table className="campaigns__table">
-        <thead>
-          <tr>
-            <th className="campaigns__th">ID</th>
-            <th className="campaigns__th">상태</th>
-            <th className="campaigns__th">로그</th>
-            <th className="campaigns__th"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {campaigns.map((c) => {
-            const rowCls = `campaigns__row${selected === c.id ? " campaigns__row--selected" : ""}`;
-            return (
-              <tr key={c.id} className={rowCls} onClick={() => onSelect(c.id, c.status)}>
-                <td className="campaigns__td">
-                  <code className="campaigns__id">{c.id}</code>
-                </td>
-                <td className="campaigns__td">
-                  <span className={`badge badge--${c.status}`}>{c.status}</span>
-                </td>
-                <td className="campaigns__td">{c.log_length}줄</td>
-                <td className="campaigns__td">
-                  {(c.status === "queued" || c.status === "running") && (
-                    <button className="btn btn--danger" onClick={(e) => handleCancel(e, c.id)}>
-                      중단
-                    </button>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
     </div>
   );
 }

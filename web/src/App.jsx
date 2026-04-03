@@ -1,36 +1,34 @@
-import { useState } from "react";
-import { isLoggedIn, clearApiKey } from "./api";
+import { useState, useEffect } from "react";
+import { isLoggedIn, clearApiKey, getCampaign } from "./api";
 import Login from "./Login";
 import Upload from "./Upload";
 import CampaignList from "./CampaignList";
-import LogViewer from "./LogViewer";
-import SessionSetup from "./SessionSetup";
+import CampaignPage from "./CampaignPage";
 
 export default function App() {
   const [authed, setAuthed] = useState(isLoggedIn());
-  const [selected, setSelected] = useState(null);
-  const [selectedStatus, setSelectedStatus] = useState(null);
+  const [page, setPage] = useState("list"); // "list" | campaign id
   const [refreshKey, setRefreshKey] = useState(0);
   const refresh = () => setRefreshKey((k) => k + 1);
 
   function handleLogout() {
     clearApiKey();
     setAuthed(false);
-    setSelected(null);
-  }
-
-  function handleSelect(id, status) {
-    setSelected(id);
-    setSelectedStatus(status);
-  }
-
-  function handleExecuted() {
-    setSelectedStatus("queued");
-    refresh();
+    setPage("list");
   }
 
   if (!authed) {
     return <Login onLogin={() => setAuthed(true)} />;
+  }
+
+  if (page !== "list") {
+    return (
+      <CampaignPage
+        campaignId={page}
+        onBack={() => setPage("list")}
+        onLogout={handleLogout}
+      />
+    );
   }
 
   return (
@@ -41,29 +39,16 @@ export default function App() {
       </header>
 
       <section className="app__section">
-        <Upload onUploaded={refresh} />
+        <Upload onUploaded={(id) => { refresh(); if (id) setPage(id); }} />
       </section>
 
       <section className="app__section">
         <CampaignList
           refreshKey={refreshKey}
-          onSelect={handleSelect}
-          selected={selected}
+          onSelect={(id) => setPage(id)}
           onRefresh={refresh}
         />
       </section>
-
-      {selected && selectedStatus === "pending_sessions" && (
-        <section className="app__section">
-          <SessionSetup campaignId={selected} onExecuted={handleExecuted} />
-        </section>
-      )}
-
-      {selected && selectedStatus !== "pending_sessions" && (
-        <section className="app__section">
-          <LogViewer campaignId={selected} />
-        </section>
-      )}
     </main>
   );
 }

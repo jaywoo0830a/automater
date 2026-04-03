@@ -61,6 +61,7 @@ class Campaign:
     id: str
     config_path: str
     workspace: str
+    name: str = ""
     status: Status = Status.PENDING_SESSIONS
     log_lines: list[str] = field(default_factory=list)
     exit_code: int | None = None
@@ -91,6 +92,7 @@ class Campaign:
     def to_dict(self) -> dict:
         return {
             "id": self.id,
+            "name": self.name,
             "status": self.status.value,
             "config_path": self.config_path,
             "exit_code": self.exit_code,
@@ -198,15 +200,15 @@ class Worker:
         self._campaigns: dict[str, Campaign] = {}
         self._lock = threading.Lock()
 
-    def register(self, campaign_id: str, config_path: str, workspace: str) -> Campaign:
+    def register(self, campaign_id: str, config_path: str, workspace: str, name: str = "") -> Campaign:
         """캠페인을 등록한다. 세션 확인 후 execute로 실행."""
-        # sessions/ 디렉터리 보장
         (Path(workspace) / "sessions").mkdir(exist_ok=True)
 
         campaign = Campaign(
             id=campaign_id,
             config_path=config_path,
             workspace=workspace,
+            name=name or campaign_id,
             status=Status.PENDING_SESSIONS,
         )
         with self._lock:

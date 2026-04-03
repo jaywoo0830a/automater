@@ -28,9 +28,10 @@ export async function verifyApiKey(key) {
   return res.ok;
 }
 
-export async function uploadCampaign(file) {
+export async function uploadCampaign(file, name = "") {
   const form = new FormData();
   form.append("file", file);
+  if (name) form.append("name", name);
   const res = await fetch("/campaigns", {
     method: "POST",
     headers: headers(),
