@@ -294,24 +294,35 @@ class Worker:
                 raw["assets"] = "."
                 changed = True
 
-        # 3. 전체 YAML 문자열에서 윈도우 절대 경로를 상대 경로로 치환
+        # 3. 전체 YAML 문자열에서 윈도우 절대 경로를 워크스페이스 기준 상대 경로로 치환
         raw_text = yaml.dump(raw, allow_unicode=True, default_flow_style=False, sort_keys=False)
-        # C:/Users/.../assets/something → ./something (워크스페이스에 있으면)
+
+        # assets 설정값 (패치 후)
+        assets_dir = raw.get("assets", "./assets").rstrip("/").rstrip("\\")
+
         def _fix_win_path(match):
-            full = match.group(0)
-            # 경로에서 마지막 의미 있는 부분 추출
-            # e.g., C:/Users/x/Documents/automator/assets/images/photo.jpg → images/photo.jpg
-            for marker in ("assets/", "assets\\", "maps/", "maps\\", "sessions/", "sessions\\"):
-                idx = full.replace("\\", "/").find(marker)
+            full = match.group(0).replace("\\", "/")
+
+            # assets/ 하위 파일: C:/.../assets/images/x.jpg → images/x.jpg
+            # (assets 설정이 이미 assets/ 를 가리키므로 그 이후만 남김)
+            for marker in ("assets/",):
+                idx = full.find(marker)
                 if idx >= 0:
-                    relative = full.replace("\\", "/")[idx:]
+                    after = full[idx + len(marker):]
+                    if (workspace / assets_dir / after).exists():
+                        return after
+                    # assets/ 포함 상대경로로도 시도
+                    if (workspace / marker / after).exists():
+                        return after
+
+            # maps/, sessions/ 등
+            for marker in ("maps/", "sessions/"):
+                idx = full.find(marker)
+                if idx >= 0:
+                    relative = full[idx:]
                     if (workspace / relative).exists():
                         return relative
-                    # assets/ 이후 부분만
-                    after_assets = full.replace("\\", "/")[idx + len(marker):]
-                    candidate = workspace / "assets" / after_assets
-                    if candidate.exists():
-                        return f"assets/{after_assets}"
+
             return full
 
         patched_text = re.sub(r'[A-Z]:[/\\][\w/\\.~: -]+', _fix_win_path, raw_text)
