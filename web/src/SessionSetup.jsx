@@ -88,7 +88,7 @@ export default function SessionSetup({ campaignId, onExecuted }) {
   }
 
   const vncUrl = currentVnc?.wsPort
-    ? `http://${window.location.hostname}:${currentVnc.wsPort}/vnc.html?autoconnect=true&resize=scale`
+    ? `${window.location.origin}/vnc/${currentVnc.wsPort}/vnc.html?autoconnect=true&resize=scale&path=vnc/${currentVnc.wsPort}/websockify`
     : "";
 
   const doneCount = accounts.filter((a) => a.has_session).length;
@@ -147,7 +147,6 @@ export default function SessionSetup({ campaignId, onExecuted }) {
             src={vncUrl}
             title="Remote Browser"
             allow="fullscreen"
-            allowFullScreen
           />
         </div>
       )}

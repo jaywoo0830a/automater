@@ -62,7 +62,7 @@ export default function LogViewer({ campaignId }) {
   }
 
   const vncUrl = vncPort
-    ? `http://${window.location.hostname}:${vncPort}/vnc.html?autoconnect=true&resize=scale`
+    ? `${window.location.origin}/vnc/${vncPort}/vnc.html?autoconnect=true&resize=scale&path=vnc/${vncPort}/websockify`
     : "";
 
   return (
@@ -103,7 +103,6 @@ export default function LogViewer({ campaignId }) {
             src={vncUrl}
             title="Live Browser"
             allow="fullscreen"
-            allowFullScreen
           />
         )}
 
