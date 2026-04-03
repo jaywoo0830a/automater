@@ -25,6 +25,7 @@ class ProgressTracker:
         self._path = self._dir / f"{self._campaign_id}.json"
         self._completed: set[int] = set()
         self._total: int = 0
+        self._last_schedule_at: str = ""
         self._load()
 
     @staticmethod
@@ -39,6 +40,7 @@ class ProgressTracker:
                 data = json.loads(self._path.read_text(encoding="utf-8"))
                 self._completed = set(data.get("completed", []))
                 self._total = data.get("total", 0)
+                self._last_schedule_at = data.get("last_schedule_at", "")
             except (json.JSONDecodeError, KeyError):
                 self._completed = set()
 
@@ -48,6 +50,7 @@ class ProgressTracker:
             "completed": sorted(self._completed),
             "total": self._total,
             "last_updated": datetime.now().isoformat(),
+            "last_schedule_at": self._last_schedule_at,
         }
         self._path.write_text(
             json.dumps(data, ensure_ascii=False, indent=2),
@@ -74,9 +77,20 @@ class ProgressTracker:
     def completed_indices(self) -> set[int]:
         return set(self._completed)
 
+    @property
+    def last_schedule_at(self) -> str:
+        """마지막으로 예약된 시간 (ISO format)."""
+        return self._last_schedule_at
+
+    @last_schedule_at.setter
+    def last_schedule_at(self, value: str) -> None:
+        self._last_schedule_at = value
+        self._save()
+
     def reset(self) -> None:
         """진행 기록 초기화."""
         self._completed.clear()
         self._total = 0
+        self._last_schedule_at = ""
         if self._path.exists():
             self._path.unlink()

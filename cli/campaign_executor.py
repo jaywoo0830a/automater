@@ -317,6 +317,13 @@ class CampaignExecutor:
 
         if on_resume == "restart" and not dry_run:
             progress.reset()
+        elif on_resume == "skip" and progress.last_schedule_at:
+            # resume 모드: 마지막 예약 시간 복원
+            try:
+                self._seq_next_at = datetime.fromisoformat(progress.last_schedule_at)
+                logger.info("  예약 시간 복원: %s", self._seq_next_at.strftime("%H:%M"))
+            except (ValueError, TypeError):
+                pass
         progress.set_total(len(combos))
 
         if parallel and not dry_run and len(assignments) > 1:
@@ -473,7 +480,7 @@ class CampaignExecutor:
                 title = generate_title(spec.title)
 
                 # Sequential mode: compute schedule_at for each post progressively
-                spec = self._resolve_sequential(spec, i, config)
+                spec = self._resolve_sequential(spec, i, config, progress)
                 at_label = spec.schedule_at.strftime("%H:%M") if spec.schedule_at else "즉시"
 
                 logger.info("%s [START] %s | %s (예약: %s)", progress_label, username, title, at_label)
@@ -515,12 +522,19 @@ class CampaignExecutor:
             raise RuntimeError("editor not initialized")
         self._runner.run(spec, editor)
 
-    def _resolve_sequential(self, spec: PostingSpec, index: int, config: dict[str, Any]) -> PostingSpec:
+    def _resolve_sequential(
+        self,
+        spec: PostingSpec,
+        index: int,
+        config: dict[str, Any],
+        progress=None,
+    ) -> PostingSpec:
         """
         For sequential schedule, compute schedule_at progressively.
 
         Reads interval_lo/interval_hi from config publish.schedule.
         Returns the spec unchanged if schedule is not sequential.
+        Saves last_schedule_at to progress for resume support.
         """
         publish_config = config.get("publish", {})
         schedule_raw = publish_config.get("schedule", "")
@@ -537,6 +551,10 @@ class CampaignExecutor:
             self._seq_next_at = datetime.now(tz=_KST) + timedelta(seconds=interval)
         else:
             self._seq_next_at = self._seq_next_at + timedelta(seconds=interval)
+
+        # progress에 마지막 예약 시간 저장 (재시작 시 복원용)
+        if progress:
+            progress.last_schedule_at = self._seq_next_at.isoformat()
 
         return replace(spec, schedule_at=self._seq_next_at)
 
