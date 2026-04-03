@@ -104,6 +104,11 @@ class Campaign:
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _is_windows_abs(path: str) -> bool:
+    """윈도우 절대 경로인지 확인."""
+    return len(path) >= 3 and path[1] == ":" and path[2] in ("/", "\\")
+
+
 def parse_campaign_accounts(config_path: str) -> list[dict[str, Any]]:
     """캠페인 YAML에서 accounts 목록을 추출한다."""
     raw = yaml.safe_load(Path(config_path).read_text(encoding="utf-8")) or {}
@@ -249,29 +254,70 @@ class Worker:
         return True
 
     @staticmethod
-    def _patch_session_store(config_path: str) -> None:
-        """워크스페이스 내 sessions/ 폴더가 있으면 YAML의 session_store를 패치."""
+    def _patch_config(config_path: str) -> None:
+        """워크스페이스 환경에 맞게 YAML 설정을 패치한다.
+
+        1. 세션 경로를 워크스페이스 sessions/ 내 파일로 교체
+        2. assets 경로를 워크스페이스 기준 상대 경로로 교체
+        3. YAML 내 윈도우 절대 경로를 워크스페이스 내 파일로 교체
+        """
+        import re
+
         config_file = Path(config_path)
-        sessions_dir = config_file.parent / "sessions"
-        if not sessions_dir.is_dir():
-            return
+        workspace = config_file.parent
 
         raw = yaml.safe_load(config_file.read_text(encoding="utf-8")) or {}
-        raw["session_store"] = "file"
+        changed = False
 
-        for acc in raw.get("accounts", []):
-            username = acc.get("username", "")
-            if not username:
-                continue
-            for candidate in sessions_dir.iterdir():
-                if candidate.is_file() and username in candidate.stem:
-                    acc["session"] = str(candidate.resolve())
-                    break
+        # 1. 세션 패치
+        sessions_dir = workspace / "sessions"
+        if sessions_dir.is_dir():
+            raw["session_store"] = "file"
+            for acc in raw.get("accounts", []):
+                username = acc.get("username", "")
+                if not username:
+                    continue
+                for candidate in sessions_dir.iterdir():
+                    if candidate.is_file() and username in candidate.stem:
+                        acc["session"] = str(candidate.resolve())
+                        changed = True
+                        break
 
-        config_file.write_text(
-            yaml.dump(raw, allow_unicode=True, default_flow_style=False, sort_keys=False),
-            encoding="utf-8",
-        )
+        # 2. assets 경로 패치 — 윈도우 절대 경로 or 존재하지 않는 경로면 워크스페이스 내로 교체
+        assets_raw = raw.get("assets", "")
+        if assets_raw and (_is_windows_abs(assets_raw) or not (workspace / assets_raw).exists()):
+            # 워크스페이스 내 assets/ 가 있으면 사용
+            if (workspace / "assets").is_dir():
+                raw["assets"] = "./assets"
+                changed = True
+            elif workspace.is_dir():
+                raw["assets"] = "."
+                changed = True
+
+        # 3. 전체 YAML 문자열에서 윈도우 절대 경로를 상대 경로로 치환
+        raw_text = yaml.dump(raw, allow_unicode=True, default_flow_style=False, sort_keys=False)
+        # C:/Users/.../assets/something → ./something (워크스페이스에 있으면)
+        def _fix_win_path(match):
+            full = match.group(0)
+            # 경로에서 마지막 의미 있는 부분 추출
+            # e.g., C:/Users/x/Documents/automator/assets/images/photo.jpg → images/photo.jpg
+            for marker in ("assets/", "assets\\", "maps/", "maps\\", "sessions/", "sessions\\"):
+                idx = full.replace("\\", "/").find(marker)
+                if idx >= 0:
+                    relative = full.replace("\\", "/")[idx:]
+                    if (workspace / relative).exists():
+                        return relative
+                    # assets/ 이후 부분만
+                    after_assets = full.replace("\\", "/")[idx + len(marker):]
+                    candidate = workspace / "assets" / after_assets
+                    if candidate.exists():
+                        return f"assets/{after_assets}"
+            return full
+
+        patched_text = re.sub(r'[A-Z]:[/\\][\w/\\.~: -]+', _fix_win_path, raw_text)
+
+        if patched_text != raw_text or changed:
+            config_file.write_text(patched_text, encoding="utf-8")
 
     @staticmethod
     def _find_free_display() -> int:
@@ -332,7 +378,7 @@ class Worker:
         campaign.status = Status.RUNNING
         campaign._emit(f"[실행 시작] {campaign.config_path}\n")
 
-        self._patch_session_store(campaign.config_path)
+        self._patch_config(campaign.config_path)
 
         project_root = str(Path(__file__).resolve().parent.parent)
 
