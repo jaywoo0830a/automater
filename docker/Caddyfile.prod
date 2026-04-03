@@ -1,0 +1,19 @@
+{$DOMAIN} {
+    encode gzip
+
+    handle /campaigns* {
+        reverse_proxy localhost:5000 {
+            flush_interval -1
+        }
+    }
+
+    handle /sessions* {
+        reverse_proxy localhost:5000
+    }
+
+    handle {
+        root * /srv
+        try_files {path} /index.html
+        file_server
+    }
+}

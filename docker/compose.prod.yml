@@ -8,17 +8,23 @@ services:
     env_file:
       - ../.env
     volumes:
-      - workspaces:/app/workspaces
+      - ../workspaces:/app/workspaces
 
   web:
     build:
       context: ..
       dockerfile: docker/web.Dockerfile
     restart: unless-stopped
-    ports:
-      - "80:80"
+    network_mode: host
+    env_file:
+      - ../.env
+    volumes:
+      - ./Caddyfile.prod:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
     depends_on:
       - api
 
 volumes:
-  workspaces:
+  caddy_data:
+  caddy_config:

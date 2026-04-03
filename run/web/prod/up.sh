@@ -2,4 +2,4 @@
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
 docker compose -f docker/compose.prod.yml up --build -d
-echo "prod: web=http://localhost"
+echo "prod: https://${DOMAIN:-localhost}"
