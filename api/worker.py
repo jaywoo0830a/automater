@@ -327,7 +327,7 @@ class Worker:
 
             return full
 
-        patched_text = re.sub(r'[A-Z]:[/\\][\w/\\.~: -]+', _fix_win_path, raw_text)
+        patched_text = re.sub(r'[A-Z]:[/\\][^\s\'",:]+', _fix_win_path, raw_text)
 
         if patched_text != raw_text or changed:
             config_file.write_text(patched_text, encoding="utf-8")
