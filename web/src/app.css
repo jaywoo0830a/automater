@@ -421,6 +421,21 @@
   50%      { opacity: 0.4; }
 }
 
+.log__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.log__vnc {
+  width: 100%;
+  height: calc(100vh - 16rem);
+  min-height: 30rem;
+  border: none;
+  border-bottom: 1px solid var(--border-subtle);
+  background: #000;
+}
+
 .log__output {
   padding: var(--space-sm);
   max-height: 25rem;

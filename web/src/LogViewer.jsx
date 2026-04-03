@@ -5,6 +5,8 @@ export default function LogViewer({ campaignId }) {
   const [lines, setLines] = useState([]);
   const [live, setLive] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [vncPort, setVncPort] = useState(0);
+  const [showVnc, setShowVnc] = useState(false);
   const outputRef = useRef();
   const baseCountRef = useRef(0);
 
@@ -12,16 +14,19 @@ export default function LogViewer({ campaignId }) {
     setLines([]);
     setLive(true);
     setAutoScroll(true);
+    setVncPort(0);
+    setShowVnc(false);
     baseCountRef.current = 0;
 
-    // 1. REST로 전체 로그 가져오기
     getCampaign(campaignId).then((data) => {
       const existing = data.logs || [];
       baseCountRef.current = existing.length;
       setLines(existing);
+      if (data.vnc_port && data.status === "running") {
+        setVncPort(data.vnc_port);
+      }
     }).catch(() => {});
 
-    // 2. WebSocket — REST 이후 줄만 추가
     let wsCount = 0;
     const close = streamLogs(
       campaignId,
@@ -30,8 +35,16 @@ export default function LogViewer({ campaignId }) {
         if (wsCount > baseCountRef.current) {
           setLines((prev) => [...prev, line]);
         }
+        // VNC 포트 감지
+        if (line.includes("[VNC] ws://")) {
+          const match = line.match(/:(\d+)/);
+          if (match) setVncPort(parseInt(match[1]));
+        }
       },
-      () => setLive(false),
+      () => {
+        setLive(false);
+        setVncPort(0);
+      },
     );
     return close;
   }, [campaignId]);
@@ -48,6 +61,10 @@ export default function LogViewer({ campaignId }) {
     setAutoScroll(atBottom);
   }
 
+  const vncUrl = vncPort
+    ? `http://${window.location.hostname}:${vncPort}/vnc.html?autoconnect=true&resize=scale`
+    : "";
+
   return (
     <div className="log">
       <div className="log__container">
@@ -55,20 +72,41 @@ export default function LogViewer({ campaignId }) {
           <span className="log__title">
             <code>{campaignId}</code> log ({lines.length} lines)
           </span>
-          {live && <span className="log__live">LIVE</span>}
-          {!autoScroll && (
-            <button
-              className="btn btn--ghost"
-              onClick={() => {
-                setAutoScroll(true);
-                const el = outputRef.current;
-                if (el) el.scrollTop = el.scrollHeight;
-              }}
-            >
-              scroll to bottom
-            </button>
-          )}
+          <span className="log__actions">
+            {vncPort > 0 && (
+              <button
+                className="btn btn--ghost"
+                onClick={() => setShowVnc(!showVnc)}
+              >
+                {showVnc ? "Hide Browser" : "Show Browser"}
+              </button>
+            )}
+            {live && <span className="log__live">LIVE</span>}
+            {!autoScroll && (
+              <button
+                className="btn btn--ghost"
+                onClick={() => {
+                  setAutoScroll(true);
+                  const el = outputRef.current;
+                  if (el) el.scrollTop = el.scrollHeight;
+                }}
+              >
+                scroll to bottom
+              </button>
+            )}
+          </span>
         </header>
+
+        {showVnc && vncUrl && (
+          <iframe
+            className="log__vnc"
+            src={vncUrl}
+            title="Live Browser"
+            allow="fullscreen"
+            allowFullScreen
+          />
+        )}
+
         <pre ref={outputRef} className="log__output" onScroll={handleScroll}>
           {lines.join("")}
         </pre>

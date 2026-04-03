@@ -10,6 +10,7 @@ api/worker.py
 from __future__ import annotations
 
 import os
+import socket
 import subprocess
 import sys
 import threading
@@ -31,6 +32,29 @@ class Status(str, Enum):
     CANCELLED = "cancelled"
 
 
+_VNC_PORT_RANGE = range(6090, 6100)
+_WS_PORT_RANGE = range(6080, 6090)
+_used_ports: set[int] = set()
+
+
+def _alloc_port(port_range: range) -> int:
+    for port in port_range:
+        if port in _used_ports:
+            continue
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(("", port))
+                _used_ports.add(port)
+                return port
+            except OSError:
+                continue
+    raise RuntimeError(f"No free port in {port_range.start}-{port_range.stop}")
+
+
+def _free_port(port: int) -> None:
+    _used_ports.discard(port)
+
+
 @dataclass
 class Campaign:
     """실행 중인 캠페인 상태."""
@@ -41,7 +65,9 @@ class Campaign:
     log_lines: list[str] = field(default_factory=list)
     exit_code: int | None = None
     created_at: float = field(default_factory=time.time)
+    vnc_port: int = 0
     _proc: subprocess.Popen | None = field(default=None, repr=False)
+    _vnc_procs: list = field(default_factory=list, repr=False)
     _listeners: list[Callable[[str], None]] = field(default_factory=list, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
@@ -70,6 +96,7 @@ class Campaign:
             "exit_code": self.exit_code,
             "log_length": len(self.log_lines),
             "created_at": self.created_at,
+            "vnc_port": self.vnc_port,
         }
 
 
@@ -246,8 +273,62 @@ class Worker:
             encoding="utf-8",
         )
 
+    @staticmethod
+    def _find_free_display() -> int:
+        for n in range(99, 200):
+            if not Path(f"/tmp/.X{n}-lock").exists():
+                return n
+        raise RuntimeError("No free X display")
+
+    def _start_vnc(self, campaign: Campaign) -> tuple[str, int]:
+        """Xvfb + x11vnc + websockify를 시작하고 (display, ws_port)를 반환."""
+        display_num = self._find_free_display()
+        display_str = f":{display_num}"
+        vnc_port = _alloc_port(_VNC_PORT_RANGE)
+        ws_port = _alloc_port(_WS_PORT_RANGE)
+
+        xvfb = subprocess.Popen(
+            ["Xvfb", display_str, "-screen", "0", "1920x1080x24", "-ac"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        time.sleep(1)
+
+        vnc = subprocess.Popen(
+            ["x11vnc", "-display", display_str, "-nopw", "-shared", "-forever",
+             "-rfbport", str(vnc_port), "-noxdamage"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        time.sleep(0.5)
+
+        wsproxy = subprocess.Popen(
+            ["websockify", "--web", "/usr/share/novnc", str(ws_port),
+             f"localhost:{vnc_port}"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        time.sleep(0.5)
+
+        campaign._vnc_procs = [xvfb, vnc, wsproxy]
+        campaign.vnc_port = ws_port
+        return display_str, ws_port
+
+    def _stop_vnc(self, campaign: Campaign) -> None:
+        """VNC 관련 프로세스를 종료한다."""
+        for proc in reversed(campaign._vnc_procs):
+            try:
+                proc.terminate()
+                proc.wait(timeout=3)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+        if campaign.vnc_port:
+            _free_port(campaign.vnc_port)
+        campaign._vnc_procs = []
+        campaign.vnc_port = 0
+
     def _run(self, campaign: Campaign) -> None:
-        """워커 스레드: subprocess로 CLI를 실행한다."""
+        """워커 스레드: Xvfb + VNC로 실시간 브라우저 화면을 제공하며 CLI를 실행한다."""
         campaign.status = Status.RUNNING
         campaign._emit(f"[실행 시작] {campaign.config_path}\n")
 
@@ -255,15 +336,21 @@ class Worker:
 
         project_root = str(Path(__file__).resolve().parent.parent)
 
+        # Xvfb + VNC 시작
+        display_str, ws_port = self._start_vnc(campaign)
+        campaign._emit(f"[VNC] ws://localhost:{ws_port}\n")
+
         cmd = [
             sys.executable, "-m", "cli",
             campaign.config_path,
             "--execute",
+            "--no-headless",
         ]
         env = {
             **os.environ,
             "PYTHONIOENCODING": "utf-8",
             "PYTHONPATH": project_root,
+            "DISPLAY": display_str,
         }
 
         try:
@@ -294,3 +381,4 @@ class Worker:
             campaign._emit(f"[오류] {exc}\n")
         finally:
             campaign._proc = None
+            self._stop_vnc(campaign)
