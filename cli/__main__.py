@@ -369,9 +369,47 @@ def _build_live_executor(
         write_url = f"https://blog.naver.com/{blog_id}?Redirect=Write&"
         return SmartEditorOne(page, write_url, dry_run=False)
 
+    def checker_factory(account: dict[str, Any]):
+        from automator.naver_checker import PlaywrightTitleChecker
+
+        tc_config = config.get("title_check", {})
+        state = _get_session(account)
+        account_browser_cfg = account.get("browser") or {}
+
+        proxy = account.get("proxy")
+        if proxy:
+            account_browser_cfg = {**account_browser_cfg, "proxy": proxy}
+
+        merged_cfg = merge_browser_config(global_browser_cfg, account_browser_cfg)
+
+        browser = pw.chromium.launch(headless=headless, slow_mo=slow_mo)
+        ctx = build_context(browser, merged_cfg, storage_state=state)
+        page = ctx.new_page()
+
+        checker = PlaywrightTitleChecker(
+            page,
+            match=tc_config.get("match", "exact"),
+            delay=tc_config.get("delay", "1s ~ 2s"),
+        )
+        # close()에서 브라우저까지 정리할 수 있도록 참조 보존
+        checker._browser = browser  # type: ignore[attr-defined]
+        _original_close = checker.close
+
+        def _close_with_browser() -> None:
+            _original_close()
+            try:
+                ctx.close()
+                browser.close()
+            except Exception:
+                pass
+
+        checker.close = _close_with_browser  # type: ignore[method-assign]
+        return checker
+
     return CampaignExecutor(
         runner=runner,
         editor_factory=editor_factory,
+        checker_factory=checker_factory,
     )
 
 
