@@ -21,8 +21,8 @@ Each step carries data + execute(editor).  No isinstance anywhere.
     ImageStep           -> upload_file
     FeaturedImageStep   -> upload_file + insert_link
     HeadingStep         -> insert_text
-    ListStep            -> insert_text
-    QuoteStep           -> insert_text
+    ListStep            -> insert_list
+    QuoteStep           -> insert_quote
 """
 
 from __future__ import annotations
@@ -95,6 +95,16 @@ class BlogEditor(ABC):
 
         Args:
             text: Quote text.
+        """
+
+    @abstractmethod
+    def insert_list(self, items: list[str], ordered: bool = False) -> None:
+        """
+        Insert a list with editor-native formatting.
+
+        Args:
+            items:   List of item strings.
+            ordered: True for numbered list, False for bullet list.
         """
 
     @abstractmethod
@@ -205,12 +215,13 @@ class HeadingStep(PostStep):
 
 @dataclass(frozen=True)
 class ListStep(PostStep):
-    """Insert a list as formatted text."""
-    text:    str
+    """Insert a list with editor-native formatting."""
+    items:   tuple[str, ...]
+    ordered: bool = False
     wait_ms: int = 0
 
     def execute(self, editor: BlogEditor) -> None:
-        editor.insert_text(self.text, 2)
+        editor.insert_list(list(self.items), self.ordered)
 
 
 @dataclass(frozen=True)

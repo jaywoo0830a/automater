@@ -72,10 +72,16 @@ def test_heading_step_passes_level(mock_editor):
     mock_editor.insert_heading.assert_called_once_with("Sub section", 3)
 
 
-def test_list_step_calls_insert_text(mock_editor):
-    step = ListStep(text="- item1\n- item2")
+def test_list_step_calls_insert_list(mock_editor):
+    step = ListStep(items=("item1", "item2"))
     step.execute(mock_editor)
-    mock_editor.insert_text.assert_called_once_with("- item1\n- item2", 2)
+    mock_editor.insert_list.assert_called_once_with(["item1", "item2"], False)
+
+
+def test_list_step_ordered_calls_insert_list(mock_editor):
+    step = ListStep(items=("a", "b"), ordered=True)
+    step.execute(mock_editor)
+    mock_editor.insert_list.assert_called_once_with(["a", "b"], True)
 
 
 def test_quote_step_calls_insert_quote(mock_editor):

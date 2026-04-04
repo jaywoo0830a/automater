@@ -332,3 +332,19 @@ editor_link_confirm:
   - type: role
     value: button
     name: 링크 입력
+list_trigger:
+  description: 툴바 — ��록 드롭다운 트리거 (CSS 우선)
+  locators:
+  - type: css
+    value: button.se-property-toolbar-drop-down-button.se-list-bullet-toolbar-button.__se-sentry
+  - type: role
+    value: button
+    name: 목록
+list_type_1:
+  description: 목록 — 기호목록 스타일 (CSS 우선)
+  locators:
+  - type: css
+    value: button.__se-sentry.se-toolbar-option-icon-button.se-toolbar-option-list-bullet-button
+  - type: role
+    value: button
+    name: 기호목록

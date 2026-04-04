@@ -180,11 +180,7 @@ class ListHandler(BlockHandler):
     def to_steps(self, block: ListBlock, ctx: ContentContext) -> list[PostStep]:
         if not block.items:
             return []
-        lines = []
-        for i, item in enumerate(block.items, 1):
-            prefix = f"{i}. " if block.ordered else "- "
-            lines.append(f"{prefix}{item}")
-        return [ListStep(text="\n".join(lines), wait_ms=block.wait_ms)]
+        return [ListStep(items=block.items, ordered=block.ordered, wait_ms=block.wait_ms)]
 
 
 class QuoteHandler(BlockHandler):

@@ -569,6 +569,13 @@ def _parse_list(
             interpolate(str(item), values, pools, index, maps=maps) for item in value
         )
         return ListBlock(items=items, wait_ms=wait_ms)
+    if isinstance(value, dict):
+        cfg = interpolate_deep(dict(value), values, pools, index, maps=maps)
+        raw_items = cfg.get("items", [])
+        items = tuple(str(item) for item in raw_items) if isinstance(raw_items, list) else ()
+        ordered = bool(cfg.get("ordered", False))
+        inner_wait = _parse_wait(cfg.get("wait"))
+        return ListBlock(items=items, ordered=ordered, wait_ms=inner_wait or wait_ms)
     return ListBlock()
 
 

@@ -311,6 +311,55 @@ class SmartEditorOne(BlogEditor):
         # Step 4: Click bottom of editor body to exit quote block
         self._click_editor_bottom(frame)
 
+    def insert_list(self, items: list[str], ordered: bool = False) -> None:
+        """
+        Insert a list block with Naver SE One's native list formatting.
+
+        Sequence:
+            0. Click last paragraph to position cursor in body area
+            1. Click list_trigger ("목록" dropdown)
+            2. Click list_type_1 ("기호목록")
+            3. Type each item + Enter
+            4. Press Enter twice to exit list block
+
+        Falls back to insert_text for unsupported scenarios.
+        """
+        if not items:
+            return
+
+        frame = self._frame()
+        sel   = self._sel()
+
+        # Step 0: Position cursor in body area
+        last_para = sel.locator(frame, "editor_paragraph_container").last
+        last_para.wait_for(state="visible", timeout=5_000)
+        last_para.click()
+
+        # Step 1: Open list dropdown
+        trigger = sel.locator(frame, "list_trigger")
+        if not click_if_visible(trigger, timeout_ms=3_000):
+            text = "\n".join(items)
+            self.insert_text(text, 2)
+            return
+
+        # Step 2: Select list type
+        list_btn = sel.locator(frame, "list_type_1")
+        if not click_if_visible(list_btn, timeout_ms=3_000):
+            text = "\n".join(items)
+            self.insert_text(text, 2)
+            return
+
+        # Step 3: Type each item + Enter
+        for i, item in enumerate(items):
+            self._page.keyboard.type(item)
+            if i < len(items) - 1:
+                self._page.keyboard.press("Enter")
+
+        # Step 4: Enter three times to exit list block
+        self._page.keyboard.press("Enter")
+        self._page.keyboard.press("Enter")
+        self._page.keyboard.press("Enter")
+
     def insert_divider(self) -> None:
         """
         Insert a horizontal divider with Naver SE One's native formatting.

@@ -23,7 +23,7 @@ from automator.config import browser_settings
 from automator.options import (
     AccountOption, TitleOption, KST,
     HeadingBlock, ParagraphBlock, ImageBlock, FeaturedImageBlock,
-    QuoteBlock, DividerBlock, Section,
+    ListBlock, QuoteBlock, DividerBlock, Section,
 )
 from automator.selector_loader import SelectorLoader
 from automator.smart_editor import SmartEditorOne
@@ -219,6 +219,56 @@ def test_pipeline_multiple_quotes(editor: SmartEditorOne, account: AccountOption
             QuoteBlock(text="첫 번째 인용구"),
             QuoteBlock(text="두 번째 인용구"),
             ParagraphBlock(prompt="인용구 아래 마무리 본문"),
+        )),),
+    )
+    _run_spec(spec, editor)
+
+
+# ---------------------------------------------------------------------------
+# Pipeline: list
+# ---------------------------------------------------------------------------
+
+@pytest.mark.slow
+def test_pipeline_list_only(editor: SmartEditorOne, account: AccountOption):
+    """기호 목록만 삽입 — 네이티브 리스트 서식 적용 + 다음 단락 정상 입력."""
+    spec = PostingSpec(
+        account=account,
+        title="기호 목록 테스트",
+        body=(Section(blocks=(
+            ListBlock(items=("첫 번째 항목", "두 번째 항목", "세 번째 항목")),
+            ParagraphBlock(prompt="목록 아래 일반 본문"),
+        )),),
+    )
+    _run_spec(spec, editor)
+
+
+@pytest.mark.slow
+def test_pipeline_list_with_heading(editor: SmartEditorOne, account: AccountOption):
+    """소제목 + 본문 + 목록 + 본문 — 혼합 레이아웃."""
+    spec = PostingSpec(
+        account=account,
+        title="소제목 + 목록 혼합 테스트",
+        body=(Section(blocks=(
+            HeadingBlock(level=2, text="추천 항목"),
+            ParagraphBlock(prompt="아래 목록을 참고하세요"),
+            ListBlock(items=("항목 A", "항목 B", "항목 C")),
+            ParagraphBlock(prompt="목록 아래 마무리 본문"),
+        )),),
+    )
+    _run_spec(spec, editor)
+
+
+@pytest.mark.slow
+def test_pipeline_list_with_quote_and_divider(editor: SmartEditorOne, account: AccountOption):
+    """목록 + 구분선 + 인용구 — 전체 레이아웃 혼합."""
+    spec = PostingSpec(
+        account=account,
+        title="목록 + 구분선 + 인용구 혼합 테스트",
+        body=(Section(blocks=(
+            ListBlock(items=("강남 수학과외", "중등 수학과외", "고등 수학과외")),
+            DividerBlock(),
+            QuoteBlock(text="최고의 교육을 제공합니다"),
+            ParagraphBlock(prompt="마무리 본문"),
         )),),
     )
     _run_spec(spec, editor)
