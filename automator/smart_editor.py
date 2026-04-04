@@ -585,6 +585,37 @@ class SmartEditorOne(BlogEditor):
         self._wait_for_popover_ready()
         self._set_scheduled_publish(at)
 
+    def insert_tags(self, tags: list[str]) -> None:
+        """
+        Insert tags in the publish popover.
+
+        Opens the popover if not already open, then types each tag
+        followed by Space to confirm.
+
+        Sequence:
+            0. Open publish popover (if not already open)
+            1. Click tag_textarea
+            2. For each tag: type text → press Space
+        """
+        if not tags:
+            return
+
+        # Step 0: Ensure popover is open
+        self._click_publish_trigger()
+
+        sel   = self._sel()
+        frame = self._popover_frame()
+
+        # Step 1: Click tag input
+        tag_input = sel.locator(frame, "tag_textarea")
+        if not click_if_visible(tag_input, timeout_ms=3_000):
+            return
+
+        # Step 2: Type each tag + Space
+        for tag in tags:
+            self._page.keyboard.type(tag)
+            self._page.keyboard.press("Space")
+
     def publish(self) -> None:
         """
         Open the publish popover (if not already open) and confirm.

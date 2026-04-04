@@ -53,6 +53,9 @@ class _RecordingEditor(BlogEditor):
     def set_align(self, align):
         self.calls.append(("set_align", align))
 
+    def insert_tags(self, tags):
+        self.calls.append(("insert_tags", tags))
+
     def insert_list(self, items, ordered=False):
         self.calls.append(("insert_list", items, ordered))
 

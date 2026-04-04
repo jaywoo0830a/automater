@@ -331,7 +331,7 @@ def test_real_editor_yaml_naming_convention(mock_frame):
     """All keys in editor.yaml follow the {context}_{element}_{variant?} rule."""
     valid_contexts = {
         "overlay", "toolbar", "editor", "library", "publish",
-        "heading", "quote", "divider", "size", "bold", "align", "list",
+        "heading", "quote", "divider", "size", "bold", "align", "list", "tag",
     }
     loader = SelectorLoader.load("selectors/naver/editor.yaml")
     for key in loader.keys():

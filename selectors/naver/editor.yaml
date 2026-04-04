@@ -380,3 +380,14 @@ list_type_1:
   - type: role
     value: button
     name: 기호목록
+publish_trigger:
+  description: 발행 팝오버 — 발행 버튼 (팝오버 내부)
+  locators:
+  - type: role
+    value: button
+    name: 발행
+tag_textarea:
+  description: 발행 팝오버 — 태그 입력란
+  locators:
+  - type: placeholder
+    value: 태그 입력 (최대 30개)

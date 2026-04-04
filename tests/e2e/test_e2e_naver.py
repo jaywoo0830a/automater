@@ -23,7 +23,7 @@ from automator.config import browser_settings
 from automator.options import (
     AccountOption, TitleOption, KST,
     HeadingBlock, ParagraphBlock, ImageBlock, FeaturedImageBlock,
-    ListBlock, QuoteBlock, DividerBlock, Section,
+    ListBlock, QuoteBlock, DividerBlock, Section, PublishOption,
 )
 from automator.selector_loader import SelectorLoader
 from automator.smart_editor import SmartEditorOne
@@ -289,6 +289,24 @@ def test_pipeline_align(editor: SmartEditorOne, account: AccountOption, align: s
             ParagraphBlock(prompt="정렬이 적용된 본문"),
         )),),
         align=align,
+    )
+    _run_spec(spec, editor)
+
+
+# ---------------------------------------------------------------------------
+# Pipeline: tags
+# ---------------------------------------------------------------------------
+
+@pytest.mark.slow
+def test_pipeline_tags(editor: SmartEditorOne, account: AccountOption):
+    """태그 삽입 — 발행 팝오버에서 태그 입력 후 dry_run."""
+    spec = PostingSpec(
+        account=account,
+        title="태그 삽입 테스트",
+        body=(Section(blocks=(
+            ParagraphBlock(prompt="태그 테스트 본문"),
+        )),),
+        publish=PublishOption(tags=["교육", "과외", "수학"]),
     )
     _run_spec(spec, editor)
 

@@ -89,4 +89,7 @@ class JobRunner:
         if post.schedule_at is not None and hasattr(editor, "schedule"):
             editor.schedule(post.schedule_at)
 
+        if post.tags:
+            editor.insert_tags(post.tags)
+
         editor.publish()

@@ -135,6 +135,18 @@ class BlogEditor(ABC):
         """Reposition the cursor."""
 
     @abstractmethod
+    def insert_tags(self, tags: list[str]) -> None:
+        """
+        Insert tags in the publish popover.
+
+        The popover must already be open. Each tag is typed then
+        confirmed with a space.
+
+        Args:
+            tags: List of tag strings.
+        """
+
+    @abstractmethod
     def publish(self) -> None:
         """Confirm and publish the post."""
 
