@@ -1,7 +1,7 @@
 """
 gui/__main__.py
 ----------------
-Campaign DSL Builder — PyQt6-style GUI using PySide6.
+Campaign DSL Builder — PySide6 (Qt for Python 6.11).
 
 Builds a campaign YAML file from user input, then runs it via CLI.
 
