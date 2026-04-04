@@ -373,7 +373,6 @@ def _build_live_executor(
         from automator.naver_checker import PlaywrightTitleChecker
 
         tc_config = config.get("title_check", {})
-        state = _get_session(account)
         account_browser_cfg = account.get("browser") or {}
 
         proxy = account.get("proxy")
@@ -382,8 +381,10 @@ def _build_live_executor(
 
         merged_cfg = merge_browser_config(global_browser_cfg, account_browser_cfg)
 
+        # 네이버 통합검색은 로그인 불필요 — 클린 브라우저로 연다.
+        # 세션 쿠키를 넣으면 오히려 로그인 리다이렉트에 걸릴 수 있다.
         browser = pw.chromium.launch(headless=headless, slow_mo=slow_mo)
-        ctx = build_context(browser, merged_cfg, storage_state=state)
+        ctx = build_context(browser, merged_cfg)
         page = ctx.new_page()
 
         checker = PlaywrightTitleChecker(
