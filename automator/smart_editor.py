@@ -3,13 +3,6 @@ automator/smart_editor.py
 --------------------------
 SmartEditorOne — Naver Smart Editor implementation of BlogEditor.
 
-Implements the BlogEditor primitives:
-    open, write_title, insert_text, upload_file, insert_link,
-    move_cursor, publish
-
-Platform-specific:
-    set_representative_media — Naver thumbnail selection
-
 Dependencies:
     SelectorLoader  — selectors/naver/editor.yaml
     browser_actions — pure DOM functions
@@ -30,12 +23,9 @@ from automator.selector_loader import SelectorLoader
 from automator.ports import SelectorSource
 from automator.browser_actions import (
     click_if_visible,
-    click_polling,
     dismiss_polling,
     find_editor_frame,
     find_js_frame,
-    hover_if_visible,
-    js_dispatch_click,
     locator_dispatch_click,
     select_option_by_value,
     wait_until_attached,
@@ -50,16 +40,11 @@ class SmartEditorOne(BlogEditor):
     """
     Naver Smart Editor One implementation of BlogEditor.
 
-    Resolves selectors via an injected SelectorSource (or falls back to
-    loading editor.yaml directly). Delegates all DOM work to
-    browser_actions functions. No selector strings are hardcoded here.
-
     Args:
         page:       An authenticated Playwright Page.
-        write_url:  Blog write page URL (e.g. "https://blog.naver.com/{blog_id}?Redirect=Write&").
-        dry_run:    If True (default), publish() is a no-op.
+        write_url:  Blog write page URL.
+        dry_run:    If True (default), publish() skips confirm.
         sel_source: Optional SelectorSource for dependency injection.
-                    When None, loads selectors/naver/editor.yaml directly.
     """
 
     def __init__(
@@ -80,22 +65,10 @@ class SmartEditorOne(BlogEditor):
     # ------------------------------------------------------------------
 
     def open(self) -> None:
-        """
-        Navigate to write page and wait for editor to be ready.
-
-        Three overlays are polled unconditionally — all treated as
-        unpredictably timed. Each is silently skipped when absent.
-
-        If a publish popover is currently open it will block .se-content
-        from becoming visible. We force-reload the page before checking,
-        which dismisses any open overlay without side effects.
-        """
+        """Navigate to write page and wait for editor to be ready."""
         self._page.goto(self._write_url)
         self._page.wait_for_load_state("domcontentloaded")
 
-        # If already on the write URL (e.g. popover was open from a previous
-        # call), goto() may not actually reload the page. Force a reload to
-        # dismiss any overlay so .se-content becomes visible again.
         if self._write_url.split("?")[0] in self._page.url:
             self._page.reload(wait_until="domcontentloaded")
 
@@ -105,15 +78,356 @@ class SmartEditorOne(BlogEditor):
                 f"Current URL: {self._page.url}"
             )
 
-        # Wait for .se-content directly inside #mainFrame with the full timeout.
-        # Do NOT go through _frame() here — its internal 1-second probe fires
-        # before the iframe finishes loading and falls back to the page object,
-        # causing the subsequent wait_for to look outside the iframe.
         self._page.frame_locator(_MAIN_FRAME).locator(_EDITOR_BODY).wait_for(
             state="visible", timeout=30_000
         )
-
         self._wait_for_editor_ready(self._frame(), self._sel())
+
+    _ALIGN_KEY_MAP = {
+        "left":   "align_left",
+        "center": "align_center",
+        "right":  "align_right",
+    }
+
+    def set_align(self, align: Alignment) -> None:
+        """Ctrl+A → align dropdown → select direction → Escape."""
+        frame = self._frame()
+        sel   = self._sel()
+
+        self._click_last_paragraph(frame)
+        self._page.keyboard.press("Control+a")
+
+        trigger = sel.locator(frame, "align_trigger")
+        if not click_if_visible(trigger, timeout_ms=3_000):
+            self._page.keyboard.press("Escape")
+            return
+
+        align_key = self._ALIGN_KEY_MAP.get(align, "align_left")
+        click_if_visible(sel.locator(frame, align_key), timeout_ms=3_000)
+        self._page.keyboard.press("Escape")
+
+    def write_title(self, title: str) -> None:
+        """Click title placeholder and type title."""
+        frame = self._frame()
+        sel   = self._sel()
+        el    = sel.locator(frame, "editor_title")
+        el.wait_for(state="visible", timeout=5_000)
+        el.click()
+        self._page.keyboard.type(title)
+
+    def insert_text(self, text: str, newlines: int = 2) -> None:
+        """Click last paragraph and type text."""
+        self._click_last_paragraph()
+
+        lines = text.split("\n")
+        for i, line in enumerate(lines):
+            if line:
+                self._page.keyboard.type(line)
+            if i < len(lines) - 1:
+                self._page.keyboard.press("Enter")
+
+        # Editor DOM lags on long text — wait proportionally.
+        if len(text) >= 100:
+            time.sleep(min(60, max(2, len(text) // 100)))
+
+        for _ in range(max(newlines, 1)):
+            self._page.keyboard.press("Enter")
+
+    _HEADING_SIZE_MAP = {
+        1: "size_38", 2: "size_34", 3: "size_30",
+        4: "size_28", 5: "size_24", 6: "size_19",
+    }
+
+    def insert_heading(self, text: str, level: int = 2) -> None:
+        """Insert heading with native Naver subtitle formatting + font size."""
+        frame = self._frame()
+        sel   = self._sel()
+
+        self._click_last_paragraph(frame)
+
+        trigger = sel.locator(frame, "heading_trigger")
+        if not click_if_visible(trigger, timeout_ms=3_000):
+            self.insert_text(text, 1)
+            return
+
+        heading_btn = sel.locator(frame, "heading_button")
+        if not click_if_visible(heading_btn, timeout_ms=3_000):
+            self.insert_text(text, 1)
+            return
+
+        self._page.keyboard.type(text)
+
+        # Select text → change font size
+        self._page.keyboard.press("Home")
+        self._page.keyboard.press("Shift+End")
+        size_key = self._HEADING_SIZE_MAP.get(level, "size_34")
+        size_trigger = sel.locator(frame, "size_trigger")
+        if click_if_visible(size_trigger, timeout_ms=3_000):
+            click_if_visible(sel.locator(frame, size_key), timeout_ms=3_000)
+
+        click_if_visible(sel.locator(frame, "bold_button"), timeout_ms=3_000)
+
+        # Deselect → exit subtitle
+        self._click_last_paragraph(frame)
+        self._page.keyboard.press("Enter")
+
+    def insert_quote(self, text: str) -> None:
+        """Insert quote block with native formatting."""
+        frame = self._frame()
+        sel   = self._sel()
+
+        self._click_last_paragraph(frame)
+
+        trigger = sel.locator(frame, "quote_trigger")
+        if not click_if_visible(trigger, timeout_ms=3_000):
+            self.insert_text(text, 2)
+            return
+
+        quote_btn = sel.locator(frame, "quote_1")
+        if not click_if_visible(quote_btn, timeout_ms=3_000):
+            self.insert_text(text, 2)
+            return
+
+        self._page.keyboard.type(text)
+        self._click_editor_bottom(frame)
+
+    def insert_list(self, items: list[str], ordered: bool = False) -> None:
+        """Insert list block with native formatting."""
+        if not items:
+            return
+
+        frame = self._frame()
+        sel   = self._sel()
+
+        self._click_last_paragraph(frame)
+
+        trigger = sel.locator(frame, "list_trigger")
+        if not click_if_visible(trigger, timeout_ms=3_000):
+            self.insert_text("\n".join(items), 2)
+            return
+
+        list_btn = sel.locator(frame, "list_type_1")
+        if not click_if_visible(list_btn, timeout_ms=3_000):
+            self.insert_text("\n".join(items), 2)
+            return
+
+        for i, item in enumerate(items):
+            self._page.keyboard.type(item)
+            if i < len(items) - 1:
+                self._page.keyboard.press("Enter")
+
+        # Enter 3x to exit list block
+        for _ in range(3):
+            self._page.keyboard.press("Enter")
+
+    def insert_divider(self) -> None:
+        """Insert horizontal divider with native formatting."""
+        frame = self._frame()
+        sel   = self._sel()
+
+        self._click_last_paragraph(frame)
+
+        trigger = sel.locator(frame, "divider_trigger")
+        if not click_if_visible(trigger, timeout_ms=3_000):
+            return
+
+        divider_btn = sel.locator(frame, "divider_2")
+        if not click_if_visible(divider_btn, timeout_ms=3_000):
+            return
+
+        self._click_editor_bottom(frame)
+
+    def upload_file(self, path: str) -> None:
+        """Upload a file via toolbar button."""
+        file_path = Path(path)
+        if not file_path.exists():
+            raise FileNotFoundError(f"File not found: {path!r}")
+
+        frame = self._frame()
+        sel   = self._sel()
+
+        trigger = sel.locator(frame, "toolbar_image")
+        trigger.wait_for(state="visible", timeout=10_000)
+
+        with self._page.expect_file_chooser() as fc_info:
+            trigger.click()
+        fc_info.value.set_files(str(path))
+
+        dismiss_polling(
+            locator    = sel.locator(frame, "library_close").first,
+            timeout_ms = 5_000,
+        )
+
+        sel.locator(frame, "editor_image").last.wait_for(
+            state="visible", timeout=10_000
+        )
+
+    def insert_link(self, url: str) -> None:
+        """Attach a hyperlink to the last uploaded image."""
+        if not url:
+            return
+
+        frame = self._frame()
+        sel   = self._sel()
+
+        image_block = sel.locator(frame, "editor_image_block").last
+        image_block.wait_for(state="visible", timeout=5_000)
+        image_block.click()
+
+        link_btn = sel.locator(frame, "editor_link_button")
+        if not click_if_visible(link_btn, timeout_ms=3_000):
+            return
+
+        link_input = sel.locator(frame, "editor_link_input")
+        link_input.wait_for(state="visible", timeout=3_000)
+        link_input.fill(url)
+
+        confirm_btn = sel.locator(frame, "editor_link_confirm")
+        if not click_if_visible(confirm_btn, timeout_ms=3_000):
+            return
+
+        self._click_last_paragraph(frame)
+
+    def set_representative_media(self, index: int) -> None:
+        """Set representative (thumbnail) image by insertion index."""
+        if index < 0:
+            raise ValueError(f"index must be >= 0, got {index}")
+
+        frame = self._frame()
+        sel   = self._sel()
+
+        block = sel.locator(frame, "editor_image_block").nth(index)
+        block.wait_for(state="visible", timeout=5_000)
+        block.hover()
+
+        result = locator_dispatch_click(
+            sel.locator(frame, "editor_image_rep"),
+            index=index,
+        )
+        if result != "selected":
+            raise RuntimeError(
+                f"set_representative_media(index={index}) failed: "
+                f"JS returned {result!r}"
+            )
+
+        wait_until_attached(
+            sel.locator(frame, "editor_image_rep_selected").first,
+            timeout_ms=5_000,
+        )
+
+        self._click_last_paragraph(frame)
+
+    def move_cursor(self, position: CursorPosition = "end") -> None:
+        """Reposition cursor via keyboard (no clicking)."""
+        self._page.keyboard.press("Escape")
+        key = "Control+Home" if position == "start" else "Control+End"
+        self._page.keyboard.press(key)
+
+    def schedule(self, at: datetime) -> None:
+        """Open publish popover and set scheduled time."""
+        self._click_publish_trigger()
+        self._wait_for_popover_ready()
+        self._set_scheduled_publish(at)
+
+    _VISIBILITY_LABEL_MAP = {
+        "public":  "전체공개",
+        "private": "비공개",
+    }
+
+    def set_visibility(self, visibility: Visibility) -> None:
+        """Set post visibility via JS click (labels lack ARIA role)."""
+        self._click_publish_trigger()
+
+        label_text = self._VISIBILITY_LABEL_MAP.get(visibility, "전체공개")
+        js_frame = find_js_frame(self._page, url_fragment="PostWriteForm")
+        js_frame.evaluate(
+            """(text) => {
+                const labels = document.querySelectorAll('label');
+                for (const label of labels) {
+                    if (label.textContent.trim() === text) {
+                        label.click();
+                        return;
+                    }
+                }
+            }""",
+            label_text,
+        )
+
+    def insert_tags(self, tags: list[str]) -> None:
+        """Type tags in the publish popover (Space to confirm each)."""
+        if not tags:
+            return
+
+        self._click_publish_trigger()
+
+        sel   = self._sel()
+        frame = self._popover_frame()
+
+        tag_input = sel.locator(frame, "tag_textarea")
+        if not click_if_visible(tag_input, timeout_ms=3_000):
+            return
+
+        for tag in tags:
+            self._page.keyboard.type(tag)
+            self._page.keyboard.press("Space")
+
+    def publish(self) -> None:
+        """Open publish popover and confirm (skipped in dry_run)."""
+        self._click_publish_trigger()
+
+        if self._dry_run:
+            print(
+                "[SmartEditorOne] DRY RUN — confirm skipped.",
+                file=sys.stderr,
+            )
+            return
+
+        self._click_publish_confirm()
+        self._wait_for_publish_complete()
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    def _click_last_paragraph(self, frame=None) -> None:
+        """Click last paragraph (force=True to bypass image overlays)."""
+        if frame is None:
+            frame = self._frame()
+        sel = self._sel()
+        target = sel.locator(frame, "editor_paragraph_container").last
+        target.wait_for(state="visible", timeout=5_000)
+        target.click(force=True)
+
+    def _click_editor_bottom(self, frame) -> None:
+        """Click bottom of .se-content to exit quote/list/divider blocks."""
+        editor_body = frame.locator(_EDITOR_BODY)
+        box = editor_body.bounding_box()
+        if box:
+            editor_body.click(position={
+                "x": box["width"] / 2,
+                "y": box["height"] - 5,
+            })
+
+    def _sel(self) -> SelectorLoader:
+        """Return cached SelectorLoader."""
+        if self._sel_cache is None:
+            if self._sel_source is not None:
+                self._sel_cache = self._sel_source.load("editor")
+            else:
+                self._sel_cache = SelectorLoader.load(_EDITOR_JSON)
+        return self._sel_cache
+
+    def _frame(self):
+        """Editor content frame."""
+        return find_editor_frame(self._page, _MAIN_FRAME, _EDITOR_BODY)
+
+    def _popover_frame(self):
+        """Publish popover frame (bypasses .se-content visibility check)."""
+        return self._page.frame_locator(_MAIN_FRAME).first
+
+    # ------------------------------------------------------------------
+    # Publish helpers
+    # ------------------------------------------------------------------
 
     def _wait_for_editor_ready(
         self,
@@ -123,24 +437,12 @@ class SmartEditorOne(BlogEditor):
         stable_streak: int = 3,
         probe_ms: int      = 300,
     ) -> None:
-        """
-        Dismiss overlays and wait until the editor is stable.
-
-        Per cycle: check ALL overlays (not any-short-circuit), click each
-        that is visible. Streak increments only when no overlay was clicked
-        across the entire cycle. Declares ready after stable_streak clean
-        cycles (default 3 × 300ms = 0.9s gap with no overlay).
-
-        Why not any(): any() stops at first True — if draft is clicked, help
-        is never checked in the same cycle, so both overlays appearing
-        together keep resetting the streak indefinitely.
-        """
+        """Dismiss overlays and wait until the editor is stable."""
         _OVERLAYS = ["overlay_draft_cancel", "overlay_help_close"]
         deadline  = time.monotonic() + timeout_ms / 1_000
         streak    = 0
 
         while time.monotonic() < deadline:
-            # Check ALL overlays this cycle — never short-circuit
             clicked_this_cycle = [
                 click_if_visible(sel.locator(frame, k).first, timeout_ms=probe_ms)
                 for k in _OVERLAYS
@@ -160,511 +462,11 @@ class SmartEditorOne(BlogEditor):
 
             time.sleep(0.1)
 
-        # Deadline exceeded — one last sweep and continue
         for k in _OVERLAYS:
             click_if_visible(sel.locator(frame, k).first, timeout_ms=1_000)
 
-    _ALIGN_KEY_MAP = {
-        "left":   "align_left",
-        "center": "align_center",
-        "right":  "align_right",
-    }
-
-    def set_align(self, align: Alignment) -> None:
-        """
-        Set text alignment for the entire post.
-
-        Sequence:
-            0. Click last paragraph to position cursor in body area
-            1. Select all text (Ctrl+A)
-            2. Click align_trigger ("정렬" dropdown)
-            3. Click align_{direction}
-            4. Dismiss selection (keyboard Escape + click bottom)
-
-        The se-is-blurred overlay from Ctrl+A can intercept pointer
-        events on slow connections (VPS/VNC). Keyboard-based deselect
-        is immune to overlay interception.
-        """
-        frame = self._frame()
-        sel   = self._sel()
-
-        # Step 0: Position cursor in body area
-        self._click_last_paragraph(frame)
-
-        # Step 1: Select all → align → deselect
-        self._page.keyboard.press("Control+a")
-
-        trigger = sel.locator(frame, "align_trigger")
-        if not click_if_visible(trigger, timeout_ms=3_000):
-            self._page.keyboard.press("Escape")
-            return
-
-        align_key = self._ALIGN_KEY_MAP.get(align, "align_left")
-        align_btn = sel.locator(frame, align_key)
-        click_if_visible(align_btn, timeout_ms=3_000)
-
-        # Deselect
-        self._page.keyboard.press("Escape")
-
-    def write_title(self, title: str) -> None:
-        """Click title placeholder and type title."""
-        frame = self._frame()
-        sel   = self._sel()
-        el    = sel.locator(frame, "editor_title")
-        el.wait_for(state="visible", timeout=5_000)
-        el.click()
-        self._page.keyboard.type(title)
-
-    def insert_text(self, text: str, newlines: int = 2) -> None:
-        """
-        Click the last paragraph container and type text.
-
-        Uses editor_paragraph_container (p.se-text-paragraph).
-        Text containing newlines is split and Enter is pressed between segments.
-        Presses Enter newlines times after typing (default: 2).
-        After long text, waits for the editor DOM to catch up.
-        """
-        self._click_last_paragraph()
-
-        # keyboard.type()는 \n을 Enter로 변환하지 않으므로 직접 처리
-        lines = text.split("\n")
-        for i, line in enumerate(lines):
-            if line:
-                self._page.keyboard.type(line)
-            if i < len(lines) - 1:
-                self._page.keyboard.press("Enter")
-
-        # Editor DOM lags behind keyboard.type() on long text.
-        # ~1 second per 100 chars, minimum 2s, cap 60s.
-        if len(text) >= 100:
-            settle = min(60, max(2, len(text) // 100))
-            time.sleep(settle)
-
-        for _ in range(max(newlines, 1)):
-            self._page.keyboard.press("Enter")
-
-    _HEADING_SIZE_MAP = {
-        1: "size_38",
-        2: "size_34",
-        3: "size_30",
-        4: "size_28",
-        5: "size_24",
-        6: "size_19",
-    }
-
-    def insert_heading(self, text: str, level: int = 2) -> None:
-        """
-        Insert a heading with Naver SE One's native subtitle formatting.
-
-        Font sizes by level:
-            H1: 38, H2: 34, H3: 30, H4: 28, H5: 24, H6: 19
-
-        Sequence (from interactive debug):
-            0. Click last paragraph to position cursor in body area
-            1. Click heading_trigger ("본문" dropdown)
-            2. Click heading_button ("소제목")
-            3. Type the heading text
-            4. Select text (Home → Shift+End) → size_trigger → level size
-            5. Click bold_button ("굵게")
-            6. Click paragraph to deselect → Enter (exits subtitle)
-
-        Falls back to insert_text for unsupported scenarios.
-        """
-        frame = self._frame()
-        sel   = self._sel()
-
-        # Step 0: Position cursor in body area (toolbar is inactive without this)
-        self._click_last_paragraph(frame)
-
-        # Step 1: Open paragraph style dropdown
-        trigger = sel.locator(frame, "heading_trigger")
-        if not click_if_visible(trigger, timeout_ms=3_000):
-            self.insert_text(text, 1)
-            return
-
-        # Step 2: Click "소제목"
-        heading_btn = sel.locator(frame, "heading_button")
-        if not click_if_visible(heading_btn, timeout_ms=3_000):
-            self.insert_text(text, 1)
-            return
-
-        # Step 3: Type heading text
-        self._page.keyboard.type(text)
-
-        # Step 4: Select text → change font size by level
-        self._page.keyboard.press("Home")
-        self._page.keyboard.press("Shift+End")
-        size_key = self._HEADING_SIZE_MAP.get(level, "size_34")
-        size_trigger = sel.locator(frame, "size_trigger")
-        if click_if_visible(size_trigger, timeout_ms=3_000):
-            size_btn = sel.locator(frame, size_key)
-            click_if_visible(size_btn, timeout_ms=3_000)
-
-        # Step 5: Bold
-        bold_btn = sel.locator(frame, "bold_button")
-        click_if_visible(bold_btn, timeout_ms=3_000)
-
-        # Step 6: Click paragraph to deselect text, then Enter to exit subtitle
-        self._click_last_paragraph(frame)
-        self._page.keyboard.press("Enter")
-
-    def insert_quote(self, text: str) -> None:
-        """
-        Insert a quote block with Naver SE One's native quote formatting.
-
-        Sequence (from interactive debug):
-            0. Click last paragraph to position cursor in body area
-            1. Click quote_trigger ("인용구 선택" dropdown)
-            2. Click quote_1 ("인용구 1" style) — cursor lands inside quote
-            3. Type text (cursor is already in quote content)
-            4. Click bottom of .se-content to exit quote → creates new paragraph
-
-        Falls back to insert_text for unsupported scenarios.
-        """
-        frame = self._frame()
-        sel   = self._sel()
-
-        # Step 0: Position cursor in body area
-        self._click_last_paragraph(frame)
-
-        # Step 1: Open quote dropdown
-        trigger = sel.locator(frame, "quote_trigger")
-        if not click_if_visible(trigger, timeout_ms=3_000):
-            self.insert_text(text, 2)
-            return
-
-        # Step 2: Select "인용구 1" — cursor lands inside quote automatically
-        quote_btn = sel.locator(frame, "quote_1")
-        if not click_if_visible(quote_btn, timeout_ms=3_000):
-            self.insert_text(text, 2)
-            return
-
-        # Step 3: Type directly (cursor is already in quote content)
-        self._page.keyboard.type(text)
-
-        # Step 4: Click bottom of editor body to exit quote block
-        self._click_editor_bottom(frame)
-
-    def insert_list(self, items: list[str], ordered: bool = False) -> None:
-        """
-        Insert a list block with Naver SE One's native list formatting.
-
-        Sequence:
-            0. Click last paragraph to position cursor in body area
-            1. Click list_trigger ("목록" dropdown)
-            2. Click list_type_1 ("기호목록")
-            3. Type each item + Enter
-            4. Press Enter twice to exit list block
-
-        Falls back to insert_text for unsupported scenarios.
-        """
-        if not items:
-            return
-
-        frame = self._frame()
-        sel   = self._sel()
-
-        # Step 0: Position cursor in body area
-        self._click_last_paragraph(frame)
-
-        # Step 1: Open list dropdown
-        trigger = sel.locator(frame, "list_trigger")
-        if not click_if_visible(trigger, timeout_ms=3_000):
-            text = "\n".join(items)
-            self.insert_text(text, 2)
-            return
-
-        # Step 2: Select list type
-        list_btn = sel.locator(frame, "list_type_1")
-        if not click_if_visible(list_btn, timeout_ms=3_000):
-            text = "\n".join(items)
-            self.insert_text(text, 2)
-            return
-
-        # Step 3: Type each item + Enter
-        for i, item in enumerate(items):
-            self._page.keyboard.type(item)
-            if i < len(items) - 1:
-                self._page.keyboard.press("Enter")
-
-        # Step 4: Enter three times to exit list block
-        self._page.keyboard.press("Enter")
-        self._page.keyboard.press("Enter")
-        self._page.keyboard.press("Enter")
-
-    def insert_divider(self) -> None:
-        """
-        Insert a horizontal divider with Naver SE One's native formatting.
-
-        Sequence:
-            0. Click last paragraph to position cursor in body area
-            1. Click divider_trigger ("구분선 선택" dropdown)
-            2. Click divider_2 ("구분선 2" style)
-            3. Click bottom of editor body to exit divider
-        """
-        frame = self._frame()
-        sel   = self._sel()
-
-        # Step 0: Position cursor in body area
-        self._click_last_paragraph(frame)
-
-        # Step 1: Open divider dropdown
-        trigger = sel.locator(frame, "divider_trigger")
-        if not click_if_visible(trigger, timeout_ms=3_000):
-            return
-
-        # Step 2: Select "구분선 2"
-        divider_btn = sel.locator(frame, "divider_2")
-        if not click_if_visible(divider_btn, timeout_ms=3_000):
-            return
-
-        # Step 3: Click bottom of editor to exit
-        self._click_editor_bottom(frame)
-
-    def upload_file(self, path: str) -> None:
-        """
-        Upload a file via toolbar button.
-
-        Raises FileNotFoundError if path does not exist.
-        """
-        file_path = Path(path)
-        if not file_path.exists():
-            raise FileNotFoundError(f"File not found: {path!r}")
-
-        frame = self._frame()
-        sel   = self._sel()
-
-        trigger = sel.locator(frame, "toolbar_image")
-        trigger.wait_for(state="visible", timeout=10_000)
-
-        with self._page.expect_file_chooser() as fc_info:
-            trigger.click()
-        fc_info.value.set_files(str(path))
-
-        # Library sidebar appears after upload — poll as it may be slow.
-        dismiss_polling(
-            locator    = sel.locator(frame, "library_close").first,
-            timeout_ms = 5_000,
-        )
-
-        sel.locator(frame, "editor_image").last.wait_for(
-            state="visible", timeout=10_000
-        )
-
-    def insert_link(self, url: str) -> None:
-        """
-        Attach a hyperlink to the last uploaded image.
-
-        Sequence:
-            1. Click last image block (shows image toolbar)
-            2. Click link button
-            3. Fill URL input
-            4. Click confirm
-            5. Click body to restore cursor
-        """
-        if not url:
-            return
-
-        frame = self._frame()
-        sel   = self._sel()
-
-        # Step 1: click the last image to show its toolbar
-        image_block = sel.locator(frame, "editor_image_block").last
-        image_block.wait_for(state="visible", timeout=5_000)
-        image_block.click()
-        time.sleep(0.5)
-
-        # Step 2: click link button
-        link_btn = sel.locator(frame, "editor_link_button")
-        if not click_if_visible(link_btn, timeout_ms=3_000):
-            return
-
-        # Step 3: fill URL
-        link_input = sel.locator(frame, "editor_link_input")
-        link_input.wait_for(state="visible", timeout=3_000)
-        link_input.fill(url)
-
-        # Step 4: confirm
-        confirm_btn = sel.locator(frame, "editor_link_confirm")
-        if not click_if_visible(confirm_btn, timeout_ms=3_000):
-            return
-
-        time.sleep(0.3)
-
-        # Step 5: restore cursor to body
-        try:
-            sel.locator(frame, "editor_paragraph_container").last.click()
-        except Exception:
-            pass
-
-    def set_representative_media(self, index: int) -> None:
-        """
-        Set representative (thumbnail) image by insertion index.
-
-        The rep button is hidden by CSS hover state — uses js_dispatch_click
-        to fire a MouseEvent regardless of visibility.
-
-        Raises:
-            ValueError:   If index is negative.
-            RuntimeError: If the button does not reach selected state.
-        """
-        if index < 0:
-            raise ValueError(f"index must be >= 0, got {index}")
-
-        frame    = self._frame()
-        sel      = self._sel()
-        block = sel.locator(frame, "editor_image_block").nth(index)
-        block.wait_for(state="visible", timeout=5_000)
-
-        # rep 버튼은 이미지 block에 hover해야 DOM에 나타남.
-        # hover 후 locator.evaluate로 dispatchEvent — shadow DOM 통과.
-        block.hover()
-        result = locator_dispatch_click(
-            sel.locator(frame, "editor_image_rep"),
-            index=index,
-        )
-
-        if result != "selected":
-            raise RuntimeError(
-                f"set_representative_media(index={index}) failed: "
-                f"JS returned {result!r}"
-            )
-
-        wait_until_attached(
-            sel.locator(frame, "editor_image_rep_selected").first,
-            timeout_ms=5_000,
-        )
-
-        # Restore cursor to body — hover/click on image block moves focus
-        # outside the text area, which breaks subsequent toolbar actions.
-        try:
-            sel.locator(frame, "editor_paragraph_container").last.click()
-        except Exception:
-            pass
-
-    def move_cursor(self, position: CursorPosition = "end") -> None:
-        """
-        Reposition the cursor via keyboard only.
-
-        'end'   -> Escape (deselect) + Ctrl+End
-        'start' -> Escape (deselect) + Ctrl+Home
-
-        No clicking — each block method already clicks the paragraph
-        it needs. This only ensures the cursor escapes image/quote
-        blocks so the next block's click lands correctly.
-        """
-        self._page.keyboard.press("Escape")
-        key = "Control+Home" if position == "start" else "Control+End"
-        self._page.keyboard.press(key)
-
-    def schedule(self, at: datetime) -> None:
-        """
-        Configure Naver's reservation UI for scheduled publish.
-
-        Must be called before publish(). Opens the publish popover and
-        sets the "예약" radio with hour/minute.
-
-        Args:
-            at: KST-aware datetime whose hour/minute are used.
-        """
-        self._click_publish_trigger()
-        self._wait_for_popover_ready()
-        self._set_scheduled_publish(at)
-
-    _VISIBILITY_LABEL_MAP = {
-        "public":  "전체공개",
-        "private": "비공개",
-    }
-
-    def set_visibility(self, visibility: Visibility) -> None:
-        """
-        Set post visibility in the publish popover.
-
-        Opens the popover if not already open, then JS-clicks the
-        matching label element by text content.
-
-        Why JS click: The visibility labels are plain <label> elements
-        without ARIA role — Playwright get_by_role("label") cannot find
-        them. Also, labels intercept pointer events (same issue as
-        scheduled publish radio). JS evaluate() bypasses both problems.
-        """
-        self._click_publish_trigger()
-
-        label_text = self._VISIBILITY_LABEL_MAP.get(visibility, "전체공개")
-        js_frame = find_js_frame(self._page, url_fragment="PostWriteForm")
-        js_frame.evaluate(
-            """(text) => {
-                const labels = document.querySelectorAll('label');
-                for (const label of labels) {
-                    if (label.textContent.trim() === text) {
-                        label.click();
-                        return;
-                    }
-                }
-            }""",
-            label_text,
-        )
-
-    def insert_tags(self, tags: list[str]) -> None:
-        """
-        Insert tags in the publish popover.
-
-        Opens the popover if not already open, then types each tag
-        followed by Space to confirm.
-
-        Sequence:
-            0. Open publish popover (if not already open)
-            1. Click tag_textarea
-            2. For each tag: type text → press Space
-        """
-        if not tags:
-            return
-
-        # Step 0: Ensure popover is open
-        self._click_publish_trigger()
-
-        sel   = self._sel()
-        frame = self._popover_frame()
-
-        # Step 1: Click tag input
-        tag_input = sel.locator(frame, "tag_textarea")
-        if not click_if_visible(tag_input, timeout_ms=3_000):
-            return
-
-        # Step 2: Type each tag + Space
-        for tag in tags:
-            self._page.keyboard.type(tag)
-            self._page.keyboard.press("Space")
-
-    def publish(self) -> None:
-        """
-        Open the publish popover (if not already open) and confirm.
-
-        dry_run=True behaviour
-        ----------------------
-        The popover is opened normally so the result can be inspected
-        visually. Only the final confirm button is skipped.
-        """
-        # Open popover if not already opened by schedule()
-        self._click_publish_trigger()
-
-        if self._dry_run:
-            print(
-                f"[SmartEditorOne] DRY RUN — confirm skipped. "
-                f"팝오버를 수동으로 닫거나 그냥 두면 됩니다.",
-                file=sys.stderr,
-            )
-            return
-
-        self._click_publish_confirm()
-        self._wait_for_publish_complete()
-
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
-
     def _wait_for_publish_complete(self, timeout: int = 15_000) -> None:
-        """Wait for Naver to finish publishing and navigate away from the editor."""
+        """Wait for publish navigation."""
         try:
             self._page.wait_for_url(
                 lambda url: "Redirect=Write" not in url,
@@ -674,136 +476,8 @@ class SmartEditorOne(BlogEditor):
             pass
         time.sleep(1)
 
-    @staticmethod
-    def _round_minute_to_10(minute: int) -> str:
-        """
-        Floor ``minute`` to the nearest multiple of 10 and return as
-        a zero-padded 2-character string.
-
-        Naver's reservation UI exposes minute values only in steps of 10
-        (00, 10, 20, 30, 40, 50).  We always floor (never ceil) so that
-        the scheduled time never overshoots the caller's intent.
-
-        Examples:
-            0  → "00"
-            9  → "00"
-            15 → "10"
-            37 → "30"
-            55 → "50"
-            59 → "50"
-        """
-        return f"{(minute // 10) * 10:02d}"
-
-    def _set_scheduled_publish(self, schedule_at: datetime) -> None:
-        """
-        Interact with Naver's reservation UI inside the publish popover.
-
-        Why JS evaluate instead of Playwright click
-        -------------------------------------------
-        The reservation radio input is covered by a <label> element that
-        intercepts pointer events. All Playwright .click() variants fail
-        with "label intercepts pointer events". The only reliable approach
-        is document.querySelector(...).click() via frame.evaluate(), which
-        bypasses the pointer-event interception entirely.
-
-        frame.evaluate() requires a real Frame object (page.frames[N]),
-        NOT a FrameLocator — find_js_frame() with url_fragment resolves it.
-
-        Sequence
-        --------
-        1. JS click "예약" radio   → input[name=radio_time][value=pre]
-        2. Select hour             → select[class*=hour_option]
-        3. Select minute           → select[class*=minute_option] (floored to 10)
-
-        Args:
-            schedule_at: KST-aware datetime whose hour/minute are used.
-        """
-        hour_str   = f"{schedule_at.hour:02d}"  # "00"–"23" (Naver select values are zero-padded)
-        minute_str = self._round_minute_to_10(schedule_at.minute)
-
-        # Real Frame object needed for evaluate() — FrameLocator doesn't support it.
-        # PostWriteForm is the iframe that contains the publish popover.
-        js_frame = find_js_frame(self._page, url_fragment="PostWriteForm")
-
-        # Step 1: click the "예약" radio via JS (label intercepts pointer events)
-        js_frame.evaluate(
-            """() => {
-                const el = document.querySelector(
-                    'input[name="radio_time"][value="pre"]'
-                );
-                if (el) el.click();
-            }"""
-        )
-
-        # Steps 2-3: select hour/minute via Playwright (selects work normally)
-        sel   = self._sel()
-        frame = self._popover_frame()
-        select_option_by_value(sel.locator(frame, "publish_scheduled_hour"), hour_str)
-        select_option_by_value(sel.locator(frame, "publish_scheduled_min"),  minute_str)
-
-    def _sel(self) -> SelectorLoader:
-        """Return cached SelectorLoader — loaded once, reused for the lifetime of the editor."""
-        if self._sel_cache is None:
-            if self._sel_source is not None:
-                self._sel_cache = self._sel_source.load("editor")
-            else:
-                self._sel_cache = SelectorLoader.load(_EDITOR_JSON)
-        return self._sel_cache
-
-    def _click_last_paragraph(self, frame=None) -> None:
-        """
-        Click the last paragraph with force=True.
-
-        force=True bypasses Playwright's overlay interception checks.
-        Needed because image selection overlays (se-selection,
-        se-floating-material-container) cover paragraphs after upload.
-        """
-        if frame is None:
-            frame = self._frame()
-        sel = self._sel()
-        target = sel.locator(frame, "editor_paragraph_container").last
-        target.wait_for(state="visible", timeout=5_000)
-        target.click(force=True)
-
-    def _click_editor_bottom(self, frame) -> None:
-        """
-        Click the bottom of .se-content to create a new empty paragraph.
-
-        Used to exit quote/list blocks that trap the cursor.
-        Clicking below the last block in the editor body creates a new
-        normal paragraph and moves the cursor there.
-        """
-        editor_body = frame.locator(_EDITOR_BODY)
-        box = editor_body.bounding_box()
-        if box:
-            editor_body.click(position={
-                "x": box["width"] / 2,
-                "y": box["height"] - 5,
-            })
-
-    def _frame(self):
-        """Editor content frame — checks .se-content visibility (for editor actions)."""
-        return find_editor_frame(self._page, _MAIN_FRAME, _EDITOR_BODY)
-
-    def _popover_frame(self):
-        """
-        Publish popover frame — always returns #mainFrame directly.
-
-        find_editor_frame() checks .se-content visibility, which fails when
-        the publish popover overlays the editor. This method bypasses that
-        check and returns the raw FrameLocator so popover elements can always
-        be found inside mainFrame.
-        """
-        return self._page.frame_locator(_MAIN_FRAME).first
-
     def _wait_for_popover_ready(self, timeout_ms: int = 5_000) -> None:
-        """
-        Wait until the publish popover's reservation radio is attached to DOM.
-
-        Triggered after _click_publish_trigger() — the popover renders
-        asynchronously and the reservation elements may not exist yet when
-        _set_scheduled_publish() runs immediately after the trigger click.
-        """
+        """Wait for publish popover to render."""
         frame = self._popover_frame()
         sel   = self._sel()
         try:
@@ -811,14 +485,10 @@ class SmartEditorOne(BlogEditor):
                 state="attached", timeout=timeout_ms
             )
         except Exception:
-            # Fallback: simple sleep so at least partial rendering occurs
             time.sleep(1.0)
 
     def _click_publish_trigger(self, timeout: int = 5_000) -> None:
         sel = self._sel()
-        # The publish button lives inside #mainFrame.
-        # Use _popover_frame() (direct frame_locator) to avoid the
-        # 1-second .se-content visibility probe in _frame().
         for ctx in (self._popover_frame(), self._page):
             if click_if_visible(sel.locator(ctx, "toolbar_publish"), timeout):
                 return
@@ -828,3 +498,28 @@ class SmartEditorOne(BlogEditor):
         for ctx in (self._page, self._popover_frame()):
             if click_if_visible(sel.locator(ctx, "publish_confirm"), timeout):
                 return
+
+    @staticmethod
+    def _round_minute_to_10(minute: int) -> str:
+        """Floor minute to nearest 10 (Naver UI step)."""
+        return f"{(minute // 10) * 10:02d}"
+
+    def _set_scheduled_publish(self, schedule_at: datetime) -> None:
+        """Set scheduled time via JS click (label intercepts pointer events)."""
+        hour_str   = f"{schedule_at.hour:02d}"
+        minute_str = self._round_minute_to_10(schedule_at.minute)
+
+        js_frame = find_js_frame(self._page, url_fragment="PostWriteForm")
+        js_frame.evaluate(
+            """() => {
+                const el = document.querySelector(
+                    'input[name="radio_time"][value="pre"]'
+                );
+                if (el) el.click();
+            }"""
+        )
+
+        sel   = self._sel()
+        frame = self._popover_frame()
+        select_option_by_value(sel.locator(frame, "publish_scheduled_hour"), hour_str)
+        select_option_by_value(sel.locator(frame, "publish_scheduled_min"),  minute_str)
