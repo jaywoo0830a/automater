@@ -61,6 +61,9 @@ post:
         - effect: "brightness:0.95 ~ 1.05"
       wait: 3s
 
+style:
+  align: center
+
 assets: ./images
 
 publish:

@@ -379,7 +379,8 @@ class MainWindow(QMainWindow):
         config["exif_optimization"] = platform_data.get("exif_optimization", True)
         if "session_store" in platform_data:
             config["session_store"] = platform_data["session_store"]
-        config.update(self._publish_tab.to_dict())
+        pub_data = self._publish_tab.to_dict()
+        config.update(pub_data)
         config.update(self._run_tab.to_dict())
         return config
 

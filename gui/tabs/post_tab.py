@@ -125,12 +125,9 @@ class PostTab(QWidget):
             return
 
         if bt == "list":
-            text, ok = QInputDialog.getMultiLineText(
-                self, "목록 추가", "항목 (한 줄에 하나):", "항목 1\n항목 2\n항목 3"
-            )
-            if ok and text.strip():
-                items = [line.strip() for line in text.splitlines() if line.strip()]
-                self._append({"list": items})
+            dlg = _ListDialog(self)
+            if dlg.exec() == QDialog.DialogCode.Accepted:
+                self._append(dlg.result())
             return
 
         if bt in ("image", "featured_image"):
@@ -189,18 +186,9 @@ class PostTab(QWidget):
 
         # 목록
         elif bt == "list":
-            items = val if isinstance(val, list) else []
-            text, ok = QInputDialog.getMultiLineText(
-                self, "목록 수정", "항목 (한 줄에 하나):",
-                "\n".join(items),
-            )
-            if ok and text.strip():
-                new_items = [line.strip() for line in text.splitlines() if line.strip()]
-                new = {"list": new_items}
-                if when:
-                    new["when"] = when
-                if wait:
-                    new["wait"] = wait
+            dlg = _ListDialog(self, existing=block)
+            if dlg.exec() == QDialog.DialogCode.Accepted:
+                new = dlg.result()
                 item.setData(256, new)
                 item.setText(self._label(new))
             return
@@ -268,6 +256,11 @@ class PostTab(QWidget):
         if isinstance(val, list):
             return f"[{bt}]  {', '.join(str(v) for v in val[:3])}..."
         if isinstance(val, dict):
+            # list dict form
+            if bt == "list":
+                items = val.get("items", [])
+                ordered = "번호" if val.get("ordered") else "기호"
+                return f"[{bt}:{ordered}]  {', '.join(str(v) for v in items[:3])}..."
             path = val.get("path", "")
             overlay = val.get("overlay_text", "")
             file_ = val.get("file", "")
@@ -564,6 +557,85 @@ class _QuoteDialog(QDialog):
             entry: dict = {"quote": {"text": text, "attribution": attr}}
         else:
             entry = {"quote": text}
+
+        when = self._when.text().strip()
+        if when:
+            entry["when"] = when
+        wait = self._wait.text().strip()
+        if wait:
+            entry["wait"] = wait
+        return entry
+
+
+class _ListDialog(QDialog):
+    """목록 블록 — 항목 + ordered 옵션 + when/wait."""
+
+    def __init__(self, parent: QWidget, existing: dict | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("목록 수정" if existing else "목록 추가")
+        self.setMinimumWidth(500)
+
+        _raw_val = (existing or {}).get("list", [])
+        if isinstance(_raw_val, dict):
+            _items = _raw_val.get("items", [])
+            _ordered = bool(_raw_val.get("ordered", False))
+        elif isinstance(_raw_val, list):
+            _items = _raw_val
+            _ordered = False
+        else:
+            _items = []
+            _ordered = False
+        _when: str = str((existing or {}).get("when", ""))
+        _wait: str = str((existing or {}).get("wait", ""))
+
+        self._items = QTextEdit()
+        self._items.setPlaceholderText("항목 1\n항목 2\n항목 3")
+        self._items.setMaximumHeight(120)
+        if _items:
+            self._items.setPlainText("\n".join(str(i) for i in _items))
+
+        self._ordered = QCheckBox("번호 매기기 (ordered)")
+        self._ordered.setChecked(_ordered)
+
+        form = QFormLayout()
+        form.addRow("항목 (한 줄에 하나):", self._items)
+        form.addRow("", self._ordered)
+
+        # 고급
+        self._when = QLineEdit(_when)
+        self._when.setPlaceholderText('{keyword:region} == 강남')
+        self._wait = QLineEdit(_wait)
+        self._wait.setPlaceholderText("2s 또는 1s ~ 3s")
+
+        advanced = CollapsibleSection("고급 설정")
+        advanced.add_row("조건 (when):", self._when)
+        advanced.add_row("대기 (wait):", self._wait)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        if ok_btn:
+            ok_btn.setAutoDefault(False)
+            ok_btn.setDefault(False)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+
+        layout = QVBoxLayout()
+        layout.addLayout(form)
+        layout.addWidget(advanced)
+        layout.addWidget(buttons)
+        self.setLayout(layout)
+
+    def result(self) -> dict:
+        raw = self._items.toPlainText().strip()
+        items = [line.strip() for line in raw.splitlines() if line.strip()]
+        ordered = self._ordered.isChecked()
+
+        if ordered:
+            entry: dict = {"list": {"items": items, "ordered": True}}
+        else:
+            entry = {"list": items}
 
         when = self._when.text().strip()
         if when:

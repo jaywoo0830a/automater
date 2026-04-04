@@ -226,7 +226,7 @@
 #   schedule: ++ 15m                         # 순차 (고정)
 #   schedule: ++ 15m ~ 30m                   # 순차 (랜덤 간격)
 #   tags: [교육, 과외]
-#   visibility: public                       # public | private | draft
+#   visibility: public                       # public | private
 
 # ═══════════════════════════════════════════════════════════
 # run (선택)
@@ -234,9 +234,9 @@
 #
 # run:
 #   interval: 60s                            # 포스트 간 대기
-#   on_failure: stop                         # stop | switch_account
+#   on_failure: stop                         # (미구현) stop | switch_account
 #   on_resume: restart                       # restart | skip
-#   headless: true
+#   headless: true                           # CLI 인자로만 동작 (--headless)
 #   parallel: false                          # 계정별 병렬
 #   max_workers: 3                           # parallel=true 시
 #
