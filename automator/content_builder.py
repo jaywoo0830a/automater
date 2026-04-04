@@ -48,6 +48,7 @@ class ContentBuilder:
                 title=title,
                 steps=[ParagraphStep(text=stub, newlines=2)],
                 tags=spec.publish.tags,
+                visibility=spec.publish.visibility,
                 schedule_at=spec.schedule_at,
                 align=spec.align,
             )
@@ -66,6 +67,7 @@ class ContentBuilder:
             title=title,
             steps=steps_out,
             tags=spec.publish.tags,
+            visibility=spec.publish.visibility,
             schedule_at=spec.schedule_at,
             align=spec.align,
             tmp_files=ctx.tmp_files,

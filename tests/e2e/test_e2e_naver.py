@@ -311,6 +311,20 @@ def test_pipeline_tags(editor: SmartEditorOne, account: AccountOption):
     _run_spec(spec, editor)
 
 
+@pytest.mark.slow
+def test_pipeline_visibility_private(editor: SmartEditorOne, account: AccountOption):
+    """비공개 설정 — 발행 팝오버에서 비공개 선택 후 dry_run."""
+    spec = PostingSpec(
+        account=account,
+        title="비공개 테스트",
+        body=(Section(blocks=(
+            ParagraphBlock(prompt="비공개 테스트 본문"),
+        )),),
+        publish=PublishOption(visibility="private"),
+    )
+    _run_spec(spec, editor)
+
+
 # ---------------------------------------------------------------------------
 # Pipeline: divider
 # ---------------------------------------------------------------------------

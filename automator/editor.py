@@ -33,7 +33,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
-from automator.options import Alignment
+from automator.options import Alignment, Visibility
 
 
 # ---------------------------------------------------------------------------
@@ -133,6 +133,17 @@ class BlogEditor(ABC):
     @abstractmethod
     def move_cursor(self, position: CursorPosition = "end") -> None:
         """Reposition the cursor."""
+
+    @abstractmethod
+    def set_visibility(self, visibility: Visibility) -> None:
+        """
+        Set post visibility in the publish popover.
+
+        The popover must already be open.
+
+        Args:
+            visibility: "public" or "private".
+        """
 
     @abstractmethod
     def insert_tags(self, tags: list[str]) -> None:
@@ -286,6 +297,7 @@ class _PostContent:
     title:       str
     steps:       list[PostStep]  = field(default_factory=list)
     tags:        list[str]       = field(default_factory=list)
+    visibility:  Visibility      = "public"
     schedule_at: datetime | None = None
     align:       Alignment | None = None
     tmp_files:   list[str]       = field(default_factory=list)

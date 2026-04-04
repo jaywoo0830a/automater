@@ -25,7 +25,7 @@ from pathlib import Path
 from playwright.sync_api import Page
 
 from automator.editor import BlogEditor, CursorPosition
-from automator.options import Alignment
+from automator.options import Alignment, Visibility
 from automator.selector_loader import SelectorLoader
 from automator.ports import SelectorSource
 from automator.browser_actions import (
@@ -584,6 +584,40 @@ class SmartEditorOne(BlogEditor):
         self._click_publish_trigger()
         self._wait_for_popover_ready()
         self._set_scheduled_publish(at)
+
+    _VISIBILITY_LABEL_MAP = {
+        "public":  "전체공개",
+        "private": "비공개",
+    }
+
+    def set_visibility(self, visibility: Visibility) -> None:
+        """
+        Set post visibility in the publish popover.
+
+        Opens the popover if not already open, then JS-clicks the
+        matching label element by text content.
+
+        Why JS click: The visibility labels are plain <label> elements
+        without ARIA role — Playwright get_by_role("label") cannot find
+        them. Also, labels intercept pointer events (same issue as
+        scheduled publish radio). JS evaluate() bypasses both problems.
+        """
+        self._click_publish_trigger()
+
+        label_text = self._VISIBILITY_LABEL_MAP.get(visibility, "전체공개")
+        js_frame = find_js_frame(self._page, url_fragment="PostWriteForm")
+        js_frame.evaluate(
+            """(text) => {
+                const labels = document.querySelectorAll('label');
+                for (const label of labels) {
+                    if (label.textContent.trim() === text) {
+                        label.click();
+                        return;
+                    }
+                }
+            }""",
+            label_text,
+        )
 
     def insert_tags(self, tags: list[str]) -> None:
         """

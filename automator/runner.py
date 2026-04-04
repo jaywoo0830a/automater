@@ -92,4 +92,7 @@ class JobRunner:
         if post.tags:
             editor.insert_tags(post.tags)
 
+        if post.visibility != "public":
+            editor.set_visibility(post.visibility)
+
         editor.publish()

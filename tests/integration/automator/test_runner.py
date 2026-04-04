@@ -53,6 +53,9 @@ class _RecordingEditor(BlogEditor):
     def set_align(self, align):
         self.calls.append(("set_align", align))
 
+    def set_visibility(self, visibility):
+        self.calls.append(("set_visibility", visibility))
+
     def insert_tags(self, tags):
         self.calls.append(("insert_tags", tags))
 

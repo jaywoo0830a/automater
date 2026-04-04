@@ -336,7 +336,7 @@ class Section:
 
 ScheduleMode  = Literal["immediate", "scheduled", "sequential"]
 TagStyle      = Literal["dynamic", "education", "region", "subject", "learning_type"]
-Visibility    = Literal["public", "private", "draft"]
+Visibility    = Literal["public", "private"]
 Alignment     = Literal["left", "center", "right"]
 
 

@@ -391,3 +391,4 @@ tag_textarea:
   locators:
   - type: placeholder
     value: 태그 입력 (최대 30개)
+    name: 비공개
