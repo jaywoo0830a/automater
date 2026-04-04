@@ -455,7 +455,55 @@ class CampaignExecutor:
         logger.info("[%s] 배치 시작 (%d개 조합)", username, total)
         logger.info("=" * 50)
 
-        # Create editor once per account batch (not per spec)
+        # ----------------------------------------------------------
+        # Phase 1: Title check — 에디터 열기 전에 모든 제목 확정
+        # ----------------------------------------------------------
+        tc_config = config.get("title_check", {})
+        resolved_titles: dict[int, str] = {}  # combo.index → confirmed title
+
+        if tc_config.get("enabled") and self._checker_factory is not None:
+            checker: TitleChecker | None = None
+            try:
+                checker = self._checker_factory(account)
+                logger.info("[%s] 제목 중복 검사 시작 (%d개 조합)", username, total)
+            except Exception as exc:
+                logger.warning(
+                    "[%s] title_check 초기화 실패 — 비활성화: %s",
+                    username, exc,
+                )
+
+            if checker is not None:
+                for i, combo in enumerate(combos):
+                    combo_index = combo.index - 1
+                    if on_resume == "skip" and progress and progress.is_done(combo_index):
+                        continue
+                    try:
+                        spec = build_spec(combo, config, account_idx)
+                        title = generate_unique_title(
+                            spec.title,
+                            checker,
+                            max_attempts=tc_config.get("max_attempts", 10),
+                        )
+                        resolved_titles[combo.index] = title
+                    except Exception as exc:
+                        logger.warning(
+                            "[%s] title_check 실패 (combo #%d): %s — 기본 제목 사용",
+                            username, combo.index, exc,
+                        )
+
+                try:
+                    checker.close()
+                except Exception:
+                    pass
+
+                logger.info(
+                    "[%s] 제목 중복 검사 완료 (%d/%d 확정)",
+                    username, len(resolved_titles), total,
+                )
+
+        # ----------------------------------------------------------
+        # Phase 2: Editor — 확정된 제목으로 포스팅
+        # ----------------------------------------------------------
         editor = None
         if not dry_run and self._editor_factory is not None:
             try:
@@ -467,19 +515,6 @@ class CampaignExecutor:
                 for _ in combos:
                     result.record_failure(str(exc))
                 return
-
-        # Create title checker if enabled
-        tc_config = config.get("title_check", {})
-        checker: TitleChecker | None = None
-        if tc_config.get("enabled") and self._checker_factory is not None:
-            try:
-                checker = self._checker_factory(account)
-                logger.info("[%s] 제목 중복 검사 활성화", username)
-            except Exception as exc:
-                logger.warning(
-                    "[%s] title_check 초기화 실패 — 비활성화: %s",
-                    username, exc,
-                )
 
         succeeded_in_batch = 0
 
@@ -496,14 +531,8 @@ class CampaignExecutor:
             try:
                 spec = build_spec(combo, config, account_idx)
 
-                if checker is not None:
-                    title = generate_unique_title(
-                        spec.title,
-                        checker,
-                        max_attempts=tc_config.get("max_attempts", 10),
-                    )
-                else:
-                    title = generate_title(spec.title)
+                # Phase 1에서 확정된 제목이 있으면 사용, 없으면 기본 생성
+                title = resolved_titles.get(combo.index) or generate_title(spec.title)
 
                 # Sequential mode: compute schedule_at for each post progressively
                 spec = self._resolve_sequential(spec, i, config, progress)
