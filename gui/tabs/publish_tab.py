@@ -56,28 +56,14 @@ class PublishTab(QWidget):
         meta_form.addRow("태그:", self._tags)
         meta_form.addRow("공개 범위:", self._visibility)
 
-        # ── 스타일 ──
-        self._align = QComboBox()
-        self._align.addItems(["기본 (left)", "가운데 (center)", "오른쪽 (right)"])
-
-        style_form = QFormLayout()
-        style_form.addRow("글 정렬:", self._align)
-
-        style_group = QGroupBox("글 스타일")
-        style_group.setLayout(style_form)
-
         layout = QVBoxLayout()
         layout.addWidget(sched_group)
         layout.addLayout(meta_form)
-        layout.addWidget(style_group)
         layout.addStretch()
         self.setLayout(layout)
 
     _VIS_MAP = {"공개 (public)": "public", "비공개 (private)": "private"}
     _VIS_REV = {v: k for k, v in _VIS_MAP.items()}
-
-    _ALIGN_MAP = {"기본 (left)": "left", "가운데 (center)": "center", "오른쪽 (right)": "right"}
-    _ALIGN_REV = {v: k for k, v in _ALIGN_MAP.items()}
 
     def to_dict(self) -> dict:
         pub: dict = {}
@@ -100,14 +86,7 @@ class PublishTab(QWidget):
         vis = self._VIS_MAP.get(self._visibility.currentText(), "public")
         pub["visibility"] = vis
 
-        result = {"publish": pub}
-
-        # style
-        align = self._ALIGN_MAP.get(self._align.currentText(), "left")
-        if align != "left":
-            result["style"] = {"align": align}
-
-        return result
+        return {"publish": pub}
 
     def from_dict(self, data: dict) -> None:
         pub = data.get("publish", {})
@@ -130,11 +109,3 @@ class PublishTab(QWidget):
         idx = self._visibility.findText(display)
         if idx >= 0:
             self._visibility.setCurrentIndex(idx)
-
-        # style
-        style = data.get("style", {})
-        align = style.get("align", "left") if isinstance(style, dict) else "left"
-        align_display = self._ALIGN_REV.get(align, "기본 (left)")
-        align_idx = self._align.findText(align_display)
-        if align_idx >= 0:
-            self._align.setCurrentIndex(align_idx)

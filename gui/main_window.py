@@ -41,6 +41,7 @@ from gui.tabs.keywords_tab import KeywordsTab
 from gui.tabs.maps_tab import MapsTab
 from gui.tabs.post_tab import PostTab
 from gui.tabs.publish_tab import PublishTab
+from gui.tabs.style_tab import StyleTab
 from gui.tabs.run_tab import RunTab
 
 _NAME_ROLE = Qt.ItemDataRole.UserRole  # 캠페인 고유 이름 저장용
@@ -116,6 +117,7 @@ class MainWindow(QMainWindow):
         self._maps_tab = MapsTab()
         self._post_tab = PostTab()
         self._publish_tab = PublishTab()
+        self._style_tab = StyleTab()
         self._run_tab = RunTab()
 
         self._accounts_tab.set_platform_tab(self._platform_tab)
@@ -131,6 +133,7 @@ class MainWindow(QMainWindow):
         self._tabs.addTab(self._maps_tab, "맵")
         self._tabs.addTab(self._post_tab, "포스트 블록")
         self._tabs.addTab(self._publish_tab, "발행")
+        self._tabs.addTab(self._style_tab, "스타일")
         self._tabs.addTab(self._run_tab, "실행 설정")
 
         # ── Bottom panel ──
@@ -379,8 +382,8 @@ class MainWindow(QMainWindow):
         config["exif_optimization"] = platform_data.get("exif_optimization", True)
         if "session_store" in platform_data:
             config["session_store"] = platform_data["session_store"]
-        pub_data = self._publish_tab.to_dict()
-        config.update(pub_data)
+        config.update(self._publish_tab.to_dict())
+        config.update(self._style_tab.to_dict())
         config.update(self._run_tab.to_dict())
         return config
 
@@ -393,6 +396,7 @@ class MainWindow(QMainWindow):
         self._maps_tab.from_dict(config)
         self._post_tab.from_dict(config)
         self._publish_tab.from_dict(config)
+        self._style_tab.from_dict(config)
         self._run_tab.from_dict(config)
 
     def _to_yaml(self) -> str:
