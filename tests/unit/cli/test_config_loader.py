@@ -230,3 +230,72 @@ class TestSemanticValidation:
         }
         with pytest.raises(ConfigError, match="prefix"):
             load_config(write_yaml(data))
+
+
+# ---------------------------------------------------------------------------
+# title_check validation
+# ---------------------------------------------------------------------------
+
+WITH_POOL = {
+    **MINIMAL,
+    "titles": ["{keyword:region} {keyword:subject} {pool:hook}"],
+    "pools": {"hook": ["솔직 리뷰", "학부모 후기", "실제 경험담"]},
+}
+
+
+class TestTitleCheckValidation:
+
+    def test_true_shorthand_normalizes(self, write_yaml):
+        data = {**WITH_POOL, "title_check": True}
+        config = load_config(write_yaml(data))
+        tc = config["title_check"]
+        assert tc["enabled"] is True
+        assert tc["max_attempts"] == 10
+        assert tc["match"] == "exact"
+        assert tc["delay"] == "1s ~ 2s"
+
+    def test_false_shorthand(self, write_yaml):
+        data = {**WITH_POOL, "title_check": False}
+        config = load_config(write_yaml(data))
+        assert config["title_check"]["enabled"] is False
+
+    def test_absent_defaults_to_disabled(self, write_yaml):
+        config = load_config(write_yaml(MINIMAL))
+        assert config["title_check"]["enabled"] is False
+
+    def test_dict_form(self, write_yaml):
+        data = {
+            **WITH_POOL,
+            "title_check": {"max_attempts": 5, "match": "contains", "delay": "2s ~ 3s"},
+        }
+        config = load_config(write_yaml(data))
+        tc = config["title_check"]
+        assert tc["enabled"] is True
+        assert tc["max_attempts"] == 5
+        assert tc["match"] == "contains"
+        assert tc["delay"] == "2s ~ 3s"
+
+    def test_invalid_match_mode(self, write_yaml):
+        data = {
+            **WITH_POOL,
+            "title_check": {"match": "fuzzy"},
+        }
+        with pytest.raises(ConfigError, match="match"):
+            load_config(write_yaml(data))
+
+    def test_invalid_max_attempts(self, write_yaml):
+        data = {
+            **WITH_POOL,
+            "title_check": {"max_attempts": 0},
+        }
+        with pytest.raises(ConfigError, match="max_attempts"):
+            load_config(write_yaml(data))
+
+    def test_requires_pool_token(self, write_yaml):
+        """title_check enabled but no {pool:*} in titles → error."""
+        data = {
+            **MINIMAL,
+            "title_check": True,
+        }
+        with pytest.raises(ConfigError, match="pool"):
+            load_config(write_yaml(data))

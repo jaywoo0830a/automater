@@ -19,16 +19,21 @@ Examples::
 
 Public API
 ----------
-    generate_title(option)         -> str
-    validate_template(template)    -> None (raises ValueError)
+    generate_title(option)                -> str
+    generate_unique_title(option, checker) -> str
+    validate_template(template)           -> None (raises ValueError)
 """
 
 from __future__ import annotations
 
+import logging
 import random
 import re
 
 from automator.options import TitleOption
+from automator.ports import TitleChecker
+
+logger = logging.getLogger(__name__)
 
 _TOKEN_RE = re.compile(r"\{([^}]*)\}")
 _VALID_TYPES = {"keyword", "pool"}
@@ -163,3 +168,105 @@ def generate_title(
         return rng.choice(pool) if pool else ""
 
     return _TOKEN_RE.sub(_replace, option.template)
+
+
+# ---------------------------------------------------------------------------
+# Keyword-only query extraction
+# ---------------------------------------------------------------------------
+
+_MULTI_SPACE_RE = re.compile(r"\s{2,}")
+
+
+def extract_keyword_query(option: TitleOption) -> str:
+    """
+    Resolve only ``{keyword:*}`` tokens and strip ``{pool:*}`` tokens.
+
+    Returns the keyword-only part of the title, used as the search
+    query for duplicate checking.
+
+    Example::
+
+        template = "{keyword:region} 중등 {keyword:subject}학원 {pool:hook}"
+        values   = {"region": "대치동", "subject": "수학"}
+        → "대치동 중등 수학학원"
+
+    Consecutive spaces left by removed pool tokens are collapsed.
+    """
+    def _replace(match: re.Match) -> str:
+        raw = match.group(1)
+        token_type, slug = _parse_token(raw)
+        if token_type == "keyword":
+            return option.values[slug]
+        # pool → empty string (stripped from query)
+        return ""
+
+    raw = _TOKEN_RE.sub(_replace, option.template)
+    return _MULTI_SPACE_RE.sub(" ", raw).strip()
+
+
+# ---------------------------------------------------------------------------
+# Unique title generation (with duplicate check)
+# ---------------------------------------------------------------------------
+
+def generate_unique_title(
+    option: TitleOption,
+    checker: TitleChecker,
+    max_attempts: int = 10,
+) -> str:
+    """
+    Generate a title that does not already exist in search results.
+
+    Search strategy:
+        query = keyword-only part (e.g. "대치동 중등 수학학원")
+        title = full title including hook (e.g. "대치동 중등 수학학원 솔직 리뷰")
+
+        Search Naver for *query*, check if *title* appears in results.
+        If duplicate → re-roll pool tokens (increment seed) and retry.
+
+    Args:
+        option:       TitleOption (template + values + pools).
+        checker:      TitleChecker implementation.
+        max_attempts: Maximum re-roll attempts (default 10).
+
+    Returns:
+        A title string that is *not* a duplicate, or the last
+        generated title with a warning if all attempts are exhausted.
+    """
+    base_seed = option.seed or 0
+    query = extract_keyword_query(option)
+    seen: set[str] = set()
+    title = ""
+
+    logger.info("title_check: query=%r (max %d attempts)", query, max_attempts)
+
+    for attempt in range(max_attempts):
+        trial_option = TitleOption(
+            template=option.template,
+            values=option.values,
+            pools=option.pools,
+            seed=base_seed + attempt,
+        )
+        title = generate_title(trial_option)
+
+        # Skip if we already tried this exact title (small pool)
+        if title in seen:
+            continue
+        seen.add(title)
+
+        if not checker.is_duplicate(title, query):
+            logger.info(
+                "title_check: unique (attempt %d/%d): %s",
+                attempt + 1, max_attempts, title,
+            )
+            return title
+
+        logger.warning(
+            "title_check: duplicate (attempt %d/%d): %s",
+            attempt + 1, max_attempts, title,
+        )
+
+    logger.error(
+        "title_check: exhausted %d attempts — using last title: %s",
+        max_attempts, title,
+    )
+    return title

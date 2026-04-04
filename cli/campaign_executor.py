@@ -20,8 +20,9 @@ from typing import Any, Callable, TypeVar
 
 from automator.contracts import PostingSpec
 from automator.editor import BlogEditor
+from automator.ports import TitleChecker
 from automator.runner import JobRunner
-from automator.title_generator import generate_title
+from automator.title_generator import generate_title, generate_unique_title
 
 from cli.combo_builder import Combo, build_combos
 from cli.spec_builder import build_spec, merge_account_run
@@ -224,6 +225,7 @@ def _apply_caps(
 # ---------------------------------------------------------------------------
 
 EditorFactory = Callable[[dict[str, Any]], BlogEditor]
+CheckerFactory = Callable[[dict[str, Any]], TitleChecker]
 
 
 class CampaignExecutor:
@@ -233,6 +235,7 @@ class CampaignExecutor:
     Dependencies (optional — defaults support dry-run):
         runner:           JobRunner for live execution.
         editor_factory:   account_dict → BlogEditor for live execution.
+        checker_factory:  account_dict → TitleChecker for title dedup.
 
     Philosophy:
         어떤 프로세스든 실패하면 즉시 에러를 던지고 다음 조합으로 넘어간다.
@@ -243,9 +246,11 @@ class CampaignExecutor:
         self,
         runner: JobRunner | None = None,
         editor_factory: EditorFactory | None = None,
+        checker_factory: CheckerFactory | None = None,
     ) -> None:
         self._runner = runner
         self._editor_factory = editor_factory
+        self._checker_factory = checker_factory
         self._seq_next_at: datetime | None = None
 
     def preview(
@@ -463,6 +468,19 @@ class CampaignExecutor:
                     result.record_failure(str(exc))
                 return
 
+        # Create title checker if enabled
+        tc_config = config.get("title_check", {})
+        checker: TitleChecker | None = None
+        if tc_config.get("enabled") and self._checker_factory is not None:
+            try:
+                checker = self._checker_factory(account)
+                logger.info("[%s] 제목 중복 검사 활성화", username)
+            except Exception as exc:
+                logger.warning(
+                    "[%s] title_check 초기화 실패 — 비활성화: %s",
+                    username, exc,
+                )
+
         succeeded_in_batch = 0
 
         for i, combo in enumerate(combos):
@@ -477,7 +495,15 @@ class CampaignExecutor:
             title = ""
             try:
                 spec = build_spec(combo, config, account_idx)
-                title = generate_title(spec.title)
+
+                if checker is not None:
+                    title = generate_unique_title(
+                        spec.title,
+                        checker,
+                        max_attempts=tc_config.get("max_attempts", 10),
+                    )
+                else:
+                    title = generate_title(spec.title)
 
                 # Sequential mode: compute schedule_at for each post progressively
                 spec = self._resolve_sequential(spec, i, config, progress)

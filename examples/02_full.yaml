@@ -36,6 +36,8 @@ pools:
   prefix: [검증된, 전문, 추천]
   suffix: [강력 추천, 즉시 가능]
 
+title_check: true
+
 post:
   - h2: "{keyword:region} {keyword:subject} 과외 소개"
   - paragraph: "{keyword:region} {keyword:subject} 과외를 자연스럽게 소개해줘"

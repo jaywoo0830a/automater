@@ -112,7 +112,42 @@ def _normalize(raw: dict[str, Any]) -> dict[str, Any]:
     config.setdefault("assets", ".")
     config.setdefault("publish", {})
     config.setdefault("run", {})
+    config["title_check"] = _normalize_title_check(config.get("title_check"))
     return config
+
+
+def _normalize_title_check(raw: Any) -> dict[str, Any]:
+    """Normalize title_check to a dict with defaults.
+
+    Accepted forms::
+
+        title_check: true               → enabled, defaults
+        title_check: false              → disabled
+        title_check:                    → disabled (None)
+          max_attempts: 10
+          match: exact
+          delay: 1s ~ 2s
+    """
+    if raw is None or raw is False:
+        return {"enabled": False}
+
+    if raw is True:
+        return {
+            "enabled": True,
+            "max_attempts": 10,
+            "match": "exact",
+            "delay": "1s ~ 2s",
+        }
+
+    if isinstance(raw, dict):
+        return {
+            "enabled": True,
+            "max_attempts": int(raw.get("max_attempts", 10)),
+            "match": str(raw.get("match", "exact")),
+            "delay": str(raw.get("delay", "1s ~ 2s")),
+        }
+
+    return {"enabled": False}
 
 
 # ---------------------------------------------------------------------------
@@ -194,6 +229,63 @@ def _validate_semantic(config: dict[str, Any]) -> None:
                     f"Token '{{map:{slug}}}' references undefined map. "
                     f"Available: {sorted(maps.keys())}"
                 )
+
+    _validate_title_check(config, pools)
+
+
+def _validate_title_check(config: dict[str, Any], pools: dict) -> None:
+    """Validate title_check config against titles and pools."""
+    tc = config.get("title_check", {})
+    if not tc.get("enabled"):
+        return
+
+    # match must be "exact" or "contains"
+    match_mode = tc.get("match", "exact")
+    if match_mode not in ("exact", "contains"):
+        raise ConfigError(
+            f"title_check.match must be 'exact' or 'contains', "
+            f"got '{match_mode}'"
+        )
+
+    # max_attempts must be positive
+    max_attempts = tc.get("max_attempts", 10)
+    if not isinstance(max_attempts, int) or max_attempts < 1:
+        raise ConfigError(
+            f"title_check.max_attempts must be a positive integer, "
+            f"got {max_attempts!r}"
+        )
+
+    # titles must contain at least one {pool:*} token for re-rolling
+    titles = config.get("titles", [])
+    has_pool = any(
+        "pool:" in raw
+        for t in titles
+        for raw in _DSL_TOKEN_RE.findall(t)
+    )
+    if not has_pool:
+        raise ConfigError(
+            "title_check requires at least one {pool:*} token in titles — "
+            "without pools there is nothing to re-roll on duplicate"
+        )
+
+    # Warn (not error) if pool sizes are small relative to max_attempts
+    import logging
+    _logger = logging.getLogger(__name__)
+    for t in titles:
+        pool_slugs = [
+            raw.split(":", 1)[1]
+            for raw in _DSL_TOKEN_RE.findall(t)
+            if ":" in raw and raw.split(":", 1)[0] == "pool"
+        ]
+        total_combos = 1
+        for slug in pool_slugs:
+            total_combos *= len(pools.get(slug, []))
+        if total_combos < max_attempts:
+            _logger.warning(
+                "title_check: pool combinations (%d) < max_attempts (%d) "
+                "for template %r — some attempts may repeat",
+                total_combos, max_attempts, t,
+            )
 
 
 def _extract_strings(obj: Any) -> list[str]:

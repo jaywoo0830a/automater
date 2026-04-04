@@ -33,6 +33,22 @@ class ImageProcessor(ABC):
         """Apply transformations described by *block*. Returns JPEG bytes."""
 
 
+class TitleChecker(ABC):
+    """Check whether a title already exists on the target platform."""
+
+    @abstractmethod
+    def is_duplicate(self, title: str, query: str) -> bool:
+        """Search for *query* and return True if *title* appears in results.
+
+        Args:
+            title: Full generated title to match against results.
+            query: Keyword-only part used as the search query.
+        """
+
+    def close(self) -> None:  # noqa: B027
+        """Release resources (optional)."""
+
+
 class SelectorSource(ABC):
     """Load platform-specific selector data."""
 
