@@ -42,6 +42,7 @@ from gui.tabs.maps_tab import MapsTab
 from gui.tabs.post_tab import PostTab
 from gui.tabs.publish_tab import PublishTab
 from gui.tabs.style_tab import StyleTab
+from gui.tabs.title_check_tab import TitleCheckTab
 from gui.tabs.run_tab import RunTab
 
 _NAME_ROLE = Qt.ItemDataRole.UserRole  # 캠페인 고유 이름 저장용
@@ -118,6 +119,7 @@ class MainWindow(QMainWindow):
         self._post_tab = PostTab()
         self._publish_tab = PublishTab()
         self._style_tab = StyleTab()
+        self._title_check_tab = TitleCheckTab()
         self._run_tab = RunTab()
 
         self._accounts_tab.set_platform_tab(self._platform_tab)
@@ -130,6 +132,7 @@ class MainWindow(QMainWindow):
         self._tabs.addTab(self._browser_tab, "브라우저")
         self._tabs.addTab(self._keywords_tab, "키워드 / 풀")
         self._tabs.addTab(self._titles_tab, "제목")
+        self._tabs.addTab(self._title_check_tab, "제목 검사")
         self._tabs.addTab(self._maps_tab, "맵")
         self._tabs.addTab(self._post_tab, "포스트 블록")
         self._tabs.addTab(self._publish_tab, "발행")
@@ -375,6 +378,7 @@ class MainWindow(QMainWindow):
         config.update(self._browser_tab.to_dict())
         config.update(self._accounts_tab.to_dict())
         config.update(self._titles_tab.to_dict())
+        config.update(self._title_check_tab.to_dict())
         config.update(self._keywords_tab.to_dict())
         config.update(self._maps_tab.to_dict())
         config.update(self._post_tab.to_dict())
@@ -392,6 +396,7 @@ class MainWindow(QMainWindow):
         self._accounts_tab.from_dict(config)
         self._browser_tab.from_dict(config)
         self._titles_tab.from_dict(config)
+        self._title_check_tab.from_dict(config)
         self._keywords_tab.from_dict(config)
         self._maps_tab.from_dict(config)
         self._post_tab.from_dict(config)
