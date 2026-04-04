@@ -69,6 +69,7 @@ def build_spec(
     loaded_maps = load_maps(config.get("maps"), base_dir=config.get("_base_dir", "."))
     body = _build_body(combo, config, loaded_maps)
     publish_opt, schedule_at = _build_publish(config.get("publish", {}))
+    align = _parse_align(config.get("style"))
 
     return PostingSpec(
         account=account_opt,
@@ -76,6 +77,7 @@ def build_spec(
         body=tuple(body),
         publish=publish_opt,
         schedule_at=schedule_at,
+        align=align,
     )
 
 
@@ -718,6 +720,26 @@ def _build_publish(publish_config: dict[str, Any]) -> tuple[PublishOption, datet
         visibility=publish_config.get("visibility", "public"),
     )
     return opt, schedule_at
+
+
+# ---------------------------------------------------------------------------
+# Style — align
+# ---------------------------------------------------------------------------
+
+_VALID_ALIGNMENTS = {"left", "center", "right"}
+
+
+def _parse_align(style_config: dict[str, Any] | None) -> str | None:
+    """Extract align from style config. Returns None if not specified."""
+    if not style_config or not isinstance(style_config, dict):
+        return None
+    raw = style_config.get("align")
+    if raw is None:
+        return None
+    value = str(raw).strip().lower()
+    if value not in _VALID_ALIGNMENTS:
+        return None
+    return value
 
 
 # ---------------------------------------------------------------------------

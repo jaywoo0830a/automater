@@ -17,6 +17,7 @@ from datetime import datetime
 
 from automator.options import (
     AccountOption,
+    Alignment,
     TitleOption,
     Section,
     PublishOption,
@@ -32,9 +33,12 @@ class PostingSpec:
     automator.runner.JobRunner executes it against a BlogEditor.
 
     schedule_at: None = immediate publish, datetime = scheduled publish.
+    align:       Text alignment for the entire post (left/center/right).
+                 None = use editor default (left).
     """
     account:     AccountOption
     title:       TitleOption | str      = ""
     body:        tuple[Section, ...]    = ()
     publish:     PublishOption          = field(default_factory=PublishOption)
     schedule_at: datetime | None       = None
+    align:       Alignment | None      = None

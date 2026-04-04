@@ -332,8 +332,40 @@ editor_link_confirm:
   - type: role
     value: button
     name: 링크 입력
+align_trigger:
+  description: 툴바 — 정렬 드롭다운 트리거 (CSS 우선, 상태 무관 셀렉터)
+  locators:
+  - type: css
+    value: button.se-property-toolbar-drop-down-button.__se-sentry[class*="se-align"]
+  - type: role
+    value: button
+    name: 정렬
+align_left:
+  description: 정렬 — 왼쪽 정렬 (CSS 우선)
+  locators:
+  - type: css
+    value: button.__se-sentry.se-toolbar-option-icon-button.se-toolbar-option-align-left-button
+  - type: role
+    value: button
+    name: 왼쪽 정렬
+align_center:
+  description: 정렬 — 가운데 정렬 (CSS 우선)
+  locators:
+  - type: css
+    value: button.__se-sentry.se-toolbar-option-icon-button.se-toolbar-option-align-center-button
+  - type: role
+    value: button
+    name: 가운데 정렬
+align_right:
+  description: 정렬 — 오른쪽 정렬 (CSS 우선)
+  locators:
+  - type: css
+    value: button.__se-sentry.se-toolbar-option-icon-button.se-toolbar-option-align-right-button
+  - type: role
+    value: button
+    name: 오른쪽 정렬
 list_trigger:
-  description: 툴바 — ��록 드롭다운 트리거 (CSS 우선)
+  description: 툴바 — 목록 드롭다운 트리거 (CSS 우선)
   locators:
   - type: css
     value: button.se-property-toolbar-drop-down-button.se-list-bullet-toolbar-button.__se-sentry

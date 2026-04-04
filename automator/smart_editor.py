@@ -25,6 +25,7 @@ from pathlib import Path
 from playwright.sync_api import Page
 
 from automator.editor import BlogEditor, CursorPosition
+from automator.options import Alignment
 from automator.selector_loader import SelectorLoader
 from automator.ports import SelectorSource
 from automator.browser_actions import (
@@ -162,6 +163,46 @@ class SmartEditorOne(BlogEditor):
         # Deadline exceeded — one last sweep and continue
         for k in _OVERLAYS:
             click_if_visible(sel.locator(frame, k).first, timeout_ms=1_000)
+
+    _ALIGN_KEY_MAP = {
+        "left":   "align_left",
+        "center": "align_center",
+        "right":  "align_right",
+    }
+
+    def set_align(self, align: Alignment) -> None:
+        """
+        Set text alignment for the entire post.
+
+        Sequence:
+            0. Click last paragraph to position cursor in body area
+            1. Select all text (Ctrl+A)
+            2. Click align_trigger ("정렬" dropdown)
+            3. Click align_{direction}
+
+        Falls back silently if selectors are not found.
+        """
+        frame = self._frame()
+        sel   = self._sel()
+
+        # Step 0: Position cursor in body area
+        last_para = sel.locator(frame, "editor_paragraph_container").last
+        last_para.wait_for(state="visible", timeout=5_000)
+        last_para.click()
+
+        # Step 1: Select all content
+        self._page.keyboard.press("Control+a")
+
+        # Step 2: Open align dropdown
+        trigger = sel.locator(frame, "align_trigger")
+        if not click_if_visible(trigger, timeout_ms=3_000):
+            return
+
+        # Step 3: Select alignment
+        align_key = self._ALIGN_KEY_MAP.get(align, "align_left")
+        align_btn = sel.locator(frame, align_key)
+        if not click_if_visible(align_btn, timeout_ms=3_000):
+            return
 
     def write_title(self, title: str) -> None:
         """Click title placeholder and type title."""

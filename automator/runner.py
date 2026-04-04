@@ -57,6 +57,10 @@ class JobRunner:
     ) -> None:
         """Drive the editor to publish the post."""
         editor.open()
+
+        if post.align is not None:
+            editor.set_align(post.align)
+
         editor.write_title(post.title)
 
         image_upload_count = 0

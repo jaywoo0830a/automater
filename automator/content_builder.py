@@ -49,6 +49,7 @@ class ContentBuilder:
                 steps=[ParagraphStep(text=stub, newlines=2)],
                 tags=spec.publish.tags,
                 schedule_at=spec.schedule_at,
+                align=spec.align,
             )
 
         ctx = ContentContext(
@@ -66,5 +67,6 @@ class ContentBuilder:
             steps=steps_out,
             tags=spec.publish.tags,
             schedule_at=spec.schedule_at,
+            align=spec.align,
             tmp_files=ctx.tmp_files,
         )

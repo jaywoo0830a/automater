@@ -33,6 +33,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
+from automator.options import Alignment
+
 
 # ---------------------------------------------------------------------------
 # Cursor position
@@ -73,6 +75,15 @@ class BlogEditor(ABC):
     @abstractmethod
     def write_title(self, title: str) -> None:
         """Type title into the title field."""
+
+    @abstractmethod
+    def set_align(self, align: Alignment) -> None:
+        """
+        Set text alignment for the entire post.
+
+        Args:
+            align: "left", "center", or "right".
+        """
 
     @abstractmethod
     def insert_text(self, text: str, newlines: int = 2) -> None:
@@ -264,4 +275,5 @@ class _PostContent:
     steps:       list[PostStep]  = field(default_factory=list)
     tags:        list[str]       = field(default_factory=list)
     schedule_at: datetime | None = None
+    align:       Alignment | None = None
     tmp_files:   list[str]       = field(default_factory=list)

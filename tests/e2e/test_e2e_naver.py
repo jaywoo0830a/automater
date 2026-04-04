@@ -275,6 +275,25 @@ def test_pipeline_list_with_quote_and_divider(editor: SmartEditorOne, account: A
 
 
 # ---------------------------------------------------------------------------
+# Pipeline: align
+# ---------------------------------------------------------------------------
+
+@pytest.mark.slow
+@pytest.mark.parametrize("align", ["left", "center", "right"])
+def test_pipeline_align(editor: SmartEditorOne, account: AccountOption, align: str):
+    """글 전체 정렬 — left/center/right 각각 적용 후 본문 입력."""
+    spec = PostingSpec(
+        account=account,
+        title=f"정렬 테스트 ({align})",
+        body=(Section(blocks=(
+            ParagraphBlock(prompt="정렬이 적용된 본문"),
+        )),),
+        align=align,
+    )
+    _run_spec(spec, editor)
+
+
+# ---------------------------------------------------------------------------
 # Pipeline: divider
 # ---------------------------------------------------------------------------
 

@@ -50,6 +50,9 @@ class _RecordingEditor(BlogEditor):
     def insert_quote(self, text):
         self.calls.append(("insert_quote", text))
 
+    def set_align(self, align):
+        self.calls.append(("set_align", align))
+
     def insert_list(self, items, ordered=False):
         self.calls.append(("insert_list", items, ordered))
 
