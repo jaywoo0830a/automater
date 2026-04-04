@@ -293,6 +293,7 @@ def test_pipeline_align(editor: SmartEditorOne, account: AccountOption, align: s
     _run_spec(spec, editor)
 
 
+
 # ---------------------------------------------------------------------------
 # Pipeline: tags
 # ---------------------------------------------------------------------------

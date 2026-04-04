@@ -204,6 +204,9 @@ class SmartEditorOne(BlogEditor):
         if not click_if_visible(align_btn, timeout_ms=3_000):
             return
 
+        # Step 4: Deselect — click bottom to clear Ctrl+A selection overlay
+        self._click_editor_bottom(frame)
+
     def write_title(self, title: str) -> None:
         """Click title placeholder and type title."""
         frame = self._frame()
