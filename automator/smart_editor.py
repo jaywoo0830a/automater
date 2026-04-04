@@ -179,8 +179,11 @@ class SmartEditorOne(BlogEditor):
             1. Select all text (Ctrl+A)
             2. Click align_trigger ("정렬" dropdown)
             3. Click align_{direction}
+            4. Dismiss selection (keyboard Escape + click bottom)
 
-        Falls back silently if selectors are not found.
+        The se-is-blurred overlay from Ctrl+A can intercept pointer
+        events on slow connections (VPS/VNC). Keyboard-based deselect
+        is immune to overlay interception.
         """
         frame = self._frame()
         sel   = self._sel()
@@ -196,16 +199,18 @@ class SmartEditorOne(BlogEditor):
         # Step 2: Open align dropdown
         trigger = sel.locator(frame, "align_trigger")
         if not click_if_visible(trigger, timeout_ms=3_000):
+            self._dismiss_selection()
             return
 
         # Step 3: Select alignment
         align_key = self._ALIGN_KEY_MAP.get(align, "align_left")
         align_btn = sel.locator(frame, align_key)
         if not click_if_visible(align_btn, timeout_ms=3_000):
+            self._dismiss_selection()
             return
 
-        # Step 4: Deselect — click bottom to clear Ctrl+A selection overlay
-        self._click_editor_bottom(frame)
+        # Step 4: Dismiss selection overlay
+        self._dismiss_selection()
 
     def write_title(self, title: str) -> None:
         """Click title placeholder and type title."""
@@ -562,17 +567,29 @@ class SmartEditorOne(BlogEditor):
 
         'end'   -> click last paragraph, press Ctrl+End
         'start' -> click first paragraph, press Ctrl+Home
+
+        Dismisses selection overlays (se-is-blurred) that intercept
+        pointer events after image upload or alignment changes.
+        Uses keyboard Escape first (overlay-immune), then click.
+        Falls back to force click if normal click is intercepted.
         """
         frame = self._frame()
         sel   = self._sel()
-        container = sel.locator(frame, "editor_paragraph_container")
 
-        if position == "start":
-            container.first.click()
-            self._page.keyboard.press("Control+Home")
-        else:
-            container.last.click()
-            self._page.keyboard.press("Control+End")
+        # Dismiss selection overlay (keyboard is immune to overlay interception)
+        self._dismiss_selection()
+
+        container = sel.locator(frame, "editor_paragraph_container")
+        target = container.first if position == "start" else container.last
+        key = "Control+Home" if position == "start" else "Control+End"
+
+        try:
+            target.click(timeout=5_000)
+        except Exception:
+            # Force click bypasses Playwright's overlay interception checks
+            target.click(force=True, timeout=5_000)
+
+        self._page.keyboard.press(key)
 
     def schedule(self, at: datetime) -> None:
         """
@@ -766,6 +783,17 @@ class SmartEditorOne(BlogEditor):
             else:
                 self._sel_cache = SelectorLoader.load(_EDITOR_JSON)
         return self._sel_cache
+
+    def _dismiss_selection(self) -> None:
+        """
+        Dismiss any active text selection via keyboard.
+
+        Keyboard actions are immune to the se-is-blurred overlay that
+        intercepts mouse clicks. Pressing Escape clears the selection
+        without moving the cursor out of the editor.
+        """
+        self._page.keyboard.press("Escape")
+        time.sleep(0.1)
 
     def _click_editor_bottom(self, frame) -> None:
         """
