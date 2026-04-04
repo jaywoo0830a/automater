@@ -189,28 +189,22 @@ class SmartEditorOne(BlogEditor):
         sel   = self._sel()
 
         # Step 0: Position cursor in body area
-        last_para = sel.locator(frame, "editor_paragraph_container").last
-        last_para.wait_for(state="visible", timeout=5_000)
-        last_para.click()
+        self._click_last_paragraph(frame)
 
-        # Step 1: Select all content
+        # Step 1: Select all → align → deselect
         self._page.keyboard.press("Control+a")
 
-        # Step 2: Open align dropdown
         trigger = sel.locator(frame, "align_trigger")
         if not click_if_visible(trigger, timeout_ms=3_000):
-            self._dismiss_selection()
+            self._page.keyboard.press("Escape")
             return
 
-        # Step 3: Select alignment
         align_key = self._ALIGN_KEY_MAP.get(align, "align_left")
         align_btn = sel.locator(frame, align_key)
-        if not click_if_visible(align_btn, timeout_ms=3_000):
-            self._dismiss_selection()
-            return
+        click_if_visible(align_btn, timeout_ms=3_000)
 
-        # Step 4: Dismiss selection overlay
-        self._dismiss_selection()
+        # Deselect
+        self._page.keyboard.press("Escape")
 
     def write_title(self, title: str) -> None:
         """Click title placeholder and type title."""
@@ -230,11 +224,7 @@ class SmartEditorOne(BlogEditor):
         Presses Enter newlines times after typing (default: 2).
         After long text, waits for the editor DOM to catch up.
         """
-        frame     = self._frame()
-        sel       = self._sel()
-        last_para = sel.locator(frame, "editor_paragraph_container").last
-        last_para.wait_for(state="visible", timeout=5_000)
-        last_para.click()
+        self._click_last_paragraph()
 
         # keyboard.type()는 \n을 Enter로 변환하지 않으므로 직접 처리
         lines = text.split("\n")
@@ -284,9 +274,7 @@ class SmartEditorOne(BlogEditor):
         sel   = self._sel()
 
         # Step 0: Position cursor in body area (toolbar is inactive without this)
-        last_para = sel.locator(frame, "editor_paragraph_container").last
-        last_para.wait_for(state="visible", timeout=5_000)
-        last_para.click()
+        self._click_last_paragraph(frame)
 
         # Step 1: Open paragraph style dropdown
         trigger = sel.locator(frame, "heading_trigger")
@@ -317,8 +305,7 @@ class SmartEditorOne(BlogEditor):
         click_if_visible(bold_btn, timeout_ms=3_000)
 
         # Step 6: Click paragraph to deselect text, then Enter to exit subtitle
-        last_para = sel.locator(frame, "editor_paragraph_container").last
-        last_para.click()
+        self._click_last_paragraph(frame)
         self._page.keyboard.press("Enter")
 
     def insert_quote(self, text: str) -> None:
@@ -338,9 +325,7 @@ class SmartEditorOne(BlogEditor):
         sel   = self._sel()
 
         # Step 0: Position cursor in body area
-        last_para = sel.locator(frame, "editor_paragraph_container").last
-        last_para.wait_for(state="visible", timeout=5_000)
-        last_para.click()
+        self._click_last_paragraph(frame)
 
         # Step 1: Open quote dropdown
         trigger = sel.locator(frame, "quote_trigger")
@@ -380,9 +365,7 @@ class SmartEditorOne(BlogEditor):
         sel   = self._sel()
 
         # Step 0: Position cursor in body area
-        last_para = sel.locator(frame, "editor_paragraph_container").last
-        last_para.wait_for(state="visible", timeout=5_000)
-        last_para.click()
+        self._click_last_paragraph(frame)
 
         # Step 1: Open list dropdown
         trigger = sel.locator(frame, "list_trigger")
@@ -423,9 +406,7 @@ class SmartEditorOne(BlogEditor):
         sel   = self._sel()
 
         # Step 0: Position cursor in body area
-        last_para = sel.locator(frame, "editor_paragraph_container").last
-        last_para.wait_for(state="visible", timeout=5_000)
-        last_para.click()
+        self._click_last_paragraph(frame)
 
         # Step 1: Open divider dropdown
         trigger = sel.locator(frame, "divider_trigger")
@@ -563,32 +544,17 @@ class SmartEditorOne(BlogEditor):
 
     def move_cursor(self, position: CursorPosition = "end") -> None:
         """
-        Reposition the cursor.
+        Reposition the cursor via keyboard only.
 
-        'end'   -> click last paragraph, press Ctrl+End
-        'start' -> click first paragraph, press Ctrl+Home
+        'end'   -> Escape (deselect) + Ctrl+End
+        'start' -> Escape (deselect) + Ctrl+Home
 
-        Dismisses selection overlays (se-is-blurred) that intercept
-        pointer events after image upload or alignment changes.
-        Uses keyboard Escape first (overlay-immune), then click.
-        Falls back to force click if normal click is intercepted.
+        No clicking — each block method already clicks the paragraph
+        it needs. This only ensures the cursor escapes image/quote
+        blocks so the next block's click lands correctly.
         """
-        frame = self._frame()
-        sel   = self._sel()
-
-        # Dismiss selection overlay (keyboard is immune to overlay interception)
-        self._dismiss_selection()
-
-        container = sel.locator(frame, "editor_paragraph_container")
-        target = container.first if position == "start" else container.last
+        self._page.keyboard.press("Escape")
         key = "Control+Home" if position == "start" else "Control+End"
-
-        try:
-            target.click(timeout=5_000)
-        except Exception:
-            # Force click bypasses Playwright's overlay interception checks
-            target.click(force=True, timeout=5_000)
-
         self._page.keyboard.press(key)
 
     def schedule(self, at: datetime) -> None:
@@ -784,16 +750,20 @@ class SmartEditorOne(BlogEditor):
                 self._sel_cache = SelectorLoader.load(_EDITOR_JSON)
         return self._sel_cache
 
-    def _dismiss_selection(self) -> None:
+    def _click_last_paragraph(self, frame=None) -> None:
         """
-        Dismiss any active text selection via keyboard.
+        Click the last paragraph with force=True.
 
-        Keyboard actions are immune to the se-is-blurred overlay that
-        intercepts mouse clicks. Pressing Escape clears the selection
-        without moving the cursor out of the editor.
+        force=True bypasses Playwright's overlay interception checks.
+        Needed because image selection overlays (se-selection,
+        se-floating-material-container) cover paragraphs after upload.
         """
-        self._page.keyboard.press("Escape")
-        time.sleep(0.1)
+        if frame is None:
+            frame = self._frame()
+        sel = self._sel()
+        target = sel.locator(frame, "editor_paragraph_container").last
+        target.wait_for(state="visible", timeout=5_000)
+        target.click(force=True)
 
     def _click_editor_bottom(self, frame) -> None:
         """
