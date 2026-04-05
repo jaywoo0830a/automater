@@ -232,7 +232,7 @@ def generate_unique_title(
         A title string that is *not* a duplicate, or the last
         generated title with a warning if all attempts are exhausted.
     """
-    base_seed = option.seed or 0
+    base_seed = option.seed if option.seed is not None else random.randint(0, 2**31)
     query = extract_keyword_query(option)
     seen: set[str] = set()
     title = ""

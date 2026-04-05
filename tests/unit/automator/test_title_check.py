@@ -115,20 +115,18 @@ class TestGenerateUniqueTitle:
         assert "수학" in title
         assert len(checker.checked) == 1
 
-    def test_retries_on_duplicate(self, option):
-        # Generate the first title to mark it as duplicate
-        first_option = TitleOption(
-            template=option.template,
-            values=option.values,
-            pools=option.pools,
-            seed=0,
+    def test_retries_on_duplicate(self):
+        """All pool values except one are duplicates → must retry."""
+        option = TitleOption(
+            template="{keyword:region} {pool:hook}",
+            values={"region": "강남"},
+            pools={"hook": ("A", "B")},
+            seed=42,  # deterministic: seed=42 → "A", seed=43 → "B"
         )
-        first_title = generate_title(first_option)
-
-        checker = StubChecker(duplicates={first_title})
+        checker = StubChecker(duplicates={"강남 A"})
         title = generate_unique_title(option, checker, max_attempts=10)
         assert len(checker.checked) >= 2
-        assert title not in checker.duplicates
+        assert title == "강남 B"
 
     def test_query_is_keyword_only(self, option):
         """checker receives keyword-only query, not full title."""
