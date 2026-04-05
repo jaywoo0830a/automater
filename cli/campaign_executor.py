@@ -465,7 +465,13 @@ class CampaignExecutor:
             checker: TitleChecker | None = None
             try:
                 checker = self._checker_factory(account)
+                logger.info("-" * 50)
                 logger.info("[%s] 제목 중복 검사 시작 (%d개 조합)", username, total)
+                logger.info("  match: %s | delay: %s | max_attempts: %d",
+                            tc_config.get("match", "exact"),
+                            tc_config.get("delay", "1s ~ 2s"),
+                            tc_config.get("max_attempts", 10))
+                logger.info("-" * 50)
             except Exception as exc:
                 logger.warning(
                     "[%s] title_check 초기화 실패 — 비활성화: %s",
@@ -476,6 +482,7 @@ class CampaignExecutor:
                 for i, combo in enumerate(combos):
                     combo_index = combo.index - 1
                     if on_resume == "skip" and progress and progress.is_done(combo_index):
+                        logger.info("[title_check %d/%d] #%d — 이전 완료, 건너뜀", i + 1, total, combo.index)
                         continue
                     try:
                         spec = build_spec(combo, config, account_idx)
@@ -487,8 +494,8 @@ class CampaignExecutor:
                         resolved_titles[combo.index] = title
                     except Exception as exc:
                         logger.warning(
-                            "[%s] title_check 실패 (combo #%d): %s — 기본 제목 사용",
-                            username, combo.index, exc,
+                            "[title_check %d/%d] #%d 실패: %s — 기본 제목 사용",
+                            i + 1, total, combo.index, exc,
                         )
 
                 try:
@@ -496,10 +503,11 @@ class CampaignExecutor:
                 except Exception:
                     pass
 
-                logger.info(
-                    "[%s] 제목 중복 검사 완료 (%d/%d 확정)",
-                    username, len(resolved_titles), total,
-                )
+                logger.info("-" * 50)
+                logger.info("[%s] 제목 중복 검사 완료 (%d/%d 확정)", username, len(resolved_titles), total)
+                for idx, t in resolved_titles.items():
+                    logger.info("  #%d → %s", idx, t)
+                logger.info("-" * 50)
 
         # ----------------------------------------------------------
         # Phase 2: Editor — 확정된 제목으로 포스팅
