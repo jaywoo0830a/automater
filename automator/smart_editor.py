@@ -289,7 +289,16 @@ class SmartEditorOne(BlogEditor):
         self._click_last_paragraph(frame)
 
     def set_representative_media(self, index: int) -> None:
-        """Set representative (thumbnail) image by insertion index."""
+        """Set representative (thumbnail) image by insertion index.
+
+        After selecting the rep image, the image component remains
+        selected — its overlay (.se-selection, .se-floating-material-container)
+        blocks all keyboard input to the text area.
+
+        To escape, click ``div.se-canvas-bottom`` ("본문 추가" area) which
+        deselects the image and moves the cursor to a fresh paragraph.
+        Verified in tests/e2e/test_debug_rep_media.py.
+        """
         if index < 0:
             raise ValueError(f"index must be >= 0, got {index}")
 
@@ -315,14 +324,8 @@ class SmartEditorOne(BlogEditor):
             timeout_ms=5_000,
         )
 
-        # 이미지 선택 오버레이(se-selection, se-floating-material-container)가
-        # 에디터 전체를 덮어 커서/키보드 입력을 차단한다.
-        # Escape → Ctrl+End → 에디터 바닥 클릭 순서로 확실히 해제.
-        self._page.keyboard.press("Escape")
-        time.sleep(0.3)
-        self._page.keyboard.press("Control+End")
-        time.sleep(0.3)
-        self._click_editor_bottom(frame)
+        # 이미지 선택 오버레이 탈출 — 캔버스 하단 "본문 추가" 영역 클릭
+        sel.locator(frame, "editor_canvas_bottom").first.click()
 
     def move_cursor(self, position: CursorPosition = "end") -> None:
         """Reposition cursor via keyboard (no clicking)."""

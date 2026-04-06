@@ -130,6 +130,14 @@ editor_paragraph_container:
   locators:
   - type: css
     value: p.se-text-paragraph
+editor_canvas_bottom:
+  description: 에디터 — 캔버스 하단 "본문 추가" 영역. 이미지 선택 상태 탈출용.
+  locators:
+  - type: css
+    value: div.se-canvas-bottom
+  - type: role
+    value: div
+    name: 본문 추가
 heading_trigger:
   description: '툴바 — 문단 서식 드롭다운 트리거 (기본 텍스트: ''본문'')'
   locators:
