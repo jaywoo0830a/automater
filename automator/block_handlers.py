@@ -14,11 +14,14 @@ Adding a new Block type:
 
 from __future__ import annotations
 
+import logging
 import tempfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
+
+logger = logging.getLogger(__name__)
 
 from automator.editor import (
     PostStep,
@@ -86,7 +89,9 @@ class ParagraphHandler(BlockHandler):
     """ParagraphBlock -> [ParagraphStep]"""
 
     def to_steps(self, block: ParagraphBlock, ctx: ContentContext) -> list[PostStep]:
+        logger.info("  AI 텍스트 생성 중... (프롬프트: %s)", block.prompt[:80])
         text = ctx.text_gen.generate(block.prompt)
+        logger.info("  AI 텍스트 생성 완료 (%d자)", len(text))
         return [ParagraphStep(text=text, newlines=block.newlines, wait_ms=block.wait_ms)]
 
 
@@ -148,9 +153,13 @@ class ImageHandler(BlockHandler):
         path = block.path
         if Path(path).exists():
             raw = Path(block.path).read_bytes()
+            logger.info("  이미지 처리 중: %s (%.1fKB)", Path(path).name, len(raw) / 1024)
             processed = ctx.img_proc.process(raw, block)
             name = _build_filename("preview", block.filename_keyword)
             path = _save_temp(processed, name, ctx)
+            logger.info("  이미지 처리 완료 → %s (%.1fKB)", Path(path).name, len(processed) / 1024)
+        else:
+            logger.warning("  이미지 파일 없음: %s", path)
         return [ImageStep(path=path, link=block.link, wait_ms=block.wait_ms)]
 
 
@@ -161,9 +170,13 @@ class FeaturedImageHandler(BlockHandler):
         path = block.path
         if Path(path).exists():
             raw = Path(block.path).read_bytes()
+            logger.info("  대표이미지 처리 중: %s (%.1fKB)", Path(path).name, len(raw) / 1024)
             processed = ctx.img_proc.process(raw, block)
             name = _build_filename("featured", block.filename_keyword)
             path = _save_temp(processed, name, ctx)
+            logger.info("  대표이미지 처리 완료 → %s (%.1fKB)", Path(path).name, len(processed) / 1024)
+        else:
+            logger.warning("  대표이미지 파일 없음: %s", path)
         return [FeaturedImageStep(path=path, link=block.link, wait_ms=block.wait_ms)]
 
 

@@ -9,6 +9,7 @@ concrete implementations. Concrete instances are injected in __init__.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -18,6 +19,8 @@ from automator.block_handlers import ContentContext, get_handler
 from automator.layout import all_blocks
 from automator.ports import TextGenerator, ImageProcessor
 from automator.title_generator import generate_title
+
+logger = logging.getLogger(__name__)
 
 
 class ContentBuilder:
@@ -42,7 +45,10 @@ class ContentBuilder:
         title = spec.title if isinstance(spec.title, str) else generate_title(spec.title)
         flat_blocks = all_blocks(list(spec.body))
 
+        logger.info("[build] 블록 %d개 처리 시작", len(flat_blocks))
+
         if not flat_blocks:
+            logger.info("[build] 블록 없음 — 기본 텍스트 생성")
             stub = self._text_gen.generate("")
             return _PostContent(
                 title=title,
@@ -59,9 +65,14 @@ class ContentBuilder:
         )
 
         steps_out: list[PostStep] = []
-        for block in flat_blocks:
+        for i, block in enumerate(flat_blocks):
+            block_name = type(block).__name__
             handler = get_handler(block)
-            steps_out.extend(handler.to_steps(block, ctx))
+            logger.info("[build] [%d/%d] %s 변환 중...", i + 1, len(flat_blocks), block_name)
+            new_steps = handler.to_steps(block, ctx)
+            steps_out.extend(new_steps)
+
+        logger.info("[build] 변환 완료 — %d개 스텝 생성, 임시파일 %d개", len(steps_out), len(ctx.tmp_files))
 
         return _PostContent(
             title=title,
