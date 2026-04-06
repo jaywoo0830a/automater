@@ -144,6 +144,11 @@ def start_campaign_vnc(campaign_id: str):
     if not target_username:
         return jsonify({"error": "username required"}), 400
 
+    # mode: "auto" (기본) | "manual"
+    mode = data.get("mode", "auto")
+    if mode not in ("auto", "manual"):
+        return jsonify({"error": f"invalid mode: {mode} (expected 'auto' or 'manual')"}), 400
+
     # YAML에서 계정 정보 조회
     accounts = parse_campaign_accounts(campaign.config_path)
     account = None
@@ -162,7 +167,7 @@ def start_campaign_vnc(campaign_id: str):
         "_base_dir": sessions_dir,
     }
 
-    session = create_vnc_session(account, config)
+    session = create_vnc_session(account, config, mode=mode)
     return jsonify(session.to_dict()), 201
 
 

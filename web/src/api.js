@@ -90,11 +90,11 @@ export async function executeCampaign(campaignId) {
   return res.json();
 }
 
-export async function startCampaignVnc(campaignId, username) {
+export async function startCampaignVnc(campaignId, username, mode = "auto") {
   const res = await fetch(`/campaigns/${campaignId}/sessions/vnc`, {
     method: "POST",
     headers: { ...headers(), "Content-Type": "application/json" },
-    body: JSON.stringify({ username }),
+    body: JSON.stringify({ username, mode }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

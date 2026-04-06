@@ -6,12 +6,23 @@ VNC 기반 원격 로그인 세션 관리.
 Xvfb(가상 디스플레이) + Chromium(headed) + x11vnc + websockify 조합으로
 웹 브라우저에서 원격 로그인을 수행한다.
 
+로그인 모드 (CLI와 동일)
+------------------------
+auto (기본)
+    VNC 세션 시작 후 Playwright keyboard.type()으로 ID/PW를 자동 입력.
+    각 글자마다 실제 keydown/keypress/input/keyup 이벤트가 발생하며
+    80~180ms 랜덤 지터가 들어간다. CAPTCHA/2차 인증은 사용자가 noVNC로 해결.
+
+manual
+    브라우저만 열고 사용자가 noVNC 뷰어에서 직접 ID/PW를 입력.
+
 흐름:
     1. Xvfb 시작 (가상 디스플레이)
     2. Playwright Chromium 실행 (headless=False, DISPLAY=:N)
-    3. x11vnc → websockify 로 WebSocket 노출
-    4. 프론트엔드 noVNC로 원격 브라우저 표시
-    5. 사용자가 로그인 완료 → 세션 저장 → 전체 종료
+    3. (auto 모드) Playwright 키보드로 ID/PW 자동 입력
+    4. x11vnc → websockify 로 WebSocket 노출
+    5. 프론트엔드 noVNC로 원격 브라우저 표시
+    6. 사용자가 로그인 완료 → 세션 저장 → 전체 종료
 """
 
 from __future__ import annotations
@@ -19,6 +30,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import random
 import shutil
 import socket
 import subprocess
@@ -34,6 +46,10 @@ log = logging.getLogger(__name__)
 LOGIN_URL = "https://nid.naver.com/nidlogin.login"
 _MONITOR_TIMEOUT = 300  # 5분
 _POLL_INTERVAL = 2
+
+# 키 입력 간 지터 범위 (ms) — CLI의 session_manager와 동일
+_TYPE_DELAY_MIN = 80
+_TYPE_DELAY_MAX = 180
 
 
 _WS_PORT_RANGE = range(6080, 6090)
@@ -70,10 +86,23 @@ def _find_free_display() -> int:
 class VncLoginSession:
     """하나의 VNC 로그인 세션."""
 
-    def __init__(self, account: dict[str, Any], config: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        account: dict[str, Any],
+        config: dict[str, Any] | None = None,
+        mode: str = "auto",
+    ) -> None:
+        """
+        Args:
+            account: 계정 dict (username, password, blog_id, proxy?).
+            config:  캠페인 config (browser, _base_dir).
+            mode:    "auto" — Playwright 키보드로 자동 입력.
+                     "manual" — 브라우저만 열고 사용자가 직접 입력.
+        """
         self.id = uuid.uuid4().hex[:12]
         self.account = account
         self.config = config or {}
+        self.mode = mode if mode in ("auto", "manual") else "auto"
         self.status = "starting"
         self.websockify_port: int = 0
         self.error: str = ""
@@ -86,7 +115,6 @@ class VncLoginSession:
         self._pw = None
         self._context = None
         self._page = None
-        self._ext_dir: str = ""
         self._user_data_dir: str = ""
         self._lock = threading.Lock()
 
@@ -124,13 +152,8 @@ class VncLoginSession:
             )
             time.sleep(1)
 
-            from cli.session_manager import _build_login_ext
             from automator.stealth import build_stealth_script
 
-            self._ext_dir = _build_login_ext(
-                self.account["username"],
-                self.account["password"],
-            )
             self._user_data_dir = tempfile.mkdtemp(prefix="vnc_profile_")
 
             locale = str(cfg.get("locale", "ko-KR"))
@@ -151,8 +174,6 @@ class VncLoginSession:
                 "color_scheme": cfg.get("color_scheme", "light"),
                 "device_scale_factor": int(cfg.get("device_scale_factor", 1)),
                 "args": [
-                    f"--disable-extensions-except={self._ext_dir}",
-                    f"--load-extension={self._ext_dir}",
                     "--no-sandbox",
                     "--disable-blink-features=AutomationControlled",
                 ],
@@ -194,6 +215,13 @@ class VncLoginSession:
             self._page = self._context.new_page()
             self._page.goto(LOGIN_URL, wait_until="domcontentloaded")
 
+            # auto 모드: Playwright 키보드로 ID/PW 자동 입력
+            if self.mode == "auto":
+                try:
+                    self._auto_fill_credentials()
+                except Exception as exc:
+                    log.warning("[vnc:%s] auto fill failed: %s", self.id, exc)
+
             # 3. x11vnc
             self._vnc_proc = subprocess.Popen(
                 [
@@ -232,6 +260,51 @@ class VncLoginSession:
             self.error = str(exc)
             log.error("[vnc:%s] start failed: %s", self.id, exc)
             self.teardown()
+
+    def _auto_fill_credentials(self) -> None:
+        """Playwright 키보드로 ID/PW를 자동 입력하고 로그인 버튼을 클릭한다.
+
+        CLI의 auto_login과 동일한 패턴:
+          - press_sequentially로 keydown/keypress/input/keyup 발생
+          - 80~180ms 랜덤 지터
+          - Tab으로 포커스 이동
+          - 자연스러운 지연 시뮬레이션
+        """
+        from automator.selector_loader import SelectorLoader
+
+        username = self.account["username"]
+        password = self.account["password"]
+
+        login_sel = SelectorLoader.load("selectors/naver/login.yaml")
+
+        # 1. ID 필드 클릭 + 자동 타이핑
+        id_field = login_sel.locator(self._page, "naver_login_id")
+        id_field.wait_for(state="visible", timeout=10_000)
+        id_field.click()
+        id_field.press_sequentially(
+            username,
+            delay=random.randint(_TYPE_DELAY_MIN, _TYPE_DELAY_MAX),
+        )
+
+        # 2. Tab으로 PW 필드 이동
+        self._page.keyboard.press("Tab")
+        self._page.wait_for_timeout(random.randint(150, 350))
+
+        pw_field = login_sel.locator(self._page, "naver_login_pw")
+        pw_field.wait_for(state="visible", timeout=5_000)
+        pw_field.press_sequentially(
+            password,
+            delay=random.randint(_TYPE_DELAY_MIN, _TYPE_DELAY_MAX),
+        )
+
+        # 3. 사람이 버튼 찾는 시간
+        self._page.wait_for_timeout(random.randint(300, 700))
+
+        # 4. 로그인 버튼 클릭
+        submit_btn = login_sel.locator(self._page, "naver_login_submit")
+        submit_btn.click()
+
+        log.info("[vnc:%s] auto fill completed for %s", self.id, username)
 
     def _monitor_login(self) -> None:
         """로그인 완료를 감지하여 세션을 저장한다."""
@@ -336,8 +409,6 @@ class VncLoginSession:
                 except Exception:
                     pass
 
-            if self._ext_dir:
-                shutil.rmtree(self._ext_dir, ignore_errors=True)
             if self._user_data_dir:
                 shutil.rmtree(self._user_data_dir, ignore_errors=True)
 
@@ -359,6 +430,7 @@ class VncLoginSession:
             "status": self.status,
             "websockify_port": self.websockify_port,
             "username": self.account.get("username", ""),
+            "mode": self.mode,
             "error": self.error,
         }
 
@@ -371,8 +443,12 @@ _sessions: dict[str, VncLoginSession] = {}
 _sessions_lock = threading.Lock()
 
 
-def create_vnc_session(account: dict[str, Any], config: dict[str, Any] | None = None) -> VncLoginSession:
-    session = VncLoginSession(account, config)
+def create_vnc_session(
+    account: dict[str, Any],
+    config: dict[str, Any] | None = None,
+    mode: str = "auto",
+) -> VncLoginSession:
+    session = VncLoginSession(account, config, mode=mode)
     with _sessions_lock:
         _sessions[session.id] = session
     session.start()

@@ -10,9 +10,10 @@ import {
 export default function SessionSetup({ campaignId, onExecuted }) {
   const [accounts, setAccounts] = useState([]);
   const [allReady, setAllReady] = useState(false);
-  const [currentVnc, setCurrentVnc] = useState(null); // { username, sessionId, wsPort, status }
+  const [currentVnc, setCurrentVnc] = useState(null); // { username, sessionId, wsPort, status, mode }
   const [executing, setExecuting] = useState(false);
   const [error, setError] = useState("");
+  const [loginMode, setLoginMode] = useState("auto"); // "auto" | "manual"
 
   // poll campaign session status
   const refreshSessions = useCallback(async () => {
@@ -30,12 +31,12 @@ export default function SessionSetup({ campaignId, onExecuted }) {
     return () => clearInterval(id);
   }, [refreshSessions]);
 
-  // 자동 순차 로그인: missing 계정 중 첫 번째를 자동으로 VNC 시작
+  // 자동 순차 로그인: missing 계정 중 첫 번째를 선택된 모드로 시작
   useEffect(() => {
     if (currentVnc || allReady || accounts.length === 0) return;
     const next = accounts.find((a) => !a.has_session);
-    if (next) startVnc(next.username);
-  }, [accounts, currentVnc, allReady]);
+    if (next) startVnc(next.username, loginMode);
+  }, [accounts, currentVnc, allReady, loginMode]);
 
   // poll VNC session
   useEffect(() => {
@@ -57,11 +58,17 @@ export default function SessionSetup({ campaignId, onExecuted }) {
     return () => clearInterval(id);
   }, [currentVnc?.sessionId, currentVnc?.wsPort]);
 
-  async function startVnc(username) {
+  async function startVnc(username, mode) {
     setError("");
     try {
-      const data = await startCampaignVnc(campaignId, username);
-      setCurrentVnc({ username, sessionId: data.session_id, wsPort: null, status: "starting" });
+      const data = await startCampaignVnc(campaignId, username, mode);
+      setCurrentVnc({
+        username,
+        sessionId: data.session_id,
+        wsPort: null,
+        status: "starting",
+        mode: data.mode || mode,
+      });
     } catch (e) {
       setError(e.message);
     }
@@ -94,12 +101,42 @@ export default function SessionSetup({ campaignId, onExecuted }) {
   const doneCount = accounts.filter((a) => a.has_session).length;
   const totalCount = accounts.length;
 
+  // 모드 토글은 진행 중 세션이 없을 때만 가능
+  const modeToggleDisabled = currentVnc !== null;
+
   return (
     <div className="setup">
       <div className="setup__header">
         <span className="setup__title">
           Session Setup ({doneCount}/{totalCount})
         </span>
+
+        {/* 로그인 모드 토글 */}
+        <div className="setup__mode" role="radiogroup" aria-label="로그인 모드">
+          <label className={`setup__mode-option ${loginMode === "auto" ? "setup__mode-option--active" : ""}`}>
+            <input
+              type="radio"
+              name="loginMode"
+              value="auto"
+              checked={loginMode === "auto"}
+              onChange={() => setLoginMode("auto")}
+              disabled={modeToggleDisabled}
+            />
+            세션 준비 (자동)
+          </label>
+          <label className={`setup__mode-option ${loginMode === "manual" ? "setup__mode-option--active" : ""}`}>
+            <input
+              type="radio"
+              name="loginMode"
+              value="manual"
+              checked={loginMode === "manual"}
+              onChange={() => setLoginMode("manual")}
+              disabled={modeToggleDisabled}
+            />
+            수동 세션 준비
+          </label>
+        </div>
+
         {allReady && (
           <button
             className="setup__execute"
@@ -110,6 +147,13 @@ export default function SessionSetup({ campaignId, onExecuted }) {
           </button>
         )}
       </div>
+
+      {/* 모드 설명 */}
+      <p className="setup__mode-desc">
+        {loginMode === "auto"
+          ? "자동 로그인: Playwright 키보드로 ID/PW 자동 입력. CAPTCHA/2차 인증 시에만 직접 처리하세요."
+          : "수동 로그인: 브라우저만 열리며 ID/PW를 직접 입력하셔야 합니다."}
+      </p>
 
       {/* 계정 상태 목록 */}
       <div className="setup__accounts">
@@ -128,7 +172,8 @@ export default function SessionSetup({ campaignId, onExecuted }) {
       {/* VNC 상태 */}
       {currentVnc && currentVnc.status === "starting" && (
         <div className="setup__vnc-status">
-          Starting browser for <code>{currentVnc.username}</code>...
+          Starting browser for <code>{currentVnc.username}</code>
+          {" ("}{currentVnc.mode === "auto" ? "자동" : "수동"}{")"}...
         </div>
       )}
 
@@ -138,7 +183,9 @@ export default function SessionSetup({ campaignId, onExecuted }) {
             <span>
               <code>{currentVnc.username}</code>
               {" "}&mdash;{" "}
-              <kbd>Ctrl+V</kbd> (ID) → <kbd>Ctrl+V</kbd> (PW) → Login
+              {currentVnc.mode === "auto"
+                ? "자동 로그인 중... CAPTCHA/2차 인증이 뜨면 직접 처리해주세요."
+                : "브라우저에서 직접 ID/PW를 입력해주세요."}
             </span>
             <button className="btn btn--ghost" onClick={handleSkip}>skip</button>
           </div>
