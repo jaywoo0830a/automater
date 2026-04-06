@@ -237,11 +237,7 @@ def generate_unique_title(
     seen: set[str] = set()
     title = ""
 
-    logger.info("=" * 50)
-    logger.info("title_check 시작")
-    logger.info("  검색 쿼리: %s", query)
-    logger.info("  최대 시도: %d회", max_attempts)
-    logger.info("=" * 50)
+    logger.info("[title_check] 검색 쿼리: %s (최대 %d회)", query, max_attempts)
 
     for attempt in range(max_attempts):
         trial_option = TitleOption(
@@ -254,20 +250,20 @@ def generate_unique_title(
 
         # Skip if we already tried this exact title (small pool)
         if title in seen:
-            logger.info("[%d/%d] %r — 이미 시도한 제목, 건너뜀", attempt + 1, max_attempts, title)
+            logger.info("[title_check]   [%d/%d] %r — 이미 시도한 제목, 건너뜀", attempt + 1, max_attempts, title)
             continue
         seen.add(title)
 
-        logger.info("[%d/%d] 후보: %s", attempt + 1, max_attempts, title)
+        logger.info("[title_check]   [%d/%d] 후보: %s", attempt + 1, max_attempts, title)
 
         if not checker.is_duplicate(title, query):
-            logger.info("→ 확정: %s", title)
+            logger.info("[title_check]   → 확정: %s", title)
             return title
 
-        logger.warning("→ 중복! 다음 후보로 재시도...")
+        logger.warning("[title_check]   → 중복! 다음 후보로 재시도...")
 
     logger.error(
-        "title_check: %d회 시도 모두 중복 — 마지막 제목 사용: %s",
+        "[title_check] %d회 시도 모두 중복 — 마지막 제목 사용: %s",
         max_attempts, title,
     )
     return title

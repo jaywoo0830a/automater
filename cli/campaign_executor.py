@@ -306,8 +306,8 @@ class CampaignExecutor:
         mode_label = "DRY-RUN" if dry_run else "LIVE"
         account_names = [acc["username"] for acc, _ in assignments]
         logger.info("=" * 60)
-        logger.info("  캠페인 실행 시작 (%s)", mode_label)
-        logger.info("  총 조합: %d | 계정: %s", len(combos), ", ".join(account_names))
+        logger.info("[campaign] 실행 시작 (%s)", mode_label)
+        logger.info("[campaign] 총 조합: %d | 계정: %s", len(combos), ", ".join(account_names))
         logger.info("=" * 60)
 
         global_run = config.get("run", {})
@@ -326,7 +326,7 @@ class CampaignExecutor:
             # resume 모드: 마지막 예약 시간 복원
             try:
                 self._seq_next_at = datetime.fromisoformat(progress.last_schedule_at)
-                logger.info("  예약 시간 복원: %s", self._seq_next_at.strftime("%H:%M"))
+                logger.info("[campaign] 예약 시간 복원: %s", self._seq_next_at.strftime("%H:%M"))
             except (ValueError, TypeError):
                 pass
         progress.set_total(len(combos))
@@ -337,13 +337,13 @@ class CampaignExecutor:
             self._execute_serial(assignments, config, global_run, dry_run, result, progress, on_resume)
 
         logger.info("=" * 60)
-        logger.info("  캠페인 실행 완료 (%s)", mode_label)
-        logger.info("  성공: %d | 실패: %d",
+        logger.info("[campaign] 실행 완료 (%s)", mode_label)
+        logger.info("[campaign] 성공: %d | 실패: %d",
                      result.total_succeeded, result.total_failed)
         if result.errors:
-            logger.info("  오류 목록:")
+            logger.info("[campaign] 오류 목록:")
             for err in result.errors[:10]:
-                logger.info("    - %s", err)
+                logger.info("[campaign]   - %s", err)
         logger.info("=" * 60)
 
         # 알림 전송
@@ -391,7 +391,7 @@ class CampaignExecutor:
         on_resume: str = "restart",
     ) -> None:
         logger.info(
-            "병렬 실행: %d 계정, max_workers=%d",
+            "[campaign] 병렬 실행: %d 계정, max_workers=%d",
             len(assignments), max_workers,
         )
 
@@ -420,7 +420,7 @@ class CampaignExecutor:
                 try:
                     future.result()
                 except Exception as exc:
-                    logger.error("[PARALLEL] %s 스레드 에러: %s", username, exc)
+                    logger.error("[campaign] %s 스레드 에러: %s", username, exc)
 
     # ------------------------------------------------------------------
     # Internal
@@ -452,7 +452,7 @@ class CampaignExecutor:
         total = len(combos)
 
         logger.info("=" * 50)
-        logger.info("[%s] 배치 시작 (%d개 조합)", username, total)
+        logger.info("[batch] %s — %d개 조합 시작", username, total)
         logger.info("=" * 50)
 
         # ----------------------------------------------------------
@@ -466,15 +466,15 @@ class CampaignExecutor:
             try:
                 checker = self._checker_factory(account)
                 logger.info("-" * 50)
-                logger.info("[%s] 제목 중복 검사 시작 (%d개 조합)", username, total)
-                logger.info("  match: %s | delay: %s | max_attempts: %d",
+                logger.info("[title_check] %s — %d개 조합 검사 시작", username, total)
+                logger.info("[title_check] match: %s | delay: %s | max_attempts: %d",
                             tc_config.get("match", "exact"),
                             tc_config.get("delay", "1s ~ 2s"),
                             tc_config.get("max_attempts", 10))
                 logger.info("-" * 50)
             except Exception as exc:
                 logger.warning(
-                    "[%s] title_check 초기화 실패 — 비활성화: %s",
+                    "[title_check] %s — 초기화 실패, 비활성화: %s",
                     username, exc,
                 )
 
@@ -482,7 +482,7 @@ class CampaignExecutor:
                 for i, combo in enumerate(combos):
                     combo_index = combo.index - 1
                     if on_resume == "skip" and progress and progress.is_done(combo_index):
-                        logger.info("[title_check %d/%d] #%d — 이전 완료, 건너뜀", i + 1, total, combo.index)
+                        logger.info("[title_check] [%d/%d] #%d — 이전 완료, 건너뜀", i + 1, total, combo.index)
                         continue
                     try:
                         spec = build_spec(combo, config, account_idx)
@@ -494,7 +494,7 @@ class CampaignExecutor:
                         resolved_titles[combo.index] = title
                     except Exception as exc:
                         logger.warning(
-                            "[title_check %d/%d] #%d 실패: %s — 기본 제목 사용",
+                            "[title_check] [%d/%d] #%d 실패: %s — 기본 제목 사용",
                             i + 1, total, combo.index, exc,
                         )
 
@@ -504,9 +504,9 @@ class CampaignExecutor:
                     pass
 
                 logger.info("-" * 50)
-                logger.info("[%s] 제목 중복 검사 완료 (%d/%d 확정)", username, len(resolved_titles), total)
+                logger.info("[title_check] %s — %d/%d 확정", username, len(resolved_titles), total)
                 for idx, t in resolved_titles.items():
-                    logger.info("  #%d → %s", idx, t)
+                    logger.info("[title_check]   #%d → %s", idx, t)
                 logger.info("-" * 50)
 
         # ----------------------------------------------------------
@@ -515,11 +515,11 @@ class CampaignExecutor:
         editor = None
         if not dry_run and self._editor_factory is not None:
             try:
-                logger.info("[%s] 에디터 초기화 중...", username)
+                logger.info("[batch] %s — 에디터 초기화 중...", username)
                 editor = self._editor_factory(account)
-                logger.info("[%s] 에디터 준비 완료", username)
+                logger.info("[batch] %s — 에디터 준비 완료", username)
             except Exception as exc:
-                logger.error("[FAIL] %s | 에디터 초기화 실패: %s", username, exc)
+                logger.error("[batch] %s — 에디터 초기화 실패: %s", username, exc)
                 for _ in combos:
                     result.record_failure(str(exc))
                 return
@@ -532,7 +532,7 @@ class CampaignExecutor:
 
             # skip 모드: 이미 완료된 조합 건너뛰기
             if on_resume == "skip" and progress and progress.is_done(combo_index):
-                logger.info("%s [SKIP] %s | #%d (이전 실행에서 완료)", progress_label, username, combo.index)
+                logger.info("[batch] %s SKIP #%d (이전 실행에서 완료)", progress_label, combo.index)
                 continue
 
             title = ""
@@ -546,13 +546,13 @@ class CampaignExecutor:
                 spec = self._resolve_sequential(spec, i, config, progress)
                 at_label = spec.schedule_at.strftime("%H:%M") if spec.schedule_at else "즉시"
 
-                logger.info("%s [START] %s | %s (예약: %s)", progress_label, username, title, at_label)
+                logger.info("[batch] %s START %s | %s (예약: %s)", progress_label, username, title, at_label)
 
                 record = ComboRecord(combo_values=combo.values, title=title)
 
                 if dry_run:
                     result.record_success(record)
-                    logger.info("%s [DRY-RUN] %s | %s -- OK", progress_label, username, title)
+                    logger.info("[batch] %s DRY-RUN %s | %s", progress_label, username, title)
                     succeeded_in_batch += 1
                     continue
 
@@ -560,23 +560,23 @@ class CampaignExecutor:
                 self._run_spec(spec, editor)
                 result.record_success(record)
                 succeeded_in_batch += 1
-                logger.info("%s [DONE] %s | %s -- 성공", progress_label, username, title)
+                logger.info("[batch] %s DONE %s | %s", progress_label, username, title)
                 if progress:
                     progress.mark_done(combo_index)
 
             except Exception as exc:
                 record = ComboRecord(combo_values=combo.values, title=title, error=str(exc))
                 result.record_failure(str(exc), record)
-                logger.error("%s [FAIL] %s | %s -- 다음 조합으로 건너뜀", progress_label, username, str(exc))
+                logger.error("[batch] %s FAIL %s | %s", progress_label, username, str(exc))
                 continue
 
             if not dry_run and i < len(combos) - 1 and interval > 0:
-                logger.info("[%s] %d초 대기 중...", username, interval)
+                logger.info("[batch] %s — %d초 대기 중...", username, interval)
                 time.sleep(interval)
 
-        logger.info("-" * 50)
-        logger.info("[%s] 배치 완료 (%d/%d 성공)", username, succeeded_in_batch, total)
-        logger.info("-" * 50)
+        logger.info("=" * 50)
+        logger.info("[batch] %s — 완료 (%d/%d 성공)", username, succeeded_in_batch, total)
+        logger.info("=" * 50)
 
     def _run_spec(self, spec: PostingSpec, editor: BlogEditor) -> None:
         if self._runner is None:

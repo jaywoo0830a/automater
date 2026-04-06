@@ -119,13 +119,13 @@ class PlaywrightTitleChecker(TitleChecker):
                 _TITLE_SELECTOR, state="attached", timeout=5_000,
             )
         except Exception:
-            logger.info("  검색 결과 없음 → 중복 아님")
+            logger.info("[title_check]     검색 결과 없음 → 중복 아님")
             return False
 
         normalized_title = _normalize(title)
 
         elements = self._page.query_selector_all(_TITLE_SELECTOR)
-        logger.info("  검색 결과 %d건 확인 중...", len(elements))
+        logger.info("[title_check]     검색 결과 %d건 확인 중...", len(elements))
 
         for el in elements:
             # inner_text() strips <mark> tags automatically.
@@ -133,12 +133,12 @@ class PlaywrightTitleChecker(TitleChecker):
 
             if self._match == "contains":
                 if normalized_title in result_title:
-                    logger.info("  중복 발견 (contains): %r", el.inner_text().strip())
+                    logger.info("[title_check]     중복 발견 (contains): %r", el.inner_text().strip())
                     return True
             else:  # exact
                 if result_title == normalized_title:
-                    logger.info("  중복 발견 (exact): %r", el.inner_text().strip())
+                    logger.info("[title_check]     중복 발견 (exact): %r", el.inner_text().strip())
                     return True
 
-        logger.info("  일치 항목 없음 → 중복 아님")
+        logger.info("[title_check]     일치 항목 없음 → 중복 아님")
         return False
