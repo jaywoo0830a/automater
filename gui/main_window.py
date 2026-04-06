@@ -162,7 +162,11 @@ class MainWindow(QMainWindow):
         self._btn_validate = QPushButton("검증")
         self._btn_validate.clicked.connect(self._run_validate)
         self._btn_prepare = QPushButton("세션 준비")
+        self._btn_prepare.setToolTip("자동 로그인 — Playwright 키보드로 ID/PW 자동 입력")
         self._btn_prepare.clicked.connect(self._run_prepare)
+        self._btn_prepare_manual = QPushButton("수동 세션 준비")
+        self._btn_prepare_manual.setToolTip("브라우저만 열고 사용자가 직접 ID/PW 입력")
+        self._btn_prepare_manual.clicked.connect(self._run_prepare_manual)
         self._btn_clear_sessions = QPushButton("세션 비우기")
         self._btn_clear_sessions.clicked.connect(self._clear_sessions)
         self._btn_preview_plan = QPushButton("미리보기")
@@ -188,6 +192,7 @@ class MainWindow(QMainWindow):
         btn_row.addSpacing(SP_LG)
         btn_row.addWidget(self._btn_validate)
         btn_row.addWidget(self._btn_prepare)
+        btn_row.addWidget(self._btn_prepare_manual)
         btn_row.addWidget(self._btn_clear_sessions)
         btn_row.addWidget(self._btn_preview_plan)
         btn_row.addWidget(self._btn_dryrun)
@@ -741,7 +746,10 @@ class MainWindow(QMainWindow):
         self._run_cli("--validate", label="검증")
 
     def _run_prepare(self) -> None:
-        self._run_cli("--prepare", label="세션 준비")
+        self._run_cli("--prepare", label="세션 준비 (자동)")
+
+    def _run_prepare_manual(self) -> None:
+        self._run_cli("--prepare-manual", label="세션 준비 (수동)")
 
     def _run_preview(self) -> None:
         self._run_cli("--preview", label="미리보기")

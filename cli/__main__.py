@@ -68,7 +68,9 @@ def main(argv: list[str] | None = None) -> int:
 
     # Prepare sessions
     if args.prepare:
-        return _prepare_sessions(config)
+        return _prepare_sessions(config, mode="auto")
+    if args.prepare_manual:
+        return _prepare_sessions(config, mode="manual")
 
     executor = CampaignExecutor()
 
@@ -108,7 +110,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--execute", action="store_true", help="Live execution.")
     p.add_argument("--preview", action="store_true", help="Show plan only.")
     p.add_argument("--validate", action="store_true", help="Validate only.")
-    p.add_argument("--prepare", action="store_true", help="Prepare sessions (manual login).")
+    p.add_argument("--prepare", action="store_true", help="Prepare sessions with auto login (Playwright keyboard.type).")
+    p.add_argument("--prepare-manual", action="store_true", help="Prepare sessions with manual login (browser opens, you type).")
     p.add_argument("--limit", type=int, default=None, help="Max combinations.")
     p.add_argument("--account", action="append", default=[], help="Filter account (repeatable).")
     p.add_argument("--resume", action="store_true", help="Resume: skip completed combos.")
@@ -143,8 +146,14 @@ def _filter_accounts(config: dict[str, Any], usernames: list[str]) -> dict[str, 
 # Session prepare
 # ---------------------------------------------------------------------------
 
-def _prepare_sessions(config: dict[str, Any]) -> int:
-    """세션 준비 모드. SessionManager.ensure()를 각 계정에 호출."""
+def _prepare_sessions(config: dict[str, Any], mode: str = "auto") -> int:
+    """세션 준비 모드. SessionManager.ensure()를 각 계정에 호출.
+
+    Args:
+        config: 캠페인 config dict.
+        mode:   "auto" — Playwright 키보드로 자동 입력.
+                "manual" — 브라우저만 열고 사용자가 직접 입력.
+    """
     from playwright.sync_api import sync_playwright
     from cli.session_store import create_session_store
     from cli.session_manager import SessionManager
@@ -154,8 +163,9 @@ def _prepare_sessions(config: dict[str, Any]) -> int:
     accounts = config["accounts"]
     total = len(accounts)
 
+    mode_label = "자동" if mode == "auto" else "수동"
     print(f"\n{'='*50}")
-    print(f"  세션 준비 ({total}개 계정)")
+    print(f"  세션 준비 — {mode_label} 로그인 ({total}개 계정)")
     print(f"{'='*50}\n")
 
     pw = sync_playwright().start()
@@ -166,7 +176,7 @@ def _prepare_sessions(config: dict[str, Any]) -> int:
         username = account["username"]
         print(f"  [{i}/{total}] {username}")
         try:
-            mgr.ensure(account)
+            mgr.ensure(account, mode=mode)
             print(f"          [OK] 준비 완료")
         except Exception as exc:
             log.error("  [FAIL] %s: %s", username, exc)
