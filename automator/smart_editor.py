@@ -315,7 +315,14 @@ class SmartEditorOne(BlogEditor):
             timeout_ms=5_000,
         )
 
-        self._click_last_paragraph(frame)
+        # 이미지 선택 오버레이(se-selection, se-floating-material-container)가
+        # 에디터 전체를 덮어 커서/키보드 입력을 차단한다.
+        # Escape → Ctrl+End → 에디터 바닥 클릭 순서로 확실히 해제.
+        self._page.keyboard.press("Escape")
+        time.sleep(0.3)
+        self._page.keyboard.press("Control+End")
+        time.sleep(0.3)
+        self._click_editor_bottom(frame)
 
     def move_cursor(self, position: CursorPosition = "end") -> None:
         """Reposition cursor via keyboard (no clicking)."""
