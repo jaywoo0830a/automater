@@ -41,7 +41,11 @@ from automator.options import (
 from automator.contracts import PostingSpec
 from automator.editor import BlogEditor
 from automator.title_generator import generate_title, validate_template
-from automator.paragraph_generator import RateLimitError
+from automator.paragraph_generator import (
+    GeminiError, RateLimitError, SafetyBlockError,
+    EmptyResponseError, PromptBlockedError,
+    ServerError, AuthenticationError, InvalidRequestError,
+)
 from automator.block_handlers import BlockHandler, ContentContext, get_handler, HANDLERS
 from automator.ports import TextGenerator, ImageProcessor, SelectorSource
 from automator.stubs import StubTextGenerator, NoopImageProcessor, DictSelectorSource

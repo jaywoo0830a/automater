@@ -1,31 +1,81 @@
 """
 automator/paragraph_generator.py
 ----------------------------------
-Paragraph generation functions.
+Paragraph generation via Gemini API.
 
     generate_paragraph(prompt)  -> str
 
 ENV=production  -> calls Gemini API
 ENV=dev | test  -> returns stub paragraphs (no dependencies)
 
-No class — prompt in, paragraphs out.
+Gemini API error taxonomy (google.dev/gemini-api/docs)
+------------------------------------------------------
+HTTP errors (raised by SDK as exceptions):
+    400 INVALID_ARGUMENT       — malformed request / bad params
+    400 FAILED_PRECONDITION    — billing required (free tier region)
+    403 PERMISSION_DENIED      — bad API key / leaked key
+    404 NOT_FOUND              — invalid model name
+    429 RESOURCE_EXHAUSTED     — rate limit (RPM / TPM / RPD)
+    500 INTERNAL               — Google server error
+    503 UNAVAILABLE            — service overloaded
+    504 DEADLINE_EXCEEDED      — response took too long
+
+Response-level failures (response returned but unusable):
+    prompt blocked             — promptFeedback.blockReason set, no candidates
+    finish_reason=SAFETY       — output blocked by safety filter
+    finish_reason=RECITATION   — output blocked by copyright filter
+    finish_reason=BLOCKLIST    — term blocklist match
+    finish_reason=PROHIBITED_CONTENT — explicitly prohibited
+    finish_reason=SPII         — sensitive PII detected
+    finish_reason=MAX_TOKENS   — truncated (may still be usable)
+    finish_reason=MALFORMED_FUNCTION_CALL — bad function call syntax
+    empty text                 — candidates exist but text is empty
 """
 
 from __future__ import annotations
 
-import json
+import logging
 import os
-import re
 
 from automator.config import is_production
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
 # Exceptions
 # ---------------------------------------------------------------------------
 
-class RateLimitError(Exception):
-    """Raised when the Gemini API returns 429 RESOURCE_EXHAUSTED."""
+class GeminiError(Exception):
+    """Base exception for all Gemini API failures."""
+
+
+class RateLimitError(GeminiError):
+    """429 RESOURCE_EXHAUSTED — rate limit exceeded (RPM/TPM/RPD)."""
+
+
+class SafetyBlockError(GeminiError):
+    """Response blocked by safety / recitation / blocklist / prohibited content / SPII filter."""
+
+
+class EmptyResponseError(GeminiError):
+    """API returned a response but text is empty or candidates are missing."""
+
+
+class PromptBlockedError(GeminiError):
+    """Prompt itself was blocked before generation (promptFeedback.blockReason)."""
+
+
+class ServerError(GeminiError):
+    """500 INTERNAL / 503 UNAVAILABLE / 504 DEADLINE_EXCEEDED — transient server failure."""
+
+
+class AuthenticationError(GeminiError):
+    """403 PERMISSION_DENIED — invalid or leaked API key."""
+
+
+class InvalidRequestError(GeminiError):
+    """400 INVALID_ARGUMENT / FAILED_PRECONDITION / 404 NOT_FOUND — bad request."""
 
 
 # ---------------------------------------------------------------------------
@@ -49,21 +99,11 @@ _STUB_PARAGRAPHS = [
     "모든 사람은 자신의 나라 안에서 자유롭게 이동하고 거주지를 선택할 권리가 있다.",
 ]
 
-_SYSTEM_PROMPT = """\
-You are a Korean blog content writer specializing in education marketing.
-Write natural, warm, and trustworthy paragraphs for a Naver blog post.
-Each paragraph should be 3–5 sentences long and sound like a real person wrote it.
-Do NOT use markdown, bullet points, or headings — plain text only.
-"""
-
-_USER_TEMPLATE = """\
-{user_prompt}
-
-단락 {count}개를 작성해주세요.
-반드시 아래 JSON 배열 형식으로만 응답하세요. 다른 텍스트는 절대 포함하지 마세요.
-
-["단락1 내용", "단락2 내용", ...]
-"""
+# finish_reason → 차단으로 간주하는 값들
+_BLOCKED_REASONS = frozenset({
+    "SAFETY", "RECITATION", "BLOCKLIST",
+    "PROHIBITED_CONTENT", "SPII",
+})
 
 
 # ---------------------------------------------------------------------------
@@ -76,21 +116,22 @@ def generate_paragraph(
     model: str = "",
 ) -> str:
     """
-    Generate a single paragraph from ``prompt``.
+    Send ``prompt`` to Gemini and return the response text.
+
+    프롬프트는 호출자가 완전히 제어한다. 이 함수는 시스템 프롬프트나
+    출력 형식 지시를 일체 추가하지 않고 ``prompt``를 그대로 전달한다.
 
     ENV=production  -> calls Gemini API; errors propagate.
     ENV=dev | test  -> returns a stub paragraph, no API call.
 
-    Args:
-        prompt:  Content instruction (e.g. "대치동 수학 과외 홍보").
-        api_key: Gemini API key. Defaults to GEMINI_API_KEY env var.
-        model:   Gemini model name. Defaults to GEMINI_MODEL.
-
-    Returns:
-        A single paragraph string.
-
     Raises:
-        RateLimitError: API returns 429 RESOURCE_EXHAUSTED.
+        RateLimitError:      429 rate limit.
+        SafetyBlockError:    Content blocked by safety/recitation/blocklist.
+        PromptBlockedError:  Prompt itself was blocked.
+        EmptyResponseError:  API returned empty text.
+        ServerError:         500/503/504 transient failure.
+        AuthenticationError: 403 bad API key.
+        InvalidRequestError: 400/404 bad request.
     """
     if not is_production():
         return _stub_generate(1)[0]
@@ -99,13 +140,12 @@ def generate_paragraph(
     resolved_model = model or os.getenv("GEMINI_MODEL", GEMINI_MODEL)
 
     if not resolved_key:
-        raise ValueError(
+        raise AuthenticationError(
             "Gemini API key is required in production. "
             "Set GEMINI_API_KEY in .env or pass api_key= explicitly."
         )
 
-    raw = _call_api(prompt, 1, resolved_key, resolved_model)
-    return _parse(raw, 1)[0]
+    return _call_api(prompt, resolved_key, resolved_model)
 
 
 # ---------------------------------------------------------------------------
@@ -120,131 +160,108 @@ def _stub_generate(count: int) -> list[str]:
     ]
 
 
-def _call_api(prompt: str, count: int, api_key: str, model: str) -> str:
-    """Send the prompt to Gemini and return the raw response text."""
+def _classify_http_error(exc: Exception) -> GeminiError:
+    """Classify an SDK exception into the appropriate GeminiError subclass."""
+    msg = str(exc)
+
+    # 429 Rate limit
+    if "429" in msg or "RESOURCE_EXHAUSTED" in msg:
+        return RateLimitError(f"Rate limit exceeded: {msg}")
+
+    # 403 Permission
+    if "403" in msg or "PERMISSION_DENIED" in msg:
+        return AuthenticationError(f"API key invalid or revoked: {msg}")
+
+    # 500 / 503 / 504 Server errors
+    if any(code in msg for code in ("500", "503", "504", "INTERNAL", "UNAVAILABLE", "DEADLINE_EXCEEDED")):
+        return ServerError(f"Gemini server error: {msg}")
+
+    # 400 / 404 Client errors
+    if any(code in msg for code in ("400", "404", "INVALID_ARGUMENT", "FAILED_PRECONDITION", "NOT_FOUND")):
+        return InvalidRequestError(f"Bad request: {msg}")
+
+    # Unknown — wrap in base class
+    return GeminiError(f"Gemini API error: {msg}")
+
+
+def _call_api(prompt: str, api_key: str, model: str) -> str:
+    """Send ``prompt`` to Gemini as-is and return the validated response text.
+
+    No system instruction, no output format wrapping — the caller owns
+    the entire prompt content.
+
+    Raises the appropriate GeminiError subclass on any failure.
+    """
     from google import genai
     from google.genai import types
 
     client = genai.Client(api_key=api_key)
-    user_text = _USER_TEMPLATE.format(user_prompt=prompt, count=count)
 
+    # ── HTTP 요청 ──
     try:
         response = client.models.generate_content(
             model=model,
-            contents=user_text,
+            contents=prompt,
             config=types.GenerateContentConfig(
-                system_instruction=_SYSTEM_PROMPT,
                 temperature=0.8,
                 max_output_tokens=65536,
             ),
         )
     except Exception as exc:
-        msg = str(exc)
-        if "429" in msg or "RESOURCE_EXHAUSTED" in msg:
-            raise RateLimitError(
-                f"Gemini API rate limit exceeded: {msg}"
-            ) from exc
-        raise
+        raise _classify_http_error(exc) from exc
 
-    return response.text
+    # ── 프롬프트 차단 확인 ──
+    prompt_feedback = getattr(response, "prompt_feedback", None)
+    if prompt_feedback:
+        block_reason = getattr(prompt_feedback, "block_reason", None)
+        if block_reason:
+            raise PromptBlockedError(
+                f"Prompt blocked by Gemini. "
+                f"block_reason: {block_reason}, "
+                f"prompt_feedback: {prompt_feedback}"
+            )
 
+    # ── candidates 존재 확인 ──
+    candidates = getattr(response, "candidates", None)
+    if not candidates:
+        raise EmptyResponseError(
+            f"No candidates in response. "
+            f"prompt_feedback: {prompt_feedback}"
+        )
 
-def _parse(raw: str, count: int) -> list[str]:
-    """
-    Parse a JSON array from the raw API response.
+    # ── finish_reason 확인 ──
+    candidate = candidates[0]
+    finish_reason = getattr(candidate, "finish_reason", None)
+    reason_str = str(finish_reason).upper() if finish_reason else ""
 
-    Handles:
-        - Markdown fences around JSON
-        - Literal newlines inside JSON strings (Gemini quirk)
-        - Truncated responses (max_output_tokens hit mid-string)
-        - Gemini splitting one paragraph into many array elements:
-          when count=1 but API returns N elements, join them all
-    """
-    clean = re.sub(r"```(?:json)?\s*|\s*```", "", raw).strip()
-    sanitized = _escape_newlines_in_json(clean)
+    # 차단된 finish_reason
+    for blocked in _BLOCKED_REASONS:
+        if blocked in reason_str:
+            safety_ratings = getattr(candidate, "safety_ratings", None)
+            raise SafetyBlockError(
+                f"Response blocked. "
+                f"finish_reason: {finish_reason}, "
+                f"safety_ratings: {safety_ratings}"
+            )
 
-    parsed = _try_parse_json_array(sanitized)
+    # MAX_TOKENS — 잘렸지만 텍스트가 있으면 경고만 하고 진행
+    if "MAX_TOKENS" in reason_str:
+        logger.warning(
+            "[gemini] 응답이 max_tokens에 의해 잘림 — 잘린 텍스트 그대로 사용"
+        )
 
-    if parsed is not None:
-        return _fit_to_count(parsed, count)
+    # ── 텍스트 추출 ──
+    try:
+        text = response.text or ""
+    except Exception:
+        # response.text 접근 자체가 실패하는 경우 (차단 시 SDK가 raise)
+        text = ""
 
-    raise ValueError(f"No JSON array found in response: {raw!r:.200s}")
+    if not text.strip():
+        raise EmptyResponseError(
+            f"Empty response text. "
+            f"finish_reason: {finish_reason}, "
+            f"candidates: {len(candidates)}"
+        )
 
-
-def _try_parse_json_array(text: str) -> list[str] | None:
-    """Try to extract a JSON string array from text. Returns None on failure."""
-    # Exact match
-    match = re.search(r"\[.*\]", text, re.DOTALL)
-    if match:
-        try:
-            parsed = json.loads(match.group())
-            if isinstance(parsed, list):
-                return [str(p) for p in parsed if str(p).strip()]
-        except json.JSONDecodeError:
-            pass
-
-    # Truncated array repair
-    bracket = text.find("[")
-    if bracket >= 0:
-        fragment = text[bracket:]
-        if fragment.count('"') % 2 == 1:
-            fragment += '"'
-        if not fragment.rstrip().endswith("]"):
-            fragment = fragment.rstrip().rstrip(",") + "]"
-        try:
-            parsed = json.loads(fragment)
-            if isinstance(parsed, list):
-                return [str(p) for p in parsed if str(p).strip()]
-        except json.JSONDecodeError:
-            pass
-
-    return None
-
-
-def _fit_to_count(paragraphs: list[str], count: int) -> list[str]:
-    """
-    Fit parsed paragraphs to the requested count.
-
-    When count=1 but Gemini returned multiple elements (common for
-    long-form prompts), join them all into one text with paragraph
-    breaks so the full content is preserved.
-    """
-    if not paragraphs:
-        return [f"(단락 {i + 1} 생성 실패)" for i in range(count)]
-
-    if count == 1 and len(paragraphs) > 1:
-        return ["\n\n".join(paragraphs)]
-
-    result = list(paragraphs)
-    while len(result) < count:
-        result.append(f"(단락 {len(result) + 1} 생성 실패)")
-    return result[:count]
-
-
-def _escape_newlines_in_json(text: str) -> str:
-    """
-    Replace literal newlines inside JSON string values with \\n.
-
-    Walks character by character tracking whether we're inside a
-    quoted string. Literal \\n/\\r inside quotes become escaped.
-    """
-    result = []
-    in_string = False
-    i = 0
-    while i < len(text):
-        ch = text[i]
-        if ch == '\\' and in_string and i + 1 < len(text):
-            result.append(ch)
-            result.append(text[i + 1])
-            i += 2
-            continue
-        if ch == '"':
-            in_string = not in_string
-        if in_string and ch == '\n':
-            result.append('\\n')
-        elif in_string and ch == '\r':
-            result.append('\\r')
-        else:
-            result.append(ch)
-        i += 1
-    return ''.join(result)
+    return text

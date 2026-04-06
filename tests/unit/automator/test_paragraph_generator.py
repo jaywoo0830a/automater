@@ -8,13 +8,19 @@ ENV=production -> Gemini API (mocked in tests)
 """
 
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from automator.paragraph_generator import (
     generate_paragraph,
     _stub_generate,
-    _parse,
+    GeminiError,
     RateLimitError,
+    SafetyBlockError,
+    EmptyResponseError,
+    PromptBlockedError,
+    ServerError,
+    AuthenticationError,
+    InvalidRequestError,
     _STUB_PARAGRAPHS,
 )
 
@@ -42,16 +48,16 @@ def test_test_env_does_not_require_api_key(monkeypatch):
 def test_production_env_requires_api_key(monkeypatch):
     monkeypatch.setenv("ENV", "production")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    with pytest.raises(ValueError, match="API key"):
+    with pytest.raises(AuthenticationError, match="API key"):
         generate_paragraph("p")
 
 
 def test_explicit_key_overrides_env(monkeypatch):
     monkeypatch.setenv("ENV", "production")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    with patch("automator.paragraph_generator._call_api", return_value='["text"]'):
+    with patch("automator.paragraph_generator._call_api", return_value="generated text"):
         result = generate_paragraph("p", api_key="explicit-key")
-    assert result == "text"
+    assert result == "generated text"
 
 
 # ===========================================================================
@@ -72,108 +78,40 @@ def test_generate_does_not_call_api_in_dev():
 
 
 # ===========================================================================
-# _parse — JSON array extraction
+# Prompt passthrough — no wrapping
 # ===========================================================================
 
-def test_parse_json_array():
-    result = _parse('["a", "b", "c"]', 3)
-    assert result == ["a", "b", "c"]
+def test_prompt_passed_as_is(monkeypatch):
+    """generate_paragraph sends the user's prompt to _call_api without modification."""
+    monkeypatch.setenv("ENV", "production")
+    monkeypatch.setenv("GEMINI_API_KEY", "fake")
 
-
-def test_parse_strips_markdown_fences():
-    result = _parse('```json\n["a", "b"]\n```', 2)
-    assert result == ["a", "b"]
-
-
-def test_parse_pads_short_response():
-    result = _parse('["only one"]', 3)
-    assert len(result) == 3
-    assert result[0] == "only one"
-
-
-def test_parse_truncates_long_response():
-    result = _parse('["a", "b", "c", "d"]', 2)
-    assert result == ["a", "b"]
-
-
-def test_parse_count_one_joins_all_elements():
-    """When count=1 but API returns many, join them all."""
-    result = _parse('["first", "second", "third"]', 1)
-    assert len(result) == 1
-    assert "first" in result[0]
-    assert "second" in result[0]
-    assert "third" in result[0]
-    assert "\n\n" in result[0]
-
-
-def test_parse_count_one_single_element():
-    """When count=1 and API returns exactly 1, no join needed."""
-    result = _parse('["only one"]', 1)
-    assert result == ["only one"]
-
-
-def test_parse_raises_on_no_json():
-    with pytest.raises(ValueError, match="No JSON"):
-        _parse("no json here", 1)
-
-
-def test_parse_raises_on_non_list():
-    with pytest.raises(ValueError, match="No JSON array"):
-        _parse('{"key": "value"}', 1)
-
-
-def test_parse_truncated_single_element():
-    """API hit max_output_tokens mid-string."""
-    result = _parse('["안녕하세요, 긴 텍스트가 여기서 잘림', 1)
-    assert len(result) == 1
-    assert "안녕하세요" in result[0]
-
-
-def test_parse_truncated_after_comma():
-    """Truncated between array elements."""
-    result = _parse('["first paragraph", "second paragraph is cut off here', 2)
-    assert len(result) == 2
-    assert result[0] == "first paragraph"
-    assert "second paragraph" in result[1]
-
-
-def test_parse_truncated_with_complete_elements():
-    """First element complete, second truncated."""
-    result = _parse('["complete", "trunc', 3)
-    assert result[0] == "complete"
-    assert len(result) == 3
-
-
-def test_parse_literal_newlines_in_string():
-    """Gemini returns literal newlines inside JSON strings."""
-    raw = '["This is sentence 1.\n\nThis is sentence 2.", "Another"]'
-    result = _parse(raw, 2)
-    assert "sentence 1" in result[0]
-    assert "sentence 2" in result[0]
-
-
-def test_parse_korean_with_newlines():
-    raw = '["안녕하세요.\n\n반갑습니다.", "두 번째"]'
-    result = _parse(raw, 2)
-    assert "안녕하세요" in result[0]
-    assert "반갑습니다" in result[0]
-
-
-def test_parse_truncated_with_newlines():
-    raw = '["First.\n\nStill going'
-    result = _parse(raw, 2)
-    assert "First" in result[0]
+    user_prompt = "강남 수학 과외 홍보 블로그 글을 써주세요."
+    with patch("automator.paragraph_generator._call_api", return_value="ok") as mock:
+        generate_paragraph(user_prompt)
+    assert mock.call_args[0][0] == user_prompt
 
 
 # ===========================================================================
-# RateLimitError — 429 handling
+# Exception hierarchy
 # ===========================================================================
+
+def test_all_exceptions_inherit_from_gemini_error():
+    for cls in (RateLimitError, SafetyBlockError, EmptyResponseError,
+                PromptBlockedError, ServerError, AuthenticationError,
+                InvalidRequestError):
+        assert issubclass(cls, GeminiError)
+        assert issubclass(cls, Exception)
+
 
 def test_rate_limit_error_is_exception():
-    assert issubclass(RateLimitError, Exception)
     err = RateLimitError("test")
     assert str(err) == "test"
 
+
+# ===========================================================================
+# Error propagation from _call_api
+# ===========================================================================
 
 def test_call_api_converts_429_to_rate_limit_error(monkeypatch):
     monkeypatch.setenv("ENV", "production")
@@ -185,7 +123,37 @@ def test_call_api_converts_429_to_rate_limit_error(monkeypatch):
             generate_paragraph("p")
 
 
-def test_non_429_errors_propagate(monkeypatch):
+def test_safety_block_error_propagates(monkeypatch):
+    monkeypatch.setenv("ENV", "production")
+    monkeypatch.setenv("GEMINI_API_KEY", "fake")
+
+    with patch("automator.paragraph_generator._call_api",
+               side_effect=SafetyBlockError("SAFETY")):
+        with pytest.raises(SafetyBlockError):
+            generate_paragraph("p")
+
+
+def test_empty_response_error_propagates(monkeypatch):
+    monkeypatch.setenv("ENV", "production")
+    monkeypatch.setenv("GEMINI_API_KEY", "fake")
+
+    with patch("automator.paragraph_generator._call_api",
+               side_effect=EmptyResponseError("empty")):
+        with pytest.raises(EmptyResponseError):
+            generate_paragraph("p")
+
+
+def test_server_error_propagates(monkeypatch):
+    monkeypatch.setenv("ENV", "production")
+    monkeypatch.setenv("GEMINI_API_KEY", "fake")
+
+    with patch("automator.paragraph_generator._call_api",
+               side_effect=ServerError("500")):
+        with pytest.raises(ServerError):
+            generate_paragraph("p")
+
+
+def test_non_gemini_errors_propagate(monkeypatch):
     monkeypatch.setenv("ENV", "production")
     monkeypatch.setenv("GEMINI_API_KEY", "fake")
 
@@ -193,7 +161,3 @@ def test_non_429_errors_propagate(monkeypatch):
                side_effect=RuntimeError("connection failed")):
         with pytest.raises(RuntimeError, match="connection"):
             generate_paragraph("p")
-
-
-# PostingJob integration tests removed — now covered by
-# tests/integration/test_content_builder.py
