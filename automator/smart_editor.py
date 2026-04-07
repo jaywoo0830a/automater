@@ -139,7 +139,18 @@ class SmartEditorOne(BlogEditor):
     }
 
     def insert_heading(self, text: str, level: int = 2) -> None:
-        """Insert heading with native Naver subtitle formatting + font size."""
+        """Insert heading with native Naver subtitle formatting + font size.
+
+        Sequence:
+            1. Click last paragraph to position cursor
+            2. heading_trigger → heading_button (소제목 모드 진입)
+            3. Type text
+            4. Select text + change font size + bold
+            5. Escape selection
+            6. Click "본문 추가" canvas bottom area to exit subtitle mode
+               and create a fresh normal paragraph below.
+               (단순 Enter는 소제목 모드를 못 빠져나옴)
+        """
         frame = self._frame()
         sel   = self._sel()
 
@@ -167,9 +178,16 @@ class SmartEditorOne(BlogEditor):
 
         click_if_visible(sel.locator(frame, "bold_button"), timeout_ms=3_000)
 
-        # Deselect → exit subtitle
-        self._click_last_paragraph(frame)
-        self._page.keyboard.press("Enter")
+        # ── 소제목 모드 탈출 ──
+        # 1. Escape으로 선택 해제
+        self._page.keyboard.press("Escape")
+        time.sleep(0.2)
+        # 2. 캔버스 하단 "본문 추가" 영역 클릭 — 새 일반 단락 생성
+        #    (대표이미지에서 검증된 탈출 방법)
+        click_if_visible(
+            sel.locator(frame, "editor_canvas_bottom").first,
+            timeout_ms=3_000,
+        )
 
     def insert_quote(self, text: str, quote_type: int = 1) -> None:
         """Insert quote block with native formatting.
