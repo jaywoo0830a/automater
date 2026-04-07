@@ -46,7 +46,9 @@ from automator.options import (
     QuoteBlock,
     DividerBlock,
     NewLineBlock,
+    AiSectionBlock,
 )
+from automator.markdown_parser import parse_markdown, matches_structure
 
 if TYPE_CHECKING:
     from automator.ports import TextGenerator, ImageProcessor
@@ -302,6 +304,117 @@ class NewLineHandler(BlockHandler):
 
 
 # ---------------------------------------------------------------------------
+# AiSection — 1회 호출로 마크다운 → 여러 블록
+# ---------------------------------------------------------------------------
+
+_STRUCTURE_HINTS = {
+    "heading":   "## 소제목",
+    "h1":        "# 대제목",
+    "h2":        "## 소제목",
+    "h3":        "### 소제목",
+    "h4":        "#### 소제목",
+    "h5":        "##### 소제목",
+    "h6":        "###### 소제목",
+    "list":      "- 글머리 기호 목록",
+    "ordered_list": "1. 번호 목록",
+    "quote":     "> 인용문",
+    "divider":   "--- (구분선)",
+    "paragraph": "일반 단락",
+    "text":      "일반 단락",
+}
+
+
+def _build_ai_section_prompt(user_prompt: str, structure: tuple[str, ...]) -> str:
+    """structure 가이드를 prompt 끝에 자연스럽게 추가."""
+    hints = []
+    for name in structure:
+        hint = _STRUCTURE_HINTS.get(name.lower(), name)
+        hints.append(f"- {hint}")
+
+    if not hints:
+        return user_prompt
+
+    guide = (
+        "\n\n다음 구조로 마크다운으로 작성해주세요. "
+        "다른 텍스트는 추가하지 말고 본문만 작성하세요:\n"
+        + "\n".join(hints)
+    )
+    return user_prompt + guide
+
+
+class AiSectionHandler(BlockHandler):
+    """AiSectionBlock -> 마크다운 파싱 결과의 여러 PostStep.
+
+    1. AI를 1회 호출하여 마크다운 응답을 받음
+    2. 마크다운을 Block 리스트로 파싱
+    3. on_mismatch=strict면 structure와 시퀀스 일치 검증
+    4. 각 Block을 해당 Handler로 위임하여 PostStep 생성
+       (TextBlock으로 매핑된 단락은 추가 AI 호출 없이 그대로 삽입)
+    """
+
+    def to_steps(self, block: AiSectionBlock, ctx: ContentContext) -> list[PostStep]:
+        if not block.prompt or not block.prompt.strip():
+            raise ValueError("ai_section.prompt가 비어있습니다.")
+
+        # 1. 프롬프트 조립
+        if block.auto_prompt and block.structure:
+            final_prompt = _build_ai_section_prompt(block.prompt, block.structure)
+        else:
+            final_prompt = block.prompt
+
+        logger.info("[build]   ai_section AI 호출 중... (프롬프트: %s)", block.prompt[:80])
+
+        # 2. AI 호출
+        response = ctx.text_gen.generate(final_prompt)
+        logger.info("[build]   ai_section AI 응답 수신 (%d자)", len(response))
+
+        # 3. 마크다운 파싱
+        parsed_blocks = parse_markdown(response)
+        logger.info(
+            "[build]   ai_section 파싱 완료 — %d개 블록: %s",
+            len(parsed_blocks),
+            [type(b).__name__ for b in parsed_blocks],
+        )
+
+        # 4. on_mismatch 검증
+        if block.on_mismatch == "strict" and block.structure:
+            if not matches_structure(parsed_blocks, block.structure):
+                actual = [type(b).__name__ for b in parsed_blocks]
+                raise ValueError(
+                    f"ai_section: AI 응답이 structure와 일치하지 않습니다 (strict 모드).\n"
+                    f"  expected: {list(block.structure)}\n"
+                    f"  actual:   {actual}\n"
+                    f"  raw response: {response[:200]!r}"
+                )
+
+        if not parsed_blocks:
+            raise ValueError(
+                f"ai_section: AI 응답에서 파싱된 블록이 없습니다. "
+                f"raw response: {response[:200]!r}"
+            )
+
+        # 5. 각 블록을 해당 Handler로 변환 (재귀, 단 ai_section 자체는 제외)
+        steps_out: list[PostStep] = []
+        last_idx = len(parsed_blocks) - 1
+        for i, parsed in enumerate(parsed_blocks):
+            handler = get_handler(parsed)
+            sub_steps = handler.to_steps(parsed, ctx)
+            # 마지막 블록에만 ai_section의 wait_ms를 부여
+            if i == last_idx and block.wait_ms > 0 and sub_steps:
+                # 마지막 step의 wait_ms를 ai_section의 값으로 덮어쓴다
+                last_step = sub_steps[-1]
+                # PostStep은 frozen dataclass이므로 dataclasses.replace 사용
+                from dataclasses import replace as _replace
+                try:
+                    sub_steps[-1] = _replace(last_step, wait_ms=block.wait_ms)
+                except Exception:
+                    pass
+            steps_out.extend(sub_steps)
+
+        return steps_out
+
+
+# ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
 
@@ -315,6 +428,7 @@ HANDLERS: dict[type[Block], BlockHandler] = {
     QuoteBlock:         QuoteHandler(),
     DividerBlock:       DividerHandler(),
     NewLineBlock:       NewLineHandler(),
+    AiSectionBlock:     AiSectionHandler(),
 }
 
 

@@ -488,9 +488,14 @@ def _validate_pools(config: dict[str, Any]) -> None:
 _HEADING_RE = re.compile(r"^h([1-6])$")
 _KNOWN_BLOCK_TYPES = {
     "paragraph", "text", "image", "featured_image",
-    "quote", "list", "divider", "newline",
+    "quote", "list", "divider", "newline", "ai_section",
     "h1", "h2", "h3", "h4", "h5", "h6",
 }
+_AI_SECTION_STRUCTURE_KEYS = {
+    "heading", "h1", "h2", "h3", "h4", "h5", "h6",
+    "list", "ordered_list", "quote", "divider", "paragraph", "text",
+}
+_AI_SECTION_MISMATCH_MODES = {"lenient", "strict"}
 
 
 def _validate_post_blocks(config: dict[str, Any]) -> None:
@@ -577,6 +582,8 @@ def _validate_post_blocks(config: dict[str, Any]) -> None:
             _check_text(value, loc)
         elif block_type == "newline":
             _check_newline(value, loc)
+        elif block_type == "ai_section":
+            _check_ai_section(value, loc)
         # image / featured_image는 _validate_post_image_paths에서 처리
 
 
@@ -712,6 +719,61 @@ def _check_newline(value: Any, loc: str) -> None:
     if value < 1:
         raise ConfigError(
             f"{loc}: newline 값은 1 이상이어야 합니다: {value}"
+        )
+
+
+def _check_ai_section(value: Any, loc: str) -> None:
+    """ai_section 블록 검증.
+
+    형식:
+        ai_section:
+          prompt: "..."
+          structure: [heading, list, paragraph]
+          on_mismatch: lenient    # lenient | strict
+          auto_prompt: true
+    """
+    if not isinstance(value, dict):
+        raise ConfigError(
+            f"{loc}: ai_section 값은 dict여야 합니다: {value!r}"
+        )
+
+    prompt = value.get("prompt")
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ConfigError(
+            f"{loc}: ai_section.prompt가 비어있거나 문자열이 아닙니다: {prompt!r}"
+        )
+
+    structure = value.get("structure")
+    if structure is None:
+        raise ConfigError(
+            f"{loc}: ai_section.structure 필드가 없습니다. "
+            f"예: structure: [heading, list, paragraph]"
+        )
+    if not isinstance(structure, list) or not structure:
+        raise ConfigError(
+            f"{loc}: ai_section.structure는 비어있지 않은 리스트여야 합니다: {structure!r}"
+        )
+    for j, item in enumerate(structure):
+        if not isinstance(item, str):
+            raise ConfigError(
+                f"{loc}.structure[{j}]는 문자열이어야 합니다: {item!r}"
+            )
+        if item.lower() not in _AI_SECTION_STRUCTURE_KEYS:
+            raise ConfigError(
+                f"{loc}.structure[{j}]는 알려지지 않은 블록 타입입니다: {item!r}. "
+                f"허용: {sorted(_AI_SECTION_STRUCTURE_KEYS)}"
+            )
+
+    if "on_mismatch" in value:
+        m = value["on_mismatch"]
+        if m not in _AI_SECTION_MISMATCH_MODES:
+            raise ConfigError(
+                f"{loc}.on_mismatch는 {sorted(_AI_SECTION_MISMATCH_MODES)} 중 하나여야 합니다: {m!r}"
+            )
+
+    if "auto_prompt" in value and not isinstance(value["auto_prompt"], bool):
+        raise ConfigError(
+            f"{loc}.auto_prompt는 true/false여야 합니다: {value['auto_prompt']!r}"
         )
 
 

@@ -307,6 +307,33 @@ class NewLineBlock:
     wait_ms: int = 0
 
 
+@dataclass(frozen=True)
+class AiSectionBlock:
+    """AI가 한 번의 호출로 구조화된 마크다운을 생성하는 섹션 블록.
+
+    AI 응답(마크다운)을 파싱하여 여러 블록(heading/list/text/quote/divider)으로
+    펼쳐진다. ContentBuilder가 이를 다시 PostStep으로 변환할 때
+    추가 AI 호출은 발생하지 않는다 (텍스트는 TextBlock으로 매핑됨).
+
+    Attributes:
+        prompt:       AI에게 보낼 사용자 프롬프트.
+        structure:    구조 가이드 (블록 타입 이름의 리스트).
+                      auto_prompt=True일 때 프롬프트에 자동 추가됨.
+                      예: ["heading", "list", "paragraph"]
+        on_mismatch:  "lenient" (기본) — 파싱 결과 그대로 사용.
+                      "strict" — structure와 시퀀스가 정확히 일치할 때만 통과.
+        auto_prompt:  True (기본) — structure를 프롬프트 가이드로 자동 추가.
+                      False — 사용자 prompt를 그대로 AI에 전달.
+        wait_ms:      섹션 전체가 삽입된 후 대기 시간(밀리초).
+                      개별 블록의 wait는 0으로 설정됨.
+    """
+    prompt:      str                = ""
+    structure:   tuple[str, ...]    = field(default_factory=tuple)
+    on_mismatch: str                = "lenient"
+    auto_prompt: bool               = True
+    wait_ms:     int                = 0
+
+
 # Sealed union — isinstance 분기에 사용
 Block = Union[
     HeadingBlock,
@@ -317,6 +344,7 @@ Block = Union[
     ListBlock,
     QuoteBlock,
     DividerBlock,
+    AiSectionBlock,
     NewLineBlock,
 ]
 

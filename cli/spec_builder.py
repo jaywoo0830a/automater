@@ -21,6 +21,7 @@ from typing import Any
 from automator.contracts import PostingSpec
 from automator.options import (
     AccountOption,
+    AiSectionBlock,
     DividerBlock,
     FeaturedImageBlock,
     HeadingBlock,
@@ -338,6 +339,9 @@ def _parse_block(
         count = int(value) if value else 1
         return NewLineBlock(count=count, wait_ms=wait_ms)
 
+    if block_type == "ai_section":
+        return _parse_ai_section(value, values, pools, index, str_maps, wait_ms)
+
     return None  # Unknown block type — skip silently
 
 
@@ -355,6 +359,59 @@ def _parse_paragraph(
 ) -> ParagraphBlock:
     prompt = interpolate(str(value), values, pools, index, maps=maps)
     return ParagraphBlock(prompt=prompt, wait_ms=wait_ms)
+
+
+def _parse_ai_section(
+    value: Any,
+    values: dict[str, str],
+    pools: dict[str, list[str]],
+    index: int,
+    maps: dict[str, str] | None = None,
+    wait_ms: int = 0,
+) -> AiSectionBlock:
+    """ai_section 블록 파싱.
+
+    DSL 형식:
+        - ai_section:
+            prompt: "..."
+            structure: [heading, list, paragraph]
+            on_mismatch: lenient    # lenient | strict
+            auto_prompt: true
+    """
+    if not isinstance(value, dict):
+        raise ConfigError(
+            f"ai_section 블록 값은 dict여야 합니다: {value!r}"
+        )
+
+    cfg = interpolate_deep(dict(value), values, pools, index, maps=maps)
+
+    prompt = str(cfg.get("prompt", "")).strip()
+    if not prompt:
+        raise ConfigError(
+            f"ai_section.prompt가 비어있습니다. 조합: {values}"
+        )
+
+    raw_structure = cfg.get("structure", [])
+    if not isinstance(raw_structure, list):
+        raise ConfigError(
+            f"ai_section.structure는 리스트여야 합니다: {raw_structure!r}"
+        )
+    structure = tuple(str(s).lower() for s in raw_structure if s)
+
+    on_mismatch = str(cfg.get("on_mismatch", "lenient")).lower()
+    if on_mismatch not in ("lenient", "strict"):
+        on_mismatch = "lenient"
+
+    auto_prompt = bool(cfg.get("auto_prompt", True))
+    inner_wait = _parse_wait(cfg.get("wait"))
+
+    return AiSectionBlock(
+        prompt=prompt,
+        structure=structure,
+        on_mismatch=on_mismatch,
+        auto_prompt=auto_prompt,
+        wait_ms=inner_wait or wait_ms,
+    )
 
 
 def _parse_text(

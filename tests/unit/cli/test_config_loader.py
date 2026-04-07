@@ -486,6 +486,95 @@ class TestPostBlocksStrict:
 
 
 # ---------------------------------------------------------------------------
+# Strict: ai_section
+# ---------------------------------------------------------------------------
+
+class TestAiSectionStrict:
+
+    def _ai(self, **overrides):
+        cfg = {
+            "prompt": "수학학원의 장점",
+            "structure": ["heading", "list", "paragraph"],
+        }
+        cfg.update(overrides)
+        return cfg
+
+    def test_valid(self, write_yaml):
+        data = {**MINIMAL, "post": [{"ai_section": self._ai()}]}
+        load_config(write_yaml(data))
+
+    def test_missing_prompt(self, write_yaml):
+        data = {
+            **MINIMAL,
+            "post": [{"ai_section": {"structure": ["heading"]}}],
+        }
+        with pytest.raises(ConfigError, match="prompt"):
+            load_config(write_yaml(data))
+
+    def test_empty_prompt(self, write_yaml):
+        data = {
+            **MINIMAL,
+            "post": [{"ai_section": self._ai(prompt="")}],
+        }
+        with pytest.raises(ConfigError, match="prompt"):
+            load_config(write_yaml(data))
+
+    def test_missing_structure(self, write_yaml):
+        data = {
+            **MINIMAL,
+            "post": [{"ai_section": {"prompt": "x"}}],
+        }
+        with pytest.raises(ConfigError, match="structure"):
+            load_config(write_yaml(data))
+
+    def test_empty_structure(self, write_yaml):
+        data = {
+            **MINIMAL,
+            "post": [{"ai_section": self._ai(structure=[])}],
+        }
+        with pytest.raises(ConfigError, match="structure"):
+            load_config(write_yaml(data))
+
+    def test_unknown_structure_item(self, write_yaml):
+        data = {
+            **MINIMAL,
+            "post": [{"ai_section": self._ai(structure=["heading", "unknown_block"])}],
+        }
+        with pytest.raises(ConfigError, match="알려지지 않은"):
+            load_config(write_yaml(data))
+
+    def test_invalid_on_mismatch(self, write_yaml):
+        data = {
+            **MINIMAL,
+            "post": [{"ai_section": self._ai(on_mismatch="retry")}],
+        }
+        with pytest.raises(ConfigError, match="on_mismatch"):
+            load_config(write_yaml(data))
+
+    def test_invalid_auto_prompt(self, write_yaml):
+        data = {
+            **MINIMAL,
+            "post": [{"ai_section": self._ai(auto_prompt="yes")}],
+        }
+        with pytest.raises(ConfigError, match="auto_prompt"):
+            load_config(write_yaml(data))
+
+    def test_strict_mode_valid(self, write_yaml):
+        data = {
+            **MINIMAL,
+            "post": [{"ai_section": self._ai(on_mismatch="strict")}],
+        }
+        load_config(write_yaml(data))
+
+    def test_h2_in_structure(self, write_yaml):
+        data = {
+            **MINIMAL,
+            "post": [{"ai_section": self._ai(structure=["h2", "list", "paragraph"])}],
+        }
+        load_config(write_yaml(data))
+
+
+# ---------------------------------------------------------------------------
 # Strict: publish
 # ---------------------------------------------------------------------------
 

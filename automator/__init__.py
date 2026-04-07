@@ -35,7 +35,7 @@ Usage
 from automator.options import (
     AccountOption, TitleOption, Section, Block,
     HeadingBlock, ParagraphBlock, ImageBlock, FeaturedImageBlock,
-    ListBlock, QuoteBlock, DividerBlock,
+    ListBlock, QuoteBlock, DividerBlock, AiSectionBlock,
     PublishOption,
 )
 from automator.contracts import PostingSpec
@@ -61,7 +61,7 @@ from automator.smart_editor import SmartEditorOne
 __all__ = [
     "PostingSpec", "AccountOption", "TitleOption", "Section", "Block",
     "HeadingBlock", "ParagraphBlock", "ImageBlock", "FeaturedImageBlock",
-    "ListBlock", "QuoteBlock", "DividerBlock", "PublishOption",
+    "ListBlock", "QuoteBlock", "DividerBlock", "AiSectionBlock", "PublishOption",
     "BlogEditor", "SmartEditorOne",
     "JobRunner", "SpecValidator", "ContentBuilder",
     "TextGenerator", "ImageProcessor", "SelectorSource",

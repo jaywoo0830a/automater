@@ -12,7 +12,7 @@ import pytest
 from automator.contracts import PostingSpec
 from automator.options import (
     HeadingBlock, ParagraphBlock, ImageBlock, FeaturedImageBlock,
-    ListBlock, QuoteBlock, DividerBlock, Section, TitleOption,
+    ListBlock, QuoteBlock, DividerBlock, AiSectionBlock, Section, TitleOption,
 )
 
 from cli.combo_builder import Combo
@@ -450,5 +450,59 @@ class TestDefaultBody:
         spec = build_spec(_combo(), config)
         assert len(spec.body[0].blocks) == 3
         assert all(isinstance(b, ParagraphBlock) for b in spec.body[0].blocks)
+
+
+# ---------------------------------------------------------------------------
+# ai_section parsing
+# ---------------------------------------------------------------------------
+
+class TestAiSectionParse:
+
+    def test_basic(self):
+        config = {**FULL_CONFIG, "post": [
+            {"ai_section": {
+                "prompt": "{keyword:region} 학원의 장점",
+                "structure": ["heading", "list", "paragraph"],
+            }},
+        ]}
+        spec = build_spec(_combo(), config)
+        block = spec.body[0].blocks[0]
+        assert isinstance(block, AiSectionBlock)
+        assert block.prompt == "강남 학원의 장점"
+        assert block.structure == ("heading", "list", "paragraph")
+        assert block.on_mismatch == "lenient"
+        assert block.auto_prompt is True
+
+    def test_strict_mode(self):
+        config = {**FULL_CONFIG, "post": [
+            {"ai_section": {
+                "prompt": "x",
+                "structure": ["heading"],
+                "on_mismatch": "strict",
+            }},
+        ]}
+        spec = build_spec(_combo(), config)
+        assert spec.body[0].blocks[0].on_mismatch == "strict"
+
+    def test_auto_prompt_off(self):
+        config = {**FULL_CONFIG, "post": [
+            {"ai_section": {
+                "prompt": "x",
+                "structure": ["heading"],
+                "auto_prompt": False,
+            }},
+        ]}
+        spec = build_spec(_combo(), config)
+        assert spec.body[0].blocks[0].auto_prompt is False
+
+    def test_structure_lowercased(self):
+        config = {**FULL_CONFIG, "post": [
+            {"ai_section": {
+                "prompt": "x",
+                "structure": ["Heading", "LIST"],
+            }},
+        ]}
+        spec = build_spec(_combo(), config)
+        assert spec.body[0].blocks[0].structure == ("heading", "list")
 
 

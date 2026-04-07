@@ -20,6 +20,7 @@ _BLOCK_TYPES = [
     ("소제목 (H1)", "h1"), ("소제목 (H2)", "h2"), ("소제목 (H3)", "h3"),
     ("소제목 (H4)", "h4"), ("소제목 (H5)", "h5"), ("소제목 (H6)", "h6"),
     ("AI 단락", "paragraph"),
+    ("AI 섹션 (구조화)", "ai_section"),
     ("수동 텍스트", "text"),
     ("본문 이미지", "image"),
     ("대표 이미지", "featured_image"),
@@ -136,6 +137,12 @@ class PostTab(QWidget):
                 self._append(dlg.result())
             return
 
+        if bt == "ai_section":
+            dlg = _AiSectionDialog(self, token_source=self._token_source)
+            if dlg.exec() == QDialog.DialogCode.Accepted:
+                self._append(dlg.result())
+            return
+
     def _edit_block(self) -> None:
         item = self._list.currentItem()
         if not item:
@@ -208,6 +215,13 @@ class PostTab(QWidget):
         elif bt == "newline":
             dlg = _NewLineDialog(self, existing=block)
 
+        # AI 섹션
+        elif bt == "ai_section":
+            dlg = _AiSectionDialog(
+                self, token_source=self._token_source,
+                existing=block,
+            )
+
         if dlg is None:
             return
 
@@ -257,6 +271,14 @@ class PostTab(QWidget):
 
         bt = next(iter(block))
         val = block[bt]
+
+        # ai_section 특수 처리 — structure 요약 표시
+        if bt == "ai_section" and isinstance(val, dict):
+            prompt = str(val.get("prompt", ""))
+            structure = val.get("structure", []) or []
+            short = prompt[:40] + "..." if len(prompt) > 40 else prompt
+            struct_str = "→".join(str(s) for s in structure[:5])
+            return f"[ai_section:{struct_str}]  {short}"
 
         # quote 특수 처리 — type 표시
         if bt == "quote" and isinstance(val, dict):
@@ -1043,6 +1065,210 @@ class _DividerDialog(QDialog):
             entry: dict = {"divider": dtype}
         else:
             entry = {"divider": None}
+        when = self._when.text().strip()
+        if when:
+            entry["when"] = when
+        wait = self._wait.text().strip()
+        if wait:
+            entry["wait"] = wait
+        return entry
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AI 섹션 다이얼로그
+# ─────────────────────────────────────────────────────────────────────────────
+
+_AI_SECTION_STRUCTURE_OPTIONS = [
+    "heading", "h1", "h2", "h3", "h4", "h5", "h6",
+    "list", "ordered_list", "quote", "divider", "paragraph",
+]
+
+
+class _AiSectionDialog(QDialog):
+    """AI 섹션 블록 — prompt + structure + on_mismatch + when/wait."""
+
+    def __init__(
+        self,
+        parent: QWidget,
+        token_source: Callable | None = None,
+        existing: dict | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("AI 섹션 수정" if existing else "AI 섹션 추가")
+        self.setMinimumWidth(600)
+        self.setMinimumHeight(500)
+
+        ts = token_source or (lambda: [])
+
+        _raw = (existing or {}).get("ai_section", {})
+        if not isinstance(_raw, dict):
+            _raw = {}
+        _prompt_default = str(_raw.get("prompt", ""))
+        _structure_default = _raw.get("structure", []) or []
+        _on_mismatch_default = str(_raw.get("on_mismatch", "lenient"))
+        _auto_prompt_default = bool(_raw.get("auto_prompt", True))
+        _when: str = str((existing or {}).get("when", ""))
+        _wait: str = str((existing or {}).get("wait", ""))
+
+        # 프롬프트 (멀티라인)
+        self._prompt = QTextEdit()
+        self._prompt.setPlainText(_prompt_default)
+        self._prompt.setPlaceholderText(
+            "{keyword:region} 수학학원의 장점을 정리해줘"
+        )
+        self._prompt.setMaximumHeight(120)
+        token_btn = TokenInsertButton(self._prompt, ts)
+
+        prompt_row = QHBoxLayout()
+        prompt_row.addWidget(self._prompt)
+        prompt_row.addWidget(token_btn)
+
+        # 구조 리스트 (블록 시퀀스)
+        self._structure_list = QListWidget()
+        self._structure_list.setMaximumHeight(140)
+        for s in _structure_default:
+            self._structure_list.addItem(str(s))
+
+        # 구조 추가 콤보 + 버튼
+        self._structure_combo = QComboBox()
+        self._structure_combo.addItems(_AI_SECTION_STRUCTURE_OPTIONS)
+
+        btn_add_struct = QPushButton("+ 추가")
+        btn_add_struct.clicked.connect(self._add_structure_item)
+        btn_remove_struct = QPushButton("- 삭제")
+        btn_remove_struct.clicked.connect(self._remove_structure_item)
+        btn_up = QPushButton("↑")
+        btn_up.clicked.connect(lambda: self._move_structure(-1))
+        btn_down = QPushButton("↓")
+        btn_down.clicked.connect(lambda: self._move_structure(+1))
+
+        struct_btn_row = QHBoxLayout()
+        struct_btn_row.addWidget(self._structure_combo)
+        struct_btn_row.addWidget(btn_add_struct)
+        struct_btn_row.addWidget(btn_remove_struct)
+        struct_btn_row.addWidget(btn_up)
+        struct_btn_row.addWidget(btn_down)
+        struct_btn_row.addStretch()
+
+        # 옵션
+        self._on_mismatch = QComboBox()
+        self._on_mismatch.addItems(["lenient", "strict"])
+        idx = self._on_mismatch.findText(_on_mismatch_default)
+        if idx >= 0:
+            self._on_mismatch.setCurrentIndex(idx)
+        self._on_mismatch.setToolTip(
+            "lenient: AI 응답을 그대로 사용 (기본)\n"
+            "strict: structure와 시퀀스가 정확히 일치해야 통과"
+        )
+
+        self._auto_prompt = QCheckBox("structure를 프롬프트에 자동 추가")
+        self._auto_prompt.setChecked(_auto_prompt_default)
+        self._auto_prompt.setToolTip(
+            "체크 시: structure 항목을 마크다운 가이드로 변환해 프롬프트 끝에 추가\n"
+            "체크 해제: prompt를 그대로 AI에게 전달"
+        )
+
+        # 고급
+        self._when = QLineEdit(_when)
+        self._when.setPlaceholderText('{keyword:region} == 강남')
+        self._wait = QLineEdit(_wait)
+        self._wait.setPlaceholderText("2s 또는 1s ~ 3s")
+
+        advanced = CollapsibleSection("고급 설정")
+        advanced.add_row("조건 (when):", self._when)
+        advanced.add_row("대기 (wait):", self._wait)
+
+        # 폼 조립
+        form = QFormLayout()
+        form.addRow("프롬프트:", prompt_row)
+        form.addRow("구조 (블록 시퀀스):", self._structure_list)
+        form.addRow("", struct_btn_row)
+        form.addRow("불일치 모드:", self._on_mismatch)
+        form.addRow("", self._auto_prompt)
+
+        # 안내 텍스트
+        hint = QLabel(
+            "AI가 1회 호출되어 마크다운으로 응답하고, 그 결과가 자동으로 "
+            "여러 블록으로 변환됩니다. structure는 AI에게 주는 가이드입니다."
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: gray; font-size: 11px;")
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self._on_accept)
+        buttons.rejected.connect(self.reject)
+
+        layout = QVBoxLayout()
+        layout.addLayout(form)
+        layout.addWidget(advanced)
+        layout.addWidget(hint)
+        layout.addWidget(buttons)
+        self.setLayout(layout)
+
+    def _add_structure_item(self) -> None:
+        text = self._structure_combo.currentText()
+        if text:
+            self._structure_list.addItem(text)
+
+    def _remove_structure_item(self) -> None:
+        row = self._structure_list.currentRow()
+        if row >= 0:
+            self._structure_list.takeItem(row)
+
+    def _move_structure(self, delta: int) -> None:
+        row = self._structure_list.currentRow()
+        if row < 0:
+            return
+        new_row = row + delta
+        if not (0 <= new_row < self._structure_list.count()):
+            return
+        item = self._structure_list.takeItem(row)
+        self._structure_list.insertItem(new_row, item)
+        self._structure_list.setCurrentRow(new_row)
+
+    def _on_accept(self) -> None:
+        prompt = self._prompt.toPlainText().strip()
+        if not prompt:
+            QMessageBox.warning(
+                self, "프롬프트 필수",
+                "AI 섹션은 프롬프트가 필수입니다.\n"
+                "AI에게 어떤 글을 써달라고 할지 입력하세요.",
+            )
+            self._prompt.setFocus()
+            return
+
+        if self._structure_list.count() == 0:
+            QMessageBox.warning(
+                self, "구조 필수",
+                "AI 섹션은 최소 하나의 구조 항목이 필요합니다.\n"
+                "예: heading, list, paragraph",
+            )
+            return
+
+        self.accept()
+
+    def result(self) -> dict:
+        prompt = self._prompt.toPlainText().strip()
+        structure = [
+            self._structure_list.item(i).text()
+            for i in range(self._structure_list.count())
+        ]
+
+        cfg: dict = {
+            "prompt": prompt,
+            "structure": structure,
+        }
+
+        on_mismatch = self._on_mismatch.currentText()
+        if on_mismatch != "lenient":
+            cfg["on_mismatch"] = on_mismatch
+
+        if not self._auto_prompt.isChecked():
+            cfg["auto_prompt"] = False
+
+        entry: dict = {"ai_section": cfg}
         when = self._when.text().strip()
         if when:
             entry["when"] = when
