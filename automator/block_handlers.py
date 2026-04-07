@@ -146,29 +146,86 @@ def _save_temp(data: bytes, name: str, ctx: ContentContext) -> str:
     return tmp.name
 
 
-def _validate_image_path(path: str, label: str) -> Path:
-    """이미지 경로를 검증하고 Path 객체를 반환한다.
+def _describe_block(block: Any, label: str) -> str:
+    """이미지 블록의 디버그 정보를 문자열로 만든다."""
+    parts = [f"{label} 블록 정보:"]
+    parts.append(f"  path = {getattr(block, 'path', None)!r}")
+
+    link = getattr(block, "link", "")
+    if link:
+        parts.append(f"  link = {link!r}")
+
+    kw = getattr(block, "filename_keyword", "")
+    if kw:
+        parts.append(f"  filename_keyword = {kw!r}")
+
+    wait_ms = getattr(block, "wait_ms", 0)
+    if wait_ms:
+        parts.append(f"  wait_ms = {wait_ms}")
+
+    # FeaturedImageBlock만 있는 필드들
+    overlay = getattr(block, "overlay_text", "")
+    if overlay:
+        parts.append(f"  overlay_text = {overlay!r}")
+
+    parts.append(f"  cwd = {Path.cwd()!s}")
+    return "\n".join(parts)
+
+
+def _validate_image_path(block: Any, label: str) -> Path:
+    """이미지 블록의 경로를 검증하고 Path 객체를 반환한다.
 
     Raises:
         FileNotFoundError: 경로가 비어있거나, 존재하지 않거나, 파일이 아닌 경우.
-            ('.', 디렉터리 등은 Windows에서 Permission denied로 이어짐)
+            에러 메시지에 블록 정보(path/link/keyword/cwd)를 포함하여
+            어느 블록의 어떤 설정이 문제인지 바로 알 수 있게 한다.
     """
+    path = getattr(block, "path", "") or ""
+    detail = _describe_block(block, label)
+
     if not path or not path.strip() or path.strip() == ".":
         raise FileNotFoundError(
-            f"{label} 경로가 비어있거나 유효하지 않습니다: {path!r}. "
-            f"YAML 캠페인 config의 해당 블록에 'path' 필드를 유효한 이미지 파일 경로로 설정하세요."
+            f"{label} 경로가 비어있거나 유효하지 않습니다: {path!r}\n"
+            f"{detail}\n"
+            f"→ YAML 캠페인 config에서 이 블록의 'path' 필드를 확인하세요. "
+            f"GUI에서 저장했다면 이미지 블록 편집 다이얼로그를 다시 열어 파일을 재선택해주세요."
         )
+
     p = Path(path)
+
     if not p.exists():
+        # 추가 힌트: 절대경로/상대경로 구분, 부모 디렉터리 존재 여부
+        is_abs = p.is_absolute()
+        parent_exists = p.parent.exists()
+        hint_parts = [f"경로 타입: {'절대경로' if is_abs else '상대경로'}"]
+        if not is_abs:
+            hint_parts.append(f"해석된 절대경로: {p.resolve()!s}")
+        hint_parts.append(f"부모 디렉터리 존재: {parent_exists}")
+        if parent_exists:
+            # 부모에 있는 파일 목록 일부 (최대 5개) 힌트
+            try:
+                siblings = sorted(s.name for s in p.parent.iterdir() if s.is_file())[:5]
+                if siblings:
+                    hint_parts.append(f"부모 디렉터리 내 파일 예시: {siblings}")
+            except (OSError, PermissionError):
+                pass
+
         raise FileNotFoundError(
-            f"{label} 파일이 존재하지 않습니다: {path!r}. "
-            f"경로가 올바른지, assets 디렉터리 설정이 맞는지 확인하세요."
+            f"{label} 파일이 존재하지 않습니다: {path!r}\n"
+            f"{detail}\n"
+            f"  " + "\n  ".join(hint_parts) + "\n"
+            f"→ 경로가 올바른지, assets 디렉터리 설정이 맞는지 확인하세요. "
+            f"파일이 이동/삭제되었거나, 다른 사용자 환경(예: 윈도우↔WSL)의 경로일 수 있습니다."
         )
+
     if not p.is_file():
         raise FileNotFoundError(
-            f"{label} 경로가 파일이 아닙니다 (디렉터리일 수 있음): {path!r}. "
-            f"디렉터리가 아닌 실제 이미지 파일 경로를 지정하세요."
+            f"{label} 경로가 파일이 아닙니다 (디렉터리일 수 있음): {path!r}\n"
+            f"{detail}\n"
+            f"  is_dir = {p.is_dir()}\n"
+            f"→ 디렉터리가 아닌 실제 이미지 파일 경로를 지정하세요."
         )
+
     return p
 
 
@@ -176,7 +233,8 @@ class ImageHandler(BlockHandler):
     """ImageBlock -> [ImageStep]"""
 
     def to_steps(self, block: ImageBlock, ctx: ContentContext) -> list[PostStep]:
-        p = _validate_image_path(block.path, "이미지")
+        logger.info("[build]   이미지 경로: %r", block.path)
+        p = _validate_image_path(block, "이미지")
         raw = p.read_bytes()
         logger.info("[build]   이미지 처리 중: %s (%.1fKB)", p.name, len(raw) / 1024)
         processed = ctx.img_proc.process(raw, block)
@@ -190,7 +248,8 @@ class FeaturedImageHandler(BlockHandler):
     """FeaturedImageBlock -> [FeaturedImageStep]"""
 
     def to_steps(self, block: FeaturedImageBlock, ctx: ContentContext) -> list[PostStep]:
-        p = _validate_image_path(block.path, "대표이미지")
+        logger.info("[build]   대표이미지 경로: %r", block.path)
+        p = _validate_image_path(block, "대표이미지")
         raw = p.read_bytes()
         logger.info("[build]   대표이미지 처리 중: %s (%.1fKB)", p.name, len(raw) / 1024)
         processed = ctx.img_proc.process(raw, block)

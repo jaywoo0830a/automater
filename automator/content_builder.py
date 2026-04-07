@@ -69,7 +69,15 @@ class ContentBuilder:
             block_name = type(block).__name__
             handler = get_handler(block)
             logger.info("[build] [%d/%d] %s 변환 중...", i + 1, len(flat_blocks), block_name)
-            new_steps = handler.to_steps(block, ctx)
+            try:
+                new_steps = handler.to_steps(block, ctx)
+            except Exception as exc:
+                # 어느 블록에서 실패했는지 명확히 남긴다
+                logger.error(
+                    "[build] [%d/%d] %s 변환 실패: %s",
+                    i + 1, len(flat_blocks), block_name, exc,
+                )
+                raise
             steps_out.extend(new_steps)
 
         logger.info("[build] 변환 완료 — %d개 스텝 생성, 임시파일 %d개", len(steps_out), len(ctx.tmp_files))
