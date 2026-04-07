@@ -171,8 +171,16 @@ class SmartEditorOne(BlogEditor):
         self._click_last_paragraph(frame)
         self._page.keyboard.press("Enter")
 
-    def insert_quote(self, text: str) -> None:
-        """Insert quote block with native formatting."""
+    def insert_quote(self, text: str, quote_type: int = 1) -> None:
+        """Insert quote block with native formatting.
+
+        Args:
+            text:       Quote text.
+            quote_type: Quote style 1~6 (selectors quote_1 ~ quote_6). Default 1.
+        """
+        if not (1 <= quote_type <= 6):
+            quote_type = 1
+
         frame = self._frame()
         sel   = self._sel()
 
@@ -183,7 +191,7 @@ class SmartEditorOne(BlogEditor):
             self.insert_text(text, 2)
             return
 
-        quote_btn = sel.locator(frame, "quote_1")
+        quote_btn = sel.locator(frame, f"quote_{quote_type}")
         if not click_if_visible(quote_btn, timeout_ms=3_000):
             self.insert_text(text, 2)
             return
@@ -220,8 +228,15 @@ class SmartEditorOne(BlogEditor):
         for _ in range(3):
             self._page.keyboard.press("Enter")
 
-    def insert_divider(self) -> None:
-        """Insert horizontal divider with native formatting."""
+    def insert_divider(self, divider_type: int = 2) -> None:
+        """Insert horizontal divider with native formatting.
+
+        Args:
+            divider_type: Divider style 1~8 (selectors divider_1 ~ divider_8). Default 2.
+        """
+        if not (1 <= divider_type <= 8):
+            divider_type = 2
+
         frame = self._frame()
         sel   = self._sel()
 
@@ -231,7 +246,7 @@ class SmartEditorOne(BlogEditor):
         if not click_if_visible(trigger, timeout_ms=3_000):
             return
 
-        divider_btn = sel.locator(frame, "divider_2")
+        divider_btn = sel.locator(frame, f"divider_{divider_type}")
         if not click_if_visible(divider_btn, timeout_ms=3_000):
             return
 

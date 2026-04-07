@@ -331,7 +331,7 @@ def _parse_block(
         return _parse_list(value, values, pools, index, str_maps, wait_ms)
 
     if block_type == "divider":
-        return DividerBlock(wait_ms=wait_ms)
+        return _parse_divider(value, wait_ms)
 
     if block_type == "newline":
         count = int(value) if value else 1
@@ -552,10 +552,54 @@ def _parse_quote(
         return QuoteBlock(
             text=str(cfg.get("text", "")),
             attribution=str(cfg.get("attribution", "")),
+            type=_parse_quote_type(cfg.get("type")),
             wait_ms=wait_ms,
         )
 
     return QuoteBlock()
+
+
+def _parse_quote_type(raw: Any) -> int:
+    """Parse quote type 1~6, default 1."""
+    try:
+        v = int(raw)
+        return v if 1 <= v <= 6 else 1
+    except (TypeError, ValueError):
+        return 1
+
+
+def _parse_divider_type(raw: Any) -> int:
+    """Parse divider type 1~8, default 2."""
+    try:
+        v = int(raw)
+        return v if 1 <= v <= 8 else 2
+    except (TypeError, ValueError):
+        return 2
+
+
+def _parse_divider(value: Any, wait_ms: int = 0) -> DividerBlock:
+    """Parse divider block.
+
+    Forms:
+        - divider                    # bare key, default type=2
+        - divider: 5                 # shorthand: type number
+        - divider:                   # dict form
+            type: 5
+    """
+    if value is None:
+        return DividerBlock(wait_ms=wait_ms)
+
+    if isinstance(value, dict):
+        return DividerBlock(
+            type=_parse_divider_type(value.get("type")),
+            wait_ms=wait_ms,
+        )
+
+    # 단축형: 숫자만 — divider: 5
+    return DividerBlock(
+        type=_parse_divider_type(value),
+        wait_ms=wait_ms,
+    )
 
 
 def _parse_list(

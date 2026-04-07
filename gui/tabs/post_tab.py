@@ -244,10 +244,27 @@ class PostTab(QWidget):
 
     @staticmethod
     def _label(block: dict) -> str:
-        if block.get("divider") is None and "divider" in block:
-            return "------- 구분선 -------"
+        # divider 특수 처리 — type 표시
+        if "divider" in block:
+            val = block["divider"]
+            if val is None:
+                return "------- 구분선 (type 2) -------"
+            if isinstance(val, int):
+                return f"------- 구분선 (type {val}) -------"
+            if isinstance(val, dict):
+                t = val.get("type", 2)
+                return f"------- 구분선 (type {t}) -------"
+
         bt = next(iter(block))
         val = block[bt]
+
+        # quote 특수 처리 — type 표시
+        if bt == "quote" and isinstance(val, dict):
+            text = str(val.get("text", ""))
+            t = val.get("type", 1)
+            short = text[:50] + "..." if len(text) > 50 else text
+            return f"[{bt}:type{t}]  {short}"
+
         if isinstance(val, int):
             return f"[{bt}]  {val}"
         if isinstance(val, str):
@@ -274,8 +291,18 @@ class PostTab(QWidget):
         blocks = []
         for i in range(self._list.count()):
             block = self._list.item(i).data(256)
-            if isinstance(block, dict) and block.get("divider") is None and "divider" in block:
-                blocks.append("divider")
+            # divider 단축 형식 처리:
+            #   {divider: None}              → "divider"  (기본 type=2)
+            #   {divider: 5}                 → {divider: 5}  (단축 숫자)
+            #   {divider: 5, when/wait}      → {divider: 5, ...}
+            #   {divider: {type: 5}}         → {divider: {type: 5}}
+            if isinstance(block, dict) and "divider" in block:
+                val = block.get("divider")
+                extra_keys = {k for k in block if k != "divider"}
+                if val is None and not extra_keys:
+                    blocks.append("divider")
+                else:
+                    blocks.append(block)
             else:
                 blocks.append(block)
         return {"post": blocks} if blocks else {}
@@ -508,9 +535,11 @@ class _QuoteDialog(QDialog):
         if isinstance(_raw_val, dict):
             _text_default = str(_raw_val.get("text", ""))
             _attr_default = str(_raw_val.get("attribution", ""))
+            _type_default = int(_raw_val.get("type", 1)) if _raw_val.get("type") else 1
         else:
             _text_default = str(_raw_val) if _raw_val else ""
             _attr_default = ""
+            _type_default = 1
         _when: str = str((existing or {}).get("when", ""))
         _wait: str = str((existing or {}).get("wait", ""))
 
@@ -520,6 +549,12 @@ class _QuoteDialog(QDialog):
         self._attribution = QLineEdit(_attr_default)
         self._attribution.setPlaceholderText("출처 (선택)")
 
+        # 인용구 스타일 (1~6, 기본 1)
+        self._type = QSpinBox()
+        self._type.setRange(1, 6)
+        self._type.setValue(_type_default)
+        self._type.setToolTip("네이버 SE 인용구 스타일 1~6 (기본 1)")
+
         text_row = QHBoxLayout()
         text_row.addWidget(self._text)
         text_row.addWidget(token_btn)
@@ -527,6 +562,7 @@ class _QuoteDialog(QDialog):
         form = QFormLayout()
         form.addRow("인용문:", text_row)
         form.addRow("출처:", self._attribution)
+        form.addRow("스타일:", self._type)
 
         # 고급
         self._when = QLineEdit(str(_when))
@@ -553,8 +589,16 @@ class _QuoteDialog(QDialog):
     def result(self) -> dict:
         text = self._text.text().strip()
         attr = self._attribution.text().strip()
-        if attr:
-            entry: dict = {"quote": {"text": text, "attribution": attr}}
+        qtype = int(self._type.value())
+
+        # type이 기본값(1)이 아니거나 attribution이 있으면 dict 형식
+        if attr or qtype != 1:
+            quote_dict: dict = {"text": text}
+            if attr:
+                quote_dict["attribution"] = attr
+            if qtype != 1:
+                quote_dict["type"] = qtype
+            entry: dict = {"quote": quote_dict}
         else:
             entry = {"quote": text}
 
@@ -928,15 +972,30 @@ class _ImageDialog(QDialog):
 
 
 class _DividerDialog(QDialog):
-    """구분선 편집 -- when/wait만."""
+    """구분선 편집 -- type + when/wait."""
 
     def __init__(self, parent: QWidget, existing: dict | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("구분선 설정")
         self.setMinimumWidth(400)
 
+        # 기존 값 추출 — divider는 dict({type: N}) 또는 int(N) 또는 None
+        _raw_val = (existing or {}).get("divider")
+        if isinstance(_raw_val, dict):
+            _type_default = int(_raw_val.get("type", 2)) if _raw_val.get("type") else 2
+        elif isinstance(_raw_val, int):
+            _type_default = _raw_val
+        else:
+            _type_default = 2
+
         _when: str = str((existing or {}).get("when", ""))
         _wait: str = str((existing or {}).get("wait", ""))
+
+        # 구분선 스타일 (1~8, 기본 2)
+        self._type = QSpinBox()
+        self._type.setRange(1, 8)
+        self._type.setValue(_type_default)
+        self._type.setToolTip("네이버 SE 구분선 스타일 1~8 (기본 2)")
 
         self._when = QLineEdit(_when)
         self._when.setPlaceholderText('{keyword:region} == 강남')
@@ -944,6 +1003,7 @@ class _DividerDialog(QDialog):
         self._wait.setPlaceholderText("2s 또는 1s ~ 3s")
 
         form = QFormLayout()
+        form.addRow("스타일:", self._type)
         form.addRow("조건 (when):", self._when)
         form.addRow("대기 (wait):", self._wait)
 
@@ -959,7 +1019,12 @@ class _DividerDialog(QDialog):
         self.setLayout(layout)
 
     def result(self) -> dict:
-        entry: dict = {"divider": None}
+        dtype = int(self._type.value())
+        # type이 기본값(2)이 아니면 단축형(숫자)으로, 기본값이면 None으로 저장
+        if dtype != 2:
+            entry: dict = {"divider": dtype}
+        else:
+            entry = {"divider": None}
         when = self._when.text().strip()
         if when:
             entry["when"] = when

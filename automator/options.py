@@ -278,15 +278,25 @@ class ListBlock:
 
 @dataclass(frozen=True)
 class QuoteBlock:
-    """인용문 블록."""
+    """인용문 블록.
+
+    type: 인용구 스타일 번호 (1~6, 기본 1).
+          네이버 SE에서 quote_1 ~ quote_6 셀렉터에 대응.
+    """
     text:        str = ""
     attribution: str = ""
+    type:        int = 1
     wait_ms:     int = 0
 
 
 @dataclass(frozen=True)
 class DividerBlock:
-    """구분선 블록. 내용 없음."""
+    """구분선 블록. 내용 없음.
+
+    type: 구분선 스타일 번호 (1~8, 기본 2).
+          네이버 SE에서 divider_1 ~ divider_8 셀렉터에 대응.
+    """
+    type:    int = 2
     wait_ms: int = 0
 
 

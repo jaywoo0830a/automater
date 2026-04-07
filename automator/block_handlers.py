@@ -205,14 +205,14 @@ class QuoteHandler(BlockHandler):
         text = block.text
         if block.attribution:
             text += f"\n— {block.attribution}"
-        return [QuoteStep(text=text, wait_ms=block.wait_ms)]
+        return [QuoteStep(text=text, type=block.type, wait_ms=block.wait_ms)]
 
 
 class DividerHandler(BlockHandler):
     """DividerBlock -> [DividerStep]"""
 
     def to_steps(self, block: DividerBlock, ctx: ContentContext) -> list[PostStep]:
-        return [DividerStep(wait_ms=block.wait_ms)]
+        return [DividerStep(type=block.type, wait_ms=block.wait_ms)]
 
 
 class NewLineHandler(BlockHandler):

@@ -100,12 +100,13 @@ class BlogEditor(ABC):
         """
 
     @abstractmethod
-    def insert_quote(self, text: str) -> None:
+    def insert_quote(self, text: str, quote_type: int = 1) -> None:
         """
         Insert a quote block with editor-native formatting.
 
         Args:
-            text: Quote text.
+            text:       Quote text.
+            quote_type: Quote style number (1~6, platform-specific). Default 1.
         """
 
     @abstractmethod
@@ -119,8 +120,13 @@ class BlogEditor(ABC):
         """
 
     @abstractmethod
-    def insert_divider(self) -> None:
-        """Insert a horizontal divider with editor-native formatting."""
+    def insert_divider(self, divider_type: int = 2) -> None:
+        """
+        Insert a horizontal divider with editor-native formatting.
+
+        Args:
+            divider_type: Divider style number (1~8, platform-specific). Default 2.
+        """
 
     @abstractmethod
     def upload_file(self, path: str) -> None:
@@ -260,21 +266,29 @@ class ListStep(PostStep):
 
 @dataclass(frozen=True)
 class QuoteStep(PostStep):
-    """Insert a quote with editor-native formatting."""
+    """Insert a quote with editor-native formatting.
+
+    type: 인용구 스타일 (1~6, 기본 1).
+    """
     text:    str
+    type:    int = 1
     wait_ms: int = 0
 
     def execute(self, editor: BlogEditor) -> None:
-        editor.insert_quote(self.text)
+        editor.insert_quote(self.text, self.type)
 
 
 @dataclass(frozen=True)
 class DividerStep(PostStep):
-    """Insert a horizontal divider."""
+    """Insert a horizontal divider.
+
+    type: 구분선 스타일 (1~8, 기본 2).
+    """
+    type:    int = 2
     wait_ms: int = 0
 
     def execute(self, editor: BlogEditor) -> None:
-        editor.insert_divider()
+        editor.insert_divider(self.type)
 
 
 @dataclass(frozen=True)

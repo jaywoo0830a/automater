@@ -203,8 +203,11 @@
 #                 effect: blur:3 ~ 8
 #
 # ── quote
-#   단축: - quote: "인용문"
-#   상세: - quote: {text: "인용", attribution: "작가"}
+#   단축: - quote: "인용문"                       # type=1 (기본)
+#   상세: - quote:
+#             text: "인용"
+#             attribution: "작가"
+#             type: 3                             # 1~6 (기본 1)
 #
 # ── list
 #   단축: - list: [항목1, 항목2]
@@ -213,7 +216,10 @@
 #             ordered: true
 #
 # ── divider
-#   - divider
+#   기본:    - divider                            # type=2 (기본)
+#   숫자:    - divider: 5                         # 단축: 1~8
+#   상세:    - divider:
+#                type: 5                           # 1~8 (기본 2)
 #
 # ── newline (줄바꿈 -- 지정 횟수만큼 Enter)
 #   - newline: 4                              # Enter 4번

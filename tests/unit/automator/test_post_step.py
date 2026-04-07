@@ -87,11 +87,23 @@ def test_list_step_ordered_calls_insert_list(mock_editor):
 def test_quote_step_calls_insert_quote(mock_editor):
     step = QuoteStep(text="wise words")
     step.execute(mock_editor)
-    mock_editor.insert_quote.assert_called_once_with("wise words")
+    mock_editor.insert_quote.assert_called_once_with("wise words", 1)
+
+
+def test_quote_step_with_type(mock_editor):
+    step = QuoteStep(text="wise", type=4)
+    step.execute(mock_editor)
+    mock_editor.insert_quote.assert_called_once_with("wise", 4)
 
 
 def test_divider_step_calls_insert_divider(mock_editor):
     step = DividerStep()
     step.execute(mock_editor)
-    mock_editor.insert_divider.assert_called_once()
+    mock_editor.insert_divider.assert_called_once_with(2)
+
+
+def test_divider_step_with_type(mock_editor):
+    step = DividerStep(type=5)
+    step.execute(mock_editor)
+    mock_editor.insert_divider.assert_called_once_with(5)
 
