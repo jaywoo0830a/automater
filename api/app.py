@@ -4,9 +4,10 @@ api/app.py
 Flask app.
 
 Endpoints:
-    POST   /campaigns                    ZIP upload -> register
+    POST   /campaigns                    ZIP upload -> register (validates YAML)
     GET    /campaigns                    list
     GET    /campaigns/{id}               status + logs
+    POST   /campaigns/{id}/validate      re-validate YAML on demand
     POST   /campaigns/{id}/execute       start execution
     GET    /campaigns/{id}/sessions      session status per account
     POST   /campaigns/{id}/sessions/vnc  VNC login for a campaign account
@@ -31,6 +32,7 @@ from api.auth import require_api_key
 from api.workspace import create_workspace, remove_workspace, find_config
 from api.worker import Worker, Status, check_sessions, parse_campaign_accounts
 from api.vnc_session import create_vnc_session, get_vnc_session, delete_vnc_session
+from cli.config_loader import load_config, ConfigError
 
 app = Flask(__name__)
 sock = Sock(app)
@@ -44,7 +46,11 @@ worker = Worker()
 @app.post("/campaigns")
 @require_api_key
 def upload_campaign():
-    """ZIP upload -> register campaign (pending_sessions)."""
+    """ZIP upload -> validate YAML -> register campaign (pending_sessions).
+
+    YAML이 엄격 검증을 통과하지 못하면 업로드 거부 (400).
+    워크스페이스는 생성되지 않고 ZIP은 폐기됨.
+    """
     if "file" not in request.files:
         return jsonify({"error": "file field required"}), 400
 
@@ -65,6 +71,33 @@ def upload_campaign():
         Path(tmp_path).unlink(missing_ok=True)
 
     config_path = find_config(workspace).resolve()
+
+    # ── 엄격 검증: 업로드 시점에 YAML 유효성 확인 ──
+    try:
+        load_config(str(config_path))
+    except ConfigError as exc:
+        # 검증 실패 시 워크스페이스 롤백
+        try:
+            remove_workspace(workspace)
+        except Exception:
+            pass
+        return jsonify({
+            "error": "config validation failed",
+            "detail": str(exc),
+            "config_path": str(config_path),
+        }), 400
+    except Exception as exc:
+        # YAML 파싱 에러 등
+        try:
+            remove_workspace(workspace)
+        except Exception:
+            pass
+        return jsonify({
+            "error": "config load failed",
+            "detail": str(exc),
+            "config_path": str(config_path),
+        }), 400
+
     name = request.form.get("name", "") or Path(file.filename).stem
     campaign = worker.register(campaign_id, str(config_path), str(workspace.resolve()), name=name)
 
@@ -79,6 +112,41 @@ def upload_campaign():
         "status": campaign.status.value,
         "sessions": sessions,
     }), 201
+
+
+@app.post("/campaigns/<campaign_id>/validate")
+@require_api_key
+def validate_campaign(campaign_id: str):
+    """등록된 캠페인의 YAML을 재검증한다.
+
+    워크스페이스 내 YAML을 수정한 뒤 재확인할 때 사용.
+    성공 시 {ok: true, config_path}, 실패 시 400 + detail.
+    """
+    campaign = worker.get(campaign_id)
+    if not campaign:
+        return jsonify({"error": "not found"}), 404
+
+    try:
+        load_config(campaign.config_path)
+    except ConfigError as exc:
+        return jsonify({
+            "ok": False,
+            "error": "config validation failed",
+            "detail": str(exc),
+            "config_path": campaign.config_path,
+        }), 400
+    except Exception as exc:
+        return jsonify({
+            "ok": False,
+            "error": "config load failed",
+            "detail": str(exc),
+            "config_path": campaign.config_path,
+        }), 400
+
+    return jsonify({
+        "ok": True,
+        "config_path": campaign.config_path,
+    })
 
 
 @app.get("/campaigns")
@@ -103,13 +171,33 @@ def get_campaign(campaign_id: str):
 @app.post("/campaigns/<campaign_id>/execute")
 @require_api_key
 def execute_campaign(campaign_id: str):
-    """세션 준비 완료 후 캠페인 실행."""
+    """세션 준비 완료 후 캠페인 실행.
+
+    실행 직전에 YAML을 재검증하여 워크스페이스에서 수정된 경우에도
+    엄격 검증에 통과한 설정만 실행되게 한다.
+    """
     campaign = worker.get(campaign_id)
     if not campaign:
         return jsonify({"error": "not found"}), 404
 
     if campaign.status != Status.PENDING_SESSIONS:
         return jsonify({"error": f"cannot execute: status={campaign.status.value}"}), 400
+
+    # 실행 직전 재검증
+    try:
+        load_config(campaign.config_path)
+    except ConfigError as exc:
+        return jsonify({
+            "error": "config validation failed",
+            "detail": str(exc),
+            "config_path": campaign.config_path,
+        }), 400
+    except Exception as exc:
+        return jsonify({
+            "error": "config load failed",
+            "detail": str(exc),
+            "config_path": campaign.config_path,
+        }), 400
 
     sessions = check_sessions(campaign.config_path, campaign.workspace, validate=False)
     if not sessions["all_ready"]:

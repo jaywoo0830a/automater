@@ -77,7 +77,9 @@ export default function Upload({ onUploaded }) {
           <button className="upload__submit" type="submit">Upload</button>
         </form>
       )}
-      {status && <p className={statusCls}>{status.msg}</p>}
+      {status && (
+        <pre className={statusCls}>{status.msg}</pre>
+      )}
     </div>
   );
 }

@@ -39,9 +39,30 @@ export async function uploadCampaign(file, name = "") {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || res.statusText);
+    const msg = err.detail
+      ? `${err.error || res.statusText}\n\n${err.detail}`
+      : (err.error || res.statusText);
+    const e = new Error(msg);
+    e.detail = err.detail || "";
+    e.status = res.status;
+    throw e;
   }
   return res.json();
+}
+
+export async function validateCampaign(campaignId) {
+  const res = await fetch(`/campaigns/${campaignId}/validate`, {
+    method: "POST",
+    headers: headers(),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const e = new Error(data.detail || data.error || res.statusText);
+    e.detail = data.detail || "";
+    e.status = res.status;
+    throw e;
+  }
+  return data;
 }
 
 export async function listCampaigns() {
@@ -85,7 +106,13 @@ export async function executeCampaign(campaignId) {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || res.statusText);
+    const msg = err.detail
+      ? `${err.error || res.statusText}\n\n${err.detail}`
+      : (err.error || res.statusText);
+    const e = new Error(msg);
+    e.detail = err.detail || "";
+    e.status = res.status;
+    throw e;
   }
   return res.json();
 }

@@ -167,7 +167,7 @@ export default function SessionSetup({ campaignId, onExecuted }) {
         ))}
       </div>
 
-      {error && <p className="setup__error">{error}</p>}
+      {error && <pre className="setup__error setup__error--block">{error}</pre>}
 
       {/* VNC 상태 */}
       {currentVnc && currentVnc.status === "starting" && (
