@@ -630,7 +630,9 @@ def _parse_list(
 # ---------------------------------------------------------------------------
 
 def _resolve_path(images_dir: str, filename: str) -> str:
-    if not filename:
+    # 빈 값 또는 현재 디렉터리(.) 는 경로 없음으로 처리
+    # ImageHandler/FeaturedImageHandler에서 명확한 에러로 잡힌다
+    if not filename or filename.strip() in ("", "."):
         return ""
     if not images_dir or images_dir == ".":
         return filename

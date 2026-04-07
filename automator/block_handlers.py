@@ -146,20 +146,43 @@ def _save_temp(data: bytes, name: str, ctx: ContentContext) -> str:
     return tmp.name
 
 
+def _validate_image_path(path: str, label: str) -> Path:
+    """이미지 경로를 검증하고 Path 객체를 반환한다.
+
+    Raises:
+        FileNotFoundError: 경로가 비어있거나, 존재하지 않거나, 파일이 아닌 경우.
+            ('.', 디렉터리 등은 Windows에서 Permission denied로 이어짐)
+    """
+    if not path or not path.strip() or path.strip() == ".":
+        raise FileNotFoundError(
+            f"{label} 경로가 비어있거나 유효하지 않습니다: {path!r}. "
+            f"YAML 캠페인 config의 해당 블록에 'path' 필드를 유효한 이미지 파일 경로로 설정하세요."
+        )
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(
+            f"{label} 파일이 존재하지 않습니다: {path!r}. "
+            f"경로가 올바른지, assets 디렉터리 설정이 맞는지 확인하세요."
+        )
+    if not p.is_file():
+        raise FileNotFoundError(
+            f"{label} 경로가 파일이 아닙니다 (디렉터리일 수 있음): {path!r}. "
+            f"디렉터리가 아닌 실제 이미지 파일 경로를 지정하세요."
+        )
+    return p
+
+
 class ImageHandler(BlockHandler):
     """ImageBlock -> [ImageStep]"""
 
     def to_steps(self, block: ImageBlock, ctx: ContentContext) -> list[PostStep]:
-        path = block.path
-        if Path(path).exists():
-            raw = Path(block.path).read_bytes()
-            logger.info("[build]   이미지 처리 중: %s (%.1fKB)", Path(path).name, len(raw) / 1024)
-            processed = ctx.img_proc.process(raw, block)
-            name = _build_filename("preview", block.filename_keyword)
-            path = _save_temp(processed, name, ctx)
-            logger.info("[build]   이미지 처리 완료 → %s (%.1fKB)", Path(path).name, len(processed) / 1024)
-        else:
-            logger.warning("[build]   이미지 파일 없음: %s", path)
+        p = _validate_image_path(block.path, "이미지")
+        raw = p.read_bytes()
+        logger.info("[build]   이미지 처리 중: %s (%.1fKB)", p.name, len(raw) / 1024)
+        processed = ctx.img_proc.process(raw, block)
+        name = _build_filename("preview", block.filename_keyword)
+        path = _save_temp(processed, name, ctx)
+        logger.info("[build]   이미지 처리 완료 → %s (%.1fKB)", Path(path).name, len(processed) / 1024)
         return [ImageStep(path=path, link=block.link, wait_ms=block.wait_ms)]
 
 
@@ -167,16 +190,13 @@ class FeaturedImageHandler(BlockHandler):
     """FeaturedImageBlock -> [FeaturedImageStep]"""
 
     def to_steps(self, block: FeaturedImageBlock, ctx: ContentContext) -> list[PostStep]:
-        path = block.path
-        if Path(path).exists():
-            raw = Path(block.path).read_bytes()
-            logger.info("[build]   대표이미지 처리 중: %s (%.1fKB)", Path(path).name, len(raw) / 1024)
-            processed = ctx.img_proc.process(raw, block)
-            name = _build_filename("featured", block.filename_keyword)
-            path = _save_temp(processed, name, ctx)
-            logger.info("[build]   대표이미지 처리 완료 → %s (%.1fKB)", Path(path).name, len(processed) / 1024)
-        else:
-            logger.warning("[build]   대표이미지 파일 없음: %s", path)
+        p = _validate_image_path(block.path, "대표이미지")
+        raw = p.read_bytes()
+        logger.info("[build]   대표이미지 처리 중: %s (%.1fKB)", p.name, len(raw) / 1024)
+        processed = ctx.img_proc.process(raw, block)
+        name = _build_filename("featured", block.filename_keyword)
+        path = _save_temp(processed, name, ctx)
+        logger.info("[build]   대표이미지 처리 완료 → %s (%.1fKB)", Path(path).name, len(processed) / 1024)
         return [FeaturedImageStep(path=path, link=block.link, wait_ms=block.wait_ms)]
 
 
