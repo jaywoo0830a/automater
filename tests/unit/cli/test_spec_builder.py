@@ -188,6 +188,50 @@ class TestImage:
 
 
 # ---------------------------------------------------------------------------
+# Image path required — dynamic (post-interpolation) validation
+# ---------------------------------------------------------------------------
+
+class TestImagePathRequired:
+    """interpolation 결과 path가 비어있으면 ConfigError."""
+
+    def test_token_resolved_to_empty(self):
+        """{keyword:region}이 빈 값으로 치환되어 path가 비면 실패."""
+        from cli.config_loader import ConfigError
+        config = {
+            **FULL_CONFIG,
+            "keywords": {"region": [""], "subject": ["수학"]},
+            "post": [{"image": "{keyword:region}"}],
+        }
+        combo = Combo(values={"region": "", "subject": "수학"}, title_template=FULL_CONFIG["titles"][0], index=1)
+        with pytest.raises(ConfigError, match="path.*interpolation"):
+            build_spec(combo, config)
+
+    def test_dict_path_resolved_to_empty(self):
+        """dict 형식의 path 토큰도 interpolation 후 검증."""
+        from cli.config_loader import ConfigError
+        config = {
+            **FULL_CONFIG,
+            "keywords": {"region": [""], "subject": ["수학"]},
+            "post": [{"image": {"path": "{keyword:region}", "link": "tel:..."}}],
+        }
+        combo = Combo(values={"region": "", "subject": "수학"}, title_template=FULL_CONFIG["titles"][0], index=1)
+        with pytest.raises(ConfigError, match="path.*interpolation"):
+            build_spec(combo, config)
+
+    def test_featured_image_dynamic_empty(self):
+        from cli.config_loader import ConfigError
+        config = {
+            **FULL_CONFIG,
+            "keywords": {"region": [""], "subject": ["수학"]},
+            "post": [{"featured_image": "{keyword:region}.jpg"}],
+        }
+        combo = Combo(values={"region": "", "subject": "수학"}, title_template=FULL_CONFIG["titles"][0], index=1)
+        # "" + ".jpg" = ".jpg" — 이건 통과 (빈 값이 아니므로)
+        spec = build_spec(combo, config)
+        assert ".jpg" in spec.body[0].blocks[0].path
+
+
+# ---------------------------------------------------------------------------
 # Thumbnail
 # ---------------------------------------------------------------------------
 

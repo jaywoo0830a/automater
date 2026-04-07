@@ -173,20 +173,24 @@
 #               format: plain               # plain | html
 #
 # ── image
+#   path 필수 -- 없거나 빈 값/'.'이면 ConfigError
 #   단축: - image: photo.jpg
 #   상세: - image:
-#             path: photo.jpg
+#             path: photo.jpg              # 필수
 #             alt: "대체텍스트"
 #             link: "tel:01012345678"
 #             wait: 3s
 #             effects:
 #               - region: border:10 ~ 30
 #                 effect: brightness:0.3 ~ 0.7
+#   토큰 사용: - image: {path: "{map:photo}"}
+#             (토큰이 빈 값으로 치환되면 런타임에 ConfigError)
 #
 # ── featured_image (대표 이미지)
+#   path 필수 -- image와 동일
 #   단축: - featured_image: thumb.jpg
 #   상세: - featured_image:
-#             path: thumb.jpg
+#             path: thumb.jpg              # 필수
 #             overlay_text: "{keyword:region} 과외"
 #             overlay_color: "#FFFFFF"
 #             overlay_background: 0.6

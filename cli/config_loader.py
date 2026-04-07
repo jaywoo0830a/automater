@@ -230,7 +230,622 @@ def _validate_semantic(config: dict[str, Any]) -> None:
                     f"Available: {sorted(maps.keys())}"
                 )
 
+    _validate_accounts(config)
+    _validate_maps(config, keywords)
+    _validate_pools(config)
+    _validate_post_blocks(config)
+    _validate_post_image_paths(config)
+    _validate_publish(config)
+    _validate_run(config)
+    _validate_style(config)
     _validate_title_check(config, pools)
+
+
+_IMAGE_BLOCK_TYPES = ("image", "featured_image")
+
+
+def _validate_post_image_paths(config: dict[str, Any]) -> None:
+    """image / featured_image 블록에 path가 명시되어 있는지 정적으로 검사.
+
+    DSL 규칙: image / featured_image 블록은 path 필드가 필수다.
+    빈 문자열, '.', 공백만 있는 값은 허용하지 않는다.
+
+    interpolation 전(토큰이 그대로인 상태)에서 검사하므로,
+    {keyword:x}, {pool:y}, {map:z} 같은 토큰이 포함되어 있으면 통과한다.
+    (실제 값이 비어있는지는 spec_builder가 interpolation 후에 검사)
+    """
+    post = config.get("post", [])
+    if not isinstance(post, list):
+        return
+
+    for i, entry in enumerate(post):
+        if isinstance(entry, str):
+            # bare string: "divider" 등 — image 블록이 아님
+            continue
+        if not isinstance(entry, dict):
+            continue
+
+        # 블록 타입 찾기 (when/wait 제외)
+        block_type = next(
+            (k for k in entry.keys() if k not in ("when", "wait")),
+            None,
+        )
+        if block_type not in _IMAGE_BLOCK_TYPES:
+            continue
+
+        value = entry.get(block_type)
+        raw_path = _extract_image_path(value)
+
+        if raw_path is None:
+            raise ConfigError(
+                f"post[{i}] {block_type} 블록에 'path' 필드가 없습니다. "
+                f"예: {{{block_type}: {{path: 'photo.jpg'}}}} "
+                f"또는 단축형 {{{block_type}: 'photo.jpg'}}. "
+                f"현재 값: {value!r}"
+            )
+
+        stripped = raw_path.strip()
+        if not stripped or stripped == ".":
+            raise ConfigError(
+                f"post[{i}] {block_type} 블록의 'path'가 비어있거나 '.' 입니다: {raw_path!r}. "
+                f"유효한 이미지 파일 경로를 지정하세요."
+            )
+
+
+def _extract_image_path(value: Any) -> str | None:
+    """image 블록 값에서 path 문자열을 추출한다.
+
+    Returns:
+        path 문자열 (빈 문자열 포함) 또는 path 필드 자체가 없으면 None.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        if "path" not in value:
+            return None
+        return str(value["path"]) if value["path"] is not None else ""
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Strict validators
+# ---------------------------------------------------------------------------
+
+def _validate_accounts(config: dict[str, Any]) -> None:
+    """accounts의 각 필드 타입/범위 엄격 검증.
+
+    - weight, min_posts, max_posts는 0 이상 정수
+    - max_posts > 0 이면 min_posts <= max_posts
+    - proxy는 문자열이어야 함
+    """
+    accounts = config.get("accounts", [])
+    for i, acc in enumerate(accounts):
+        if not isinstance(acc, dict):
+            continue
+
+        for key in ("weight", "min_posts", "max_posts"):
+            if key in acc:
+                val = acc[key]
+                if not isinstance(val, int) or isinstance(val, bool):
+                    raise ConfigError(
+                        f"accounts[{i}].{key}는 정수여야 합니다: {val!r}"
+                    )
+                if val < 0:
+                    raise ConfigError(
+                        f"accounts[{i}].{key}는 0 이상이어야 합니다: {val}"
+                    )
+
+        min_p = int(acc.get("min_posts", 0))
+        max_p = int(acc.get("max_posts", 0))
+        if max_p > 0 and min_p > max_p:
+            raise ConfigError(
+                f"accounts[{i}]: min_posts({min_p}) > max_posts({max_p}) — "
+                f"min_posts는 max_posts 이하여야 합니다."
+            )
+
+        if "proxy" in acc and not isinstance(acc["proxy"], str):
+            raise ConfigError(
+                f"accounts[{i}].proxy는 문자열이어야 합니다: {acc['proxy']!r}"
+            )
+
+        if "session" in acc and not isinstance(acc["session"], str):
+            raise ConfigError(
+                f"accounts[{i}].session은 문자열이어야 합니다: {acc['session']!r}"
+            )
+
+
+def _validate_maps(config: dict[str, Any], keywords: dict) -> None:
+    """maps 섹션 엄격 검증.
+
+    각 map 항목에 대해:
+    - dict 형식이어야 함
+    - file 필드 필수 (빈 값 불가)
+    - by 필드 필수 — {keyword:X} 형식이며 X가 존재하는 keyword 카테고리여야 함
+    - 파일 존재 여부 체크
+    """
+    maps = config.get("maps")
+    if maps is None:
+        return
+    if not isinstance(maps, dict):
+        raise ConfigError(f"'maps'는 매핑이어야 합니다: {type(maps).__name__}")
+
+    base_dir = config.get("_base_dir", ".")
+
+    for slug, entry in maps.items():
+        loc = f"maps['{slug}']"
+        if not isinstance(entry, dict):
+            raise ConfigError(
+                f"{loc}는 dict여야 합니다 (file, by 필드 포함): {entry!r}"
+            )
+
+        # file 필수
+        file_path = entry.get("file")
+        if not file_path or not isinstance(file_path, str):
+            raise ConfigError(
+                f"{loc}.file 필드가 없거나 비어있습니다. "
+                f"예: {{file: 'maps/region_photo.yaml', by: '{{keyword:region}}'}}"
+            )
+
+        # by 필수
+        by = entry.get("by")
+        if by is None:
+            raise ConfigError(
+                f"{loc}.by 필드가 없습니다. "
+                f"맵 조회 키를 지정하는 {{keyword:X}} 형식이 필요합니다. "
+                f"예: by: '{{keyword:region}}'"
+            )
+        if not isinstance(by, str) or not by.strip():
+            raise ConfigError(
+                f"{loc}.by는 비어있지 않은 문자열이어야 합니다: {by!r}"
+            )
+
+        # by 토큰 형식 검증
+        by_match = re.fullmatch(r"\{keyword:(\w+)\}", by.strip())
+        if not by_match:
+            raise ConfigError(
+                f"{loc}.by는 '{{keyword:슬러그}}' 형식이어야 합니다: {by!r}. "
+                f"예: by: '{{keyword:region}}'"
+            )
+
+        by_slug = by_match.group(1)
+        if by_slug not in keywords:
+            raise ConfigError(
+                f"{loc}.by = '{{keyword:{by_slug}}}'가 존재하지 않는 keyword를 참조합니다. "
+                f"정의된 keywords: {sorted(keywords.keys())}"
+            )
+
+        # file 존재 여부
+        p = Path(file_path) if Path(file_path).is_absolute() else Path(base_dir) / file_path
+        if not p.exists():
+            raise ConfigError(
+                f"{loc}.file이 존재하지 않습니다: {p} "
+                f"(config의 file={file_path!r}, base_dir={base_dir!r})"
+            )
+        if not p.is_file():
+            raise ConfigError(
+                f"{loc}.file이 파일이 아닙니다 (디렉터리일 수 있음): {p}"
+            )
+
+        # YAML 파싱 가능 여부
+        try:
+            import yaml as _yaml
+            data = _yaml.safe_load(p.read_text(encoding="utf-8"))
+        except Exception as exc:
+            raise ConfigError(
+                f"{loc}.file YAML 파싱 실패: {p} — {exc}"
+            )
+
+        if data is None:
+            raise ConfigError(f"{loc}.file이 비어있습니다: {p}")
+        if not isinstance(data, dict):
+            raise ConfigError(
+                f"{loc}.file 내용은 key:value 매핑이어야 합니다: {p} "
+                f"(got {type(data).__name__})"
+            )
+
+        # 현재 keyword 값들이 맵에 있는지(또는 _default 있는지) 체크
+        keyword_values = keywords.get(by_slug, [])
+        has_default = "_default" in data
+        missing = [v for v in keyword_values if v not in data]
+        if missing and not has_default:
+            raise ConfigError(
+                f"{loc}: keyword '{by_slug}'의 값 {missing}가 맵에 없고 '_default'도 없습니다. "
+                f"맵 파일({p})에 해당 키를 추가하거나 '_default' 항목을 정의하세요."
+            )
+
+
+def _validate_pools(config: dict[str, Any]) -> None:
+    """pools 엄격 검증.
+
+    - dict 형식
+    - 각 pool은 리스트여야 함
+    - 각 항목은 비어있지 않은 문자열
+    """
+    pools = config.get("pools", {})
+    if pools is None:
+        return
+    if not isinstance(pools, dict):
+        raise ConfigError(f"'pools'는 매핑이어야 합니다: {type(pools).__name__}")
+
+    for slug, items in pools.items():
+        if not isinstance(items, list):
+            raise ConfigError(
+                f"pools['{slug}']는 리스트여야 합니다: {type(items).__name__}"
+            )
+        for j, item in enumerate(items):
+            if not isinstance(item, (str, int, float)):
+                raise ConfigError(
+                    f"pools['{slug}'][{j}]는 문자열이어야 합니다: {item!r}"
+                )
+            if not str(item).strip():
+                raise ConfigError(
+                    f"pools['{slug}'][{j}]가 빈 문자열입니다."
+                )
+
+
+_HEADING_RE = re.compile(r"^h([1-6])$")
+_KNOWN_BLOCK_TYPES = {
+    "paragraph", "text", "image", "featured_image",
+    "quote", "list", "divider", "newline",
+    "h1", "h2", "h3", "h4", "h5", "h6",
+}
+
+
+def _validate_post_blocks(config: dict[str, Any]) -> None:
+    """post 블록 전체 엄격 검증.
+
+    - 각 entry는 str('divider') 또는 dict
+    - dict는 알려진 블록 타입 키 1개 (+ when/wait) 필요
+    - quote/divider type 범위 검증
+    - heading level 검증
+    - list items 검증
+    - text/paragraph 문자열 검증
+    """
+    post = config.get("post", [])
+    if post is None:
+        return
+    if not isinstance(post, list):
+        raise ConfigError(f"'post'는 리스트여야 합니다: {type(post).__name__}")
+
+    for i, entry in enumerate(post):
+        loc = f"post[{i}]"
+
+        if isinstance(entry, str):
+            if entry != "divider":
+                raise ConfigError(
+                    f"{loc}: 문자열 단축형은 'divider'만 허용됩니다: {entry!r}"
+                )
+            continue
+
+        if not isinstance(entry, dict):
+            raise ConfigError(
+                f"{loc}는 dict 또는 'divider' 문자열이어야 합니다: {entry!r}"
+            )
+
+        # when/wait 키 제외한 첫 번째 키를 블록 타입으로 판단
+        block_keys = [k for k in entry.keys() if k not in ("when", "wait")]
+        if not block_keys:
+            raise ConfigError(
+                f"{loc}: 블록 타입 키가 없습니다 (when/wait만 있음). "
+                f"알려진 블록 타입: {sorted(_KNOWN_BLOCK_TYPES)}"
+            )
+        if len(block_keys) > 1:
+            raise ConfigError(
+                f"{loc}: 여러 블록 타입 키가 섞여있습니다: {block_keys}. "
+                f"한 블록에는 하나의 타입만 지정하세요."
+            )
+
+        block_type = block_keys[0]
+        if block_type not in _KNOWN_BLOCK_TYPES:
+            raise ConfigError(
+                f"{loc}: 알려지지 않은 블록 타입 '{block_type}'. "
+                f"허용: {sorted(_KNOWN_BLOCK_TYPES)}"
+            )
+
+        value = entry[block_type]
+
+        # wait 형식 — 숫자 또는 문자열
+        if "wait" in entry:
+            w = entry["wait"]
+            if not isinstance(w, (int, float, str)):
+                raise ConfigError(
+                    f"{loc}.wait는 숫자 또는 문자열이어야 합니다: {w!r}"
+                )
+
+        # when 형식 — 문자열
+        if "when" in entry:
+            wh = entry["when"]
+            if not isinstance(wh, str):
+                raise ConfigError(
+                    f"{loc}.when은 문자열이어야 합니다: {wh!r}"
+                )
+
+        # 블록 타입별 상세 검증
+        if block_type == "quote":
+            _check_quote(value, loc)
+        elif block_type == "divider":
+            _check_divider(value, loc)
+        elif block_type == "list":
+            _check_list(value, loc)
+        elif _HEADING_RE.match(block_type):
+            _check_heading_value(value, loc, block_type)
+        elif block_type == "paragraph":
+            _check_paragraph(value, loc)
+        elif block_type == "text":
+            _check_text(value, loc)
+        elif block_type == "newline":
+            _check_newline(value, loc)
+        # image / featured_image는 _validate_post_image_paths에서 처리
+
+
+def _check_quote(value: Any, loc: str) -> None:
+    if value is None or value == "":
+        raise ConfigError(f"{loc}: quote 블록이 비어있습니다.")
+    if isinstance(value, str):
+        return
+    if not isinstance(value, dict):
+        raise ConfigError(
+            f"{loc}: quote 값이 문자열도 dict도 아닙니다: {value!r}"
+        )
+    text = value.get("text", "")
+    if not isinstance(text, str) or not text.strip():
+        raise ConfigError(
+            f"{loc}: quote.text가 비어있습니다: {text!r}"
+        )
+    qtype = value.get("type")
+    if qtype is not None:
+        if not isinstance(qtype, int) or not (1 <= qtype <= 6):
+            raise ConfigError(
+                f"{loc}: quote.type은 1~6 정수여야 합니다: {qtype!r}"
+            )
+    attr = value.get("attribution")
+    if attr is not None and not isinstance(attr, str):
+        raise ConfigError(
+            f"{loc}: quote.attribution은 문자열이어야 합니다: {attr!r}"
+        )
+
+
+def _check_divider(value: Any, loc: str) -> None:
+    # 허용: None (기본 type=2), int (단축형 type), dict {type: N}
+    if value is None:
+        return
+    if isinstance(value, int):
+        if not (1 <= value <= 8):
+            raise ConfigError(
+                f"{loc}: divider type은 1~8 정수여야 합니다: {value}"
+            )
+        return
+    if isinstance(value, dict):
+        dtype = value.get("type")
+        if dtype is not None:
+            if not isinstance(dtype, int) or not (1 <= dtype <= 8):
+                raise ConfigError(
+                    f"{loc}: divider.type은 1~8 정수여야 합니다: {dtype!r}"
+                )
+        return
+    raise ConfigError(
+        f"{loc}: divider 값이 잘못되었습니다: {value!r}. "
+        f"허용: null, 1~8 정수, {{type: N}}"
+    )
+
+
+def _check_list(value: Any, loc: str) -> None:
+    if isinstance(value, list):
+        if not value:
+            raise ConfigError(f"{loc}: list items가 비어있습니다.")
+        for j, item in enumerate(value):
+            if not isinstance(item, (str, int, float)) or not str(item).strip():
+                raise ConfigError(
+                    f"{loc}.items[{j}]: 비어있지 않은 문자열이어야 합니다: {item!r}"
+                )
+        return
+    if isinstance(value, dict):
+        items = value.get("items")
+        if not isinstance(items, list) or not items:
+            raise ConfigError(
+                f"{loc}.items는 비어있지 않은 리스트여야 합니다: {items!r}"
+            )
+        for j, item in enumerate(items):
+            if not isinstance(item, (str, int, float)) or not str(item).strip():
+                raise ConfigError(
+                    f"{loc}.items[{j}]: 비어있지 않은 문자열이어야 합니다: {item!r}"
+                )
+        if "ordered" in value and not isinstance(value["ordered"], bool):
+            raise ConfigError(
+                f"{loc}.ordered는 bool이어야 합니다: {value['ordered']!r}"
+            )
+        return
+    raise ConfigError(
+        f"{loc}: list 값은 리스트 또는 dict여야 합니다: {value!r}"
+    )
+
+
+def _check_heading_value(value: Any, loc: str, block_type: str) -> None:
+    if not isinstance(value, str) or not value.strip():
+        raise ConfigError(
+            f"{loc}: {block_type} 텍스트가 비어있습니다: {value!r}"
+        )
+
+
+def _check_paragraph(value: Any, loc: str) -> None:
+    if not isinstance(value, str) or not value.strip():
+        raise ConfigError(
+            f"{loc}: paragraph 프롬프트가 비어있습니다: {value!r}. "
+            f"AI에게 전달할 프롬프트 문자열을 지정하세요."
+        )
+
+
+def _check_text(value: Any, loc: str) -> None:
+    # 인라인 문자열 또는 dict {file: ..., format: ...}
+    if isinstance(value, str):
+        if not value.strip():
+            raise ConfigError(f"{loc}: text 내용이 비어있습니다.")
+        return
+    if isinstance(value, dict):
+        has_file = "file" in value and value["file"]
+        has_content = "content" in value and value["content"]
+        if not has_file and not has_content:
+            raise ConfigError(
+                f"{loc}: text는 'file' 또는 'content' 중 하나가 필요합니다: {value!r}"
+            )
+        if "format" in value:
+            fmt = value["format"]
+            if fmt not in ("plain", "html"):
+                raise ConfigError(
+                    f"{loc}.format은 'plain' 또는 'html'이어야 합니다: {fmt!r}"
+                )
+        return
+    raise ConfigError(
+        f"{loc}: text 값이 문자열도 dict도 아닙니다: {value!r}"
+    )
+
+
+def _check_newline(value: Any, loc: str) -> None:
+    if value is None:
+        return
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ConfigError(
+            f"{loc}: newline 값은 정수여야 합니다: {value!r}"
+        )
+    if value < 1:
+        raise ConfigError(
+            f"{loc}: newline 값은 1 이상이어야 합니다: {value}"
+        )
+
+
+_VISIBILITY_VALUES = {"public", "private"}
+_SCHEDULE_RE = re.compile(
+    r"^(now|immediate|"
+    r"now\s*\+\s*\d+\s*[smhd](\s*~\s*\d+\s*[smhd])?|"
+    r"\+\+(\s*\d+\s*[smhd](\s*~\s*\d+\s*[smhd])?)?)\s*$",
+    re.IGNORECASE,
+)
+
+
+def _validate_publish(config: dict[str, Any]) -> None:
+    """publish 섹션 엄격 검증."""
+    publish = config.get("publish", {})
+    if not publish:
+        return
+    if not isinstance(publish, dict):
+        raise ConfigError(f"'publish'는 dict여야 합니다: {type(publish).__name__}")
+
+    # schedule
+    if "schedule" in publish:
+        sch = publish["schedule"]
+        if sch is not None and sch != "":
+            if not isinstance(sch, str):
+                raise ConfigError(
+                    f"publish.schedule은 문자열이어야 합니다: {sch!r}"
+                )
+            if not _SCHEDULE_RE.match(sch):
+                raise ConfigError(
+                    f"publish.schedule 형식이 잘못되었습니다: {sch!r}. "
+                    f"허용 형식: 'now', 'now + 15m', 'now + 15m ~ 30m', "
+                    f"'++', '++ 15m', '++ 15m ~ 30m' (단위: s/m/h/d)"
+                )
+
+    # visibility
+    if "visibility" in publish:
+        vis = publish["visibility"]
+        if vis not in _VISIBILITY_VALUES:
+            raise ConfigError(
+                f"publish.visibility는 {sorted(_VISIBILITY_VALUES)} 중 하나여야 합니다: {vis!r}"
+            )
+
+    # tags
+    if "tags" in publish:
+        tags = publish["tags"]
+        if not isinstance(tags, list):
+            raise ConfigError(
+                f"publish.tags는 리스트여야 합니다: {type(tags).__name__}"
+            )
+        for j, t in enumerate(tags):
+            if not isinstance(t, str) or not t.strip():
+                raise ConfigError(
+                    f"publish.tags[{j}]는 비어있지 않은 문자열이어야 합니다: {t!r}"
+                )
+
+
+_INTERVAL_RE = re.compile(
+    r"^\d+(\.\d+)?\s*(ms|s|m|min|h)?\s*$",
+    re.IGNORECASE,
+)
+_ON_FAILURE_VALUES = {"stop", "continue", "switch_account"}
+_ON_RESUME_VALUES = {"restart", "skip"}
+
+
+def _validate_run(config: dict[str, Any]) -> None:
+    """run 섹션 엄격 검증."""
+    run = config.get("run", {})
+    if not run:
+        return
+    if not isinstance(run, dict):
+        raise ConfigError(f"'run'은 dict여야 합니다: {type(run).__name__}")
+
+    if "interval" in run:
+        iv = run["interval"]
+        if isinstance(iv, (int, float)):
+            if iv < 0:
+                raise ConfigError(f"run.interval은 0 이상이어야 합니다: {iv}")
+        elif isinstance(iv, str):
+            if not _INTERVAL_RE.match(iv.strip()):
+                raise ConfigError(
+                    f"run.interval 형식이 잘못되었습니다: {iv!r}. "
+                    f"예: '30s', '2m', '500ms', '1h', 또는 숫자(초)"
+                )
+        else:
+            raise ConfigError(
+                f"run.interval은 숫자 또는 문자열이어야 합니다: {iv!r}"
+            )
+
+    if "on_failure" in run:
+        v = run["on_failure"]
+        if v not in _ON_FAILURE_VALUES:
+            raise ConfigError(
+                f"run.on_failure는 {sorted(_ON_FAILURE_VALUES)} 중 하나여야 합니다: {v!r}"
+            )
+
+    if "on_resume" in run:
+        v = run["on_resume"]
+        if v not in _ON_RESUME_VALUES:
+            raise ConfigError(
+                f"run.on_resume은 {sorted(_ON_RESUME_VALUES)} 중 하나여야 합니다: {v!r}"
+            )
+
+    for key in ("headless", "parallel"):
+        if key in run and not isinstance(run[key], bool):
+            raise ConfigError(
+                f"run.{key}는 true/false여야 합니다: {run[key]!r}"
+            )
+
+    if "max_workers" in run:
+        mw = run["max_workers"]
+        if not isinstance(mw, int) or isinstance(mw, bool) or mw < 1:
+            raise ConfigError(
+                f"run.max_workers는 1 이상 정수여야 합니다: {mw!r}"
+            )
+
+
+_ALIGN_VALUES = {"left", "center", "right"}
+
+
+def _validate_style(config: dict[str, Any]) -> None:
+    """style 섹션 엄격 검증."""
+    style = config.get("style")
+    if style is None:
+        return
+    if not isinstance(style, dict):
+        raise ConfigError(f"'style'은 dict여야 합니다: {type(style).__name__}")
+
+    if "align" in style:
+        a = style["align"]
+        if a not in _ALIGN_VALUES:
+            raise ConfigError(
+                f"style.align은 {sorted(_ALIGN_VALUES)} 중 하나여야 합니다: {a!r}"
+            )
 
 
 def _validate_title_check(config: dict[str, Any], pools: dict) -> None:

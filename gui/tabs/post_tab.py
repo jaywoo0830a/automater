@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QComboBox, QListWidget, QListWidgetItem, QInputDialog,
     QDialog, QDialogButtonBox, QFormLayout, QLineEdit,
     QLabel, QDoubleSpinBox, QSpinBox, QCheckBox, QTextEdit,
-    QGroupBox, QFileDialog,
+    QGroupBox, QFileDialog, QMessageBox,
 )
 
 from typing import Callable
@@ -867,7 +867,7 @@ class _ImageDialog(QDialog):
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
-        buttons.accepted.connect(self.accept)
+        buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
 
         layout = QVBoxLayout()
@@ -876,6 +876,24 @@ class _ImageDialog(QDialog):
         layout.addWidget(advanced2)
         layout.addWidget(buttons)
         self.setLayout(layout)
+
+    def _on_accept(self) -> None:
+        """OK 버튼 핸들러 — path 유효성 검증 후에만 accept."""
+        path = self._path.text().strip()
+        label = "대표 이미지" if self._block_type == "featured_image" else "본문 이미지"
+
+        if not path or path == ".":
+            QMessageBox.warning(
+                self,
+                "경로 필수",
+                f"{label} 블록은 'path' 필드가 필수입니다.\n\n"
+                f"파일 경로를 입력하거나 '...' 버튼으로 파일을 선택하세요.\n"
+                f"DSL 토큰({{map:X}}, {{keyword:X}} 등)도 사용 가능합니다.",
+            )
+            self._path.setFocus()
+            return
+
+        self.accept()
 
     def _browse_file(self) -> None:
         path, _ = QFileDialog.getOpenFileName(

@@ -37,6 +37,7 @@ from automator.options import (
 )
 
 from cli.combo_builder import Combo
+from cli.config_loader import ConfigError
 from cli.dsl import evaluate_condition, interpolate, interpolate_deep
 from cli.map_loader import load_maps, resolve_maps
 
@@ -461,6 +462,23 @@ def _parse_effects(raw: Any) -> list[RegionalEffect]:
     return effects
 
 
+def _require_image_path(raw_path: str, label: str, combo_values: dict[str, str]) -> str:
+    """Interpolation 이후 path가 비어있거나 '.'이면 ConfigError.
+
+    정적 검증(config_loader)에서는 {map:X} 같은 토큰이 있으면 통과했을 수 있으나,
+    여기서는 실제 interpolation 결과를 검사한다. 토큰이 빈 값으로 치환되는 경우를 잡는다.
+    """
+    stripped = (raw_path or "").strip()
+    if not stripped or stripped == ".":
+        raise ConfigError(
+            f"{label} 블록의 'path'가 interpolation 이후 비어있거나 '.'이 되었습니다: {raw_path!r}. "
+            f"조합 키워드: {combo_values}. "
+            f"path에 사용된 토큰({{keyword:*}}, {{pool:*}}, {{map:*}})이 "
+            f"이 조합에서 빈 값으로 치환되지 않는지 확인하세요."
+        )
+    return raw_path
+
+
 def _parse_image(
     value: Any,
     values: dict[str, str],
@@ -473,12 +491,15 @@ def _parse_image(
 ) -> ImageBlock:
     if isinstance(value, str):
         filename = interpolate(value, values, pools, index, maps=maps)
+        _require_image_path(filename, "image", values)
         path = _resolve_path(images_dir, filename)
         return ImageBlock(path=path, exif_optimization=exif_opt, wait_ms=wait_ms)
 
     if isinstance(value, dict):
         cfg = interpolate_deep(dict(value), values, pools, index, maps=maps)
-        path = _resolve_path(images_dir, str(cfg.get("path", "")))
+        raw_filename = str(cfg.get("path", ""))
+        _require_image_path(raw_filename, "image", values)
+        path = _resolve_path(images_dir, raw_filename)
         inner_wait = _parse_wait(cfg.get("wait"))
         return ImageBlock(
             path=path,
@@ -489,7 +510,10 @@ def _parse_image(
             wait_ms=inner_wait or wait_ms,
         )
 
-    return ImageBlock(exif_optimization=exif_opt)
+    raise ConfigError(
+        f"image 블록 값이 문자열도 dict도 아닙니다: {value!r}. "
+        f"DSL 예시: {{image: 'photo.jpg'}} 또는 {{image: {{path: 'photo.jpg', link: '...'}}}}"
+    )
 
 
 def _parse_featured_image(
@@ -504,12 +528,15 @@ def _parse_featured_image(
 ) -> FeaturedImageBlock:
     if isinstance(value, str):
         filename = interpolate(value, values, pools, index, maps=maps)
+        _require_image_path(filename, "featured_image", values)
         path = _resolve_path(images_dir, filename)
         return FeaturedImageBlock(path=path, exif_optimization=exif_opt, wait_ms=wait_ms)
 
     if isinstance(value, dict):
         cfg = interpolate_deep(dict(value), values, pools, index, maps=maps)
-        path = _resolve_path(images_dir, str(cfg.get("path", "")))
+        raw_filename = str(cfg.get("path", ""))
+        _require_image_path(raw_filename, "featured_image", values)
+        path = _resolve_path(images_dir, raw_filename)
 
         gps = cfg.get("gps")
         gps_lat = gps[0] if isinstance(gps, (list, tuple)) and len(gps) >= 2 else None
@@ -532,7 +559,10 @@ def _parse_featured_image(
             wait_ms=inner_wait or wait_ms,
         )
 
-    return FeaturedImageBlock(exif_optimization=exif_opt)
+    raise ConfigError(
+        f"featured_image 블록 값이 문자열도 dict도 아닙니다: {value!r}. "
+        f"DSL 예시: {{featured_image: 'thumb.jpg'}} 또는 {{featured_image: {{path: 'thumb.jpg'}}}}"
+    )
 
 
 def _parse_quote(

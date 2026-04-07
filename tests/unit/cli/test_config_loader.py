@@ -38,10 +38,10 @@ FULL = {
     "pools": {"prefix": ["검증된", "전문"], "suffix": ["강력 추천"]},
     "post": [
         {"h2": "{keyword:region} {keyword:subject} 소개"},
-        {"paragraph": "{keyword:region} {keyword:subject}"},
+        {"paragraph": "{keyword:region} {keyword:subject} 과외 소개를 써줘"},
         {"image": "body.jpg"},
-        {"paragraph": {"keyword": "{keyword:region} {keyword:subject}", "tone": "review"}},
-        {"thumbnail": {"src": "thumb.jpg", "overlay": "{keyword:region} {keyword:subject}"}},
+        {"paragraph": "{keyword:region} {keyword:subject} 과외 후기를 써줘"},
+        {"featured_image": {"path": "thumb.jpg", "overlay_text": "{keyword:region} {keyword:subject}"}},
     ],
     "assets": "./images",
     "publish": {"schedule": "now + 15m ~ 30m", "tags": ["교육"], "visibility": "public"},
@@ -229,6 +229,345 @@ class TestSemanticValidation:
             "pools": {"prefix": []},
         }
         with pytest.raises(ConfigError, match="prefix"):
+            load_config(write_yaml(data))
+
+
+# ---------------------------------------------------------------------------
+# image / featured_image path validation (static)
+# ---------------------------------------------------------------------------
+
+class TestImagePathValidation:
+    """image / featured_image 블록은 'path' 필드가 필수."""
+
+    def test_image_shorthand_valid(self, write_yaml):
+        """단축형: image: photo.jpg — 통과."""
+        data = {**MINIMAL, "post": [{"image": "photo.jpg"}]}
+        load_config(write_yaml(data))  # no error
+
+    def test_image_dict_with_path_valid(self, write_yaml):
+        data = {**MINIMAL, "post": [{"image": {"path": "photo.jpg"}}]}
+        load_config(write_yaml(data))
+
+    def test_image_dict_missing_path(self, write_yaml):
+        """dict 형식에 path 필드 없음 → ConfigError."""
+        data = {**MINIMAL, "post": [{"image": {"link": "tel:..."}}]}
+        with pytest.raises(ConfigError, match="path.*필드"):
+            load_config(write_yaml(data))
+
+    def test_image_dict_empty_path(self, write_yaml):
+        """path: "" → ConfigError."""
+        data = {**MINIMAL, "post": [{"image": {"path": ""}}]}
+        with pytest.raises(ConfigError, match="비어있거나"):
+            load_config(write_yaml(data))
+
+    def test_image_dict_dot_path(self, write_yaml):
+        """path: "." → ConfigError."""
+        data = {**MINIMAL, "post": [{"image": {"path": "."}}]}
+        with pytest.raises(ConfigError, match="비어있거나"):
+            load_config(write_yaml(data))
+
+    def test_image_shorthand_empty(self, write_yaml):
+        data = {**MINIMAL, "post": [{"image": ""}]}
+        with pytest.raises(ConfigError, match="비어있거나"):
+            load_config(write_yaml(data))
+
+    def test_image_empty_value(self, write_yaml):
+        """image: (null) → ConfigError."""
+        data = {**MINIMAL, "post": [{"image": None}]}
+        with pytest.raises(ConfigError, match="path.*필드"):
+            load_config(write_yaml(data))
+
+    def test_featured_image_missing_path(self, write_yaml):
+        data = {**MINIMAL, "post": [{"featured_image": {"overlay_text": "x"}}]}
+        with pytest.raises(ConfigError, match="path.*필드"):
+            load_config(write_yaml(data))
+
+    def test_featured_image_empty_path(self, write_yaml):
+        data = {**MINIMAL, "post": [{"featured_image": {"path": "   "}}]}
+        with pytest.raises(ConfigError, match="비어있거나"):
+            load_config(write_yaml(data))
+
+    def test_image_path_with_token_passes_static(self, write_yaml, tmp_path):
+        """토큰이 포함된 path는 정적 검증을 통과 (interpolation 후 spec_builder가 검증)."""
+        # 실제 map 파일 생성
+        map_file = tmp_path / "photo_map.yaml"
+        map_file.write_text("강남: gangnam.jpg\n_default: default.jpg\n", encoding="utf-8")
+        data = {
+            **MINIMAL,
+            "maps": {"photo": {"file": str(map_file), "by": "{keyword:region}"}},
+            "post": [{"image": {"path": "{map:photo}"}}],
+        }
+        load_config(write_yaml(data))
+
+    def test_non_image_block_not_validated(self, write_yaml):
+        """quote/paragraph 등은 path 검증 대상 아님."""
+        data = {
+            **MINIMAL,
+            "post": [
+                {"paragraph": "hello"},
+                {"quote": "wise words"},
+                "divider",
+            ],
+        }
+        load_config(write_yaml(data))
+
+
+# ---------------------------------------------------------------------------
+# Strict: accounts
+# ---------------------------------------------------------------------------
+
+class TestAccountsStrict:
+
+    def test_weight_must_be_int(self, write_yaml):
+        data = {**MINIMAL, "accounts": [{"username": "u", "password": "p", "weight": "hi"}]}
+        with pytest.raises(ConfigError, match="weight"):
+            load_config(write_yaml(data))
+
+    def test_weight_negative(self, write_yaml):
+        data = {**MINIMAL, "accounts": [{"username": "u", "password": "p", "weight": -1}]}
+        with pytest.raises(ConfigError, match="0 이상"):
+            load_config(write_yaml(data))
+
+    def test_min_exceeds_max(self, write_yaml):
+        data = {**MINIMAL, "accounts": [
+            {"username": "u", "password": "p", "min_posts": 10, "max_posts": 5},
+        ]}
+        with pytest.raises(ConfigError, match="min_posts.*max_posts"):
+            load_config(write_yaml(data))
+
+    def test_min_equals_max_ok(self, write_yaml):
+        data = {**MINIMAL, "accounts": [
+            {"username": "u", "password": "p", "min_posts": 5, "max_posts": 5},
+        ]}
+        load_config(write_yaml(data))
+
+    def test_proxy_must_be_string(self, write_yaml):
+        data = {**MINIMAL, "accounts": [
+            {"username": "u", "password": "p", "proxy": 123},
+        ]}
+        with pytest.raises(ConfigError, match="proxy"):
+            load_config(write_yaml(data))
+
+
+# ---------------------------------------------------------------------------
+# Strict: maps
+# ---------------------------------------------------------------------------
+
+class TestMapsStrict:
+
+    def _make_map_file(self, tmp_path, name="test_map.yaml", content="강남: a.jpg\n_default: default.jpg\n"):
+        p = tmp_path / name
+        p.write_text(content, encoding="utf-8")
+        return str(p)
+
+    def test_missing_by(self, write_yaml, tmp_path):
+        """by 필드 누락 — 사용자 실제 삽질 케이스."""
+        mf = self._make_map_file(tmp_path)
+        data = {**MINIMAL, "maps": {"photo": {"file": mf}}}
+        with pytest.raises(ConfigError, match="by 필드가 없습니다"):
+            load_config(write_yaml(data))
+
+    def test_missing_file(self, write_yaml):
+        data = {**MINIMAL, "maps": {"photo": {"by": "{keyword:region}"}}}
+        with pytest.raises(ConfigError, match="file 필드"):
+            load_config(write_yaml(data))
+
+    def test_file_not_exists(self, write_yaml):
+        data = {**MINIMAL, "maps": {"photo": {"file": "nope.yaml", "by": "{keyword:region}"}}}
+        with pytest.raises(ConfigError, match="존재하지 않습니다"):
+            load_config(write_yaml(data))
+
+    def test_by_wrong_format(self, write_yaml, tmp_path):
+        mf = self._make_map_file(tmp_path)
+        data = {**MINIMAL, "maps": {"photo": {"file": mf, "by": "region"}}}
+        with pytest.raises(ConfigError, match=r"\{keyword:슬러그\}"):
+            load_config(write_yaml(data))
+
+    def test_by_unknown_keyword(self, write_yaml, tmp_path):
+        mf = self._make_map_file(tmp_path)
+        data = {**MINIMAL, "maps": {"photo": {"file": mf, "by": "{keyword:unknown_slug}"}}}
+        with pytest.raises(ConfigError, match="unknown_slug"):
+            load_config(write_yaml(data))
+
+    def test_missing_map_key_without_default(self, write_yaml, tmp_path):
+        # "강남"은 있지만 "서초"는 없음, _default도 없음
+        mf = self._make_map_file(tmp_path, content="강남: a.jpg\n")
+        data = {
+            **MINIMAL,
+            "keywords": {"region": ["강남", "서초"], "subject": ["수학"]},
+            "maps": {"photo": {"file": mf, "by": "{keyword:region}"}},
+        }
+        with pytest.raises(ConfigError, match="서초"):
+            load_config(write_yaml(data))
+
+    def test_missing_map_key_with_default_ok(self, write_yaml, tmp_path):
+        mf = self._make_map_file(tmp_path, content="강남: a.jpg\n_default: d.jpg\n")
+        data = {
+            **MINIMAL,
+            "keywords": {"region": ["강남", "서초"], "subject": ["수학"]},
+            "maps": {"photo": {"file": mf, "by": "{keyword:region}"}},
+        }
+        load_config(write_yaml(data))
+
+    def test_valid_map(self, write_yaml, tmp_path):
+        mf = self._make_map_file(tmp_path)
+        data = {**MINIMAL, "maps": {"photo": {"file": mf, "by": "{keyword:region}"}}}
+        load_config(write_yaml(data))
+
+
+# ---------------------------------------------------------------------------
+# Strict: post blocks
+# ---------------------------------------------------------------------------
+
+class TestPostBlocksStrict:
+
+    def test_unknown_block_type(self, write_yaml):
+        data = {**MINIMAL, "post": [{"thumbnail": "x.jpg"}]}
+        with pytest.raises(ConfigError, match="알려지지 않은 블록"):
+            load_config(write_yaml(data))
+
+    def test_multiple_block_keys(self, write_yaml):
+        data = {**MINIMAL, "post": [{"paragraph": "a", "quote": "b"}]}
+        with pytest.raises(ConfigError, match="여러 블록 타입"):
+            load_config(write_yaml(data))
+
+    def test_empty_paragraph(self, write_yaml):
+        data = {**MINIMAL, "post": [{"paragraph": ""}]}
+        with pytest.raises(ConfigError, match="paragraph"):
+            load_config(write_yaml(data))
+
+    def test_paragraph_must_be_string(self, write_yaml):
+        data = {**MINIMAL, "post": [{"paragraph": {"prompt": "x"}}]}
+        with pytest.raises(ConfigError, match="paragraph"):
+            load_config(write_yaml(data))
+
+    def test_empty_heading(self, write_yaml):
+        data = {**MINIMAL, "post": [{"h2": ""}]}
+        with pytest.raises(ConfigError, match="h2"):
+            load_config(write_yaml(data))
+
+    def test_quote_type_out_of_range(self, write_yaml):
+        data = {**MINIMAL, "post": [{"quote": {"text": "w", "type": 7}}]}
+        with pytest.raises(ConfigError, match="type.*1~6"):
+            load_config(write_yaml(data))
+
+    def test_divider_type_out_of_range(self, write_yaml):
+        data = {**MINIMAL, "post": [{"divider": 9}]}
+        with pytest.raises(ConfigError, match="1~8"):
+            load_config(write_yaml(data))
+
+    def test_divider_type_valid(self, write_yaml):
+        data = {**MINIMAL, "post": [{"divider": 5}]}
+        load_config(write_yaml(data))
+
+    def test_list_empty(self, write_yaml):
+        data = {**MINIMAL, "post": [{"list": []}]}
+        with pytest.raises(ConfigError, match="list"):
+            load_config(write_yaml(data))
+
+    def test_list_items_empty_string(self, write_yaml):
+        data = {**MINIMAL, "post": [{"list": ["ok", ""]}]}
+        with pytest.raises(ConfigError, match="items"):
+            load_config(write_yaml(data))
+
+    def test_newline_must_be_int(self, write_yaml):
+        data = {**MINIMAL, "post": [{"newline": "many"}]}
+        with pytest.raises(ConfigError, match="newline"):
+            load_config(write_yaml(data))
+
+    def test_divider_string_shorthand_only(self, write_yaml):
+        data = {**MINIMAL, "post": ["not-divider"]}
+        with pytest.raises(ConfigError, match="divider"):
+            load_config(write_yaml(data))
+
+    def test_bare_divider_string_ok(self, write_yaml):
+        data = {**MINIMAL, "post": ["divider"]}
+        load_config(write_yaml(data))
+
+
+# ---------------------------------------------------------------------------
+# Strict: publish
+# ---------------------------------------------------------------------------
+
+class TestPublishStrict:
+
+    def test_bad_visibility(self, write_yaml):
+        data = {**MINIMAL, "publish": {"visibility": "protected"}}
+        with pytest.raises(ConfigError, match="visibility"):
+            load_config(write_yaml(data))
+
+    def test_bad_schedule_format(self, write_yaml):
+        data = {**MINIMAL, "publish": {"schedule": "15분 뒤"}}
+        with pytest.raises(ConfigError, match="schedule"):
+            load_config(write_yaml(data))
+
+    def test_valid_schedules(self, write_yaml):
+        for s in ("now", "now + 15m", "now + 15m ~ 30m", "++", "++ 10m", "++ 10m ~ 30m"):
+            data = {**MINIMAL, "publish": {"schedule": s}}
+            load_config(write_yaml(data))  # 전부 통과
+
+    def test_tags_must_be_list(self, write_yaml):
+        data = {**MINIMAL, "publish": {"tags": "교육,과외"}}
+        with pytest.raises(ConfigError, match="tags"):
+            load_config(write_yaml(data))
+
+    def test_empty_tag(self, write_yaml):
+        data = {**MINIMAL, "publish": {"tags": ["교육", ""]}}
+        with pytest.raises(ConfigError, match="tags"):
+            load_config(write_yaml(data))
+
+
+# ---------------------------------------------------------------------------
+# Strict: run
+# ---------------------------------------------------------------------------
+
+class TestRunStrict:
+
+    def test_bad_interval_format(self, write_yaml):
+        data = {**MINIMAL, "run": {"interval": "잠깐"}}
+        with pytest.raises(ConfigError, match="interval"):
+            load_config(write_yaml(data))
+
+    def test_negative_interval(self, write_yaml):
+        data = {**MINIMAL, "run": {"interval": -5}}
+        with pytest.raises(ConfigError, match="interval"):
+            load_config(write_yaml(data))
+
+    def test_bad_on_failure(self, write_yaml):
+        data = {**MINIMAL, "run": {"on_failure": "panic"}}
+        with pytest.raises(ConfigError, match="on_failure"):
+            load_config(write_yaml(data))
+
+    def test_bad_on_resume(self, write_yaml):
+        data = {**MINIMAL, "run": {"on_resume": "reboot"}}
+        with pytest.raises(ConfigError, match="on_resume"):
+            load_config(write_yaml(data))
+
+    def test_headless_must_be_bool(self, write_yaml):
+        data = {**MINIMAL, "run": {"headless": "yes"}}
+        with pytest.raises(ConfigError, match="headless"):
+            load_config(write_yaml(data))
+
+    def test_max_workers_positive(self, write_yaml):
+        data = {**MINIMAL, "run": {"max_workers": 0}}
+        with pytest.raises(ConfigError, match="max_workers"):
+            load_config(write_yaml(data))
+
+
+# ---------------------------------------------------------------------------
+# Strict: style
+# ---------------------------------------------------------------------------
+
+class TestStyleStrict:
+
+    def test_bad_align(self, write_yaml):
+        data = {**MINIMAL, "style": {"align": "justify"}}
+        with pytest.raises(ConfigError, match="align"):
+            load_config(write_yaml(data))
+
+    def test_valid_aligns(self, write_yaml):
+        for a in ("left", "center", "right"):
+            data = {**MINIMAL, "style": {"align": a}}
             load_config(write_yaml(data))
 
 
