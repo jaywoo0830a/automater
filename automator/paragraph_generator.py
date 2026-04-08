@@ -82,8 +82,6 @@ class InvalidRequestError(GeminiError):
 # Constants
 # ---------------------------------------------------------------------------
 
-GEMINI_MODEL = "gemini-3.1-flash-lite"
-
 _STUB_PARAGRAPHS = [
     (
         "모든 사람은 태어날 때부터 자유롭고, 존엄성과 권리에 있어서 평등하다. "
@@ -130,19 +128,26 @@ def generate_paragraph(
         PromptBlockedError:  Prompt itself was blocked.
         EmptyResponseError:  API returned empty text.
         ServerError:         500/503/504 transient failure.
-        AuthenticationError: 403 bad API key.
-        InvalidRequestError: 400/404 bad request.
+        AuthenticationError: GEMINI_API_KEY missing / 403 bad API key.
+        InvalidRequestError: GEMINI_MODEL missing / 400 / 404 bad request.
     """
     if not is_production():
         return _stub_generate(1)[0]
 
     resolved_key = api_key or os.getenv("GEMINI_API_KEY", "")
-    resolved_model = model or os.getenv("GEMINI_MODEL", GEMINI_MODEL)
+    resolved_model = model or os.getenv("GEMINI_MODEL", "")
 
     if not resolved_key:
         raise AuthenticationError(
             "Gemini API key is required in production. "
             "Set GEMINI_API_KEY in .env or pass api_key= explicitly."
+        )
+
+    if not resolved_model:
+        raise InvalidRequestError(
+            "Gemini model is required in production. "
+            "Set GEMINI_MODEL in .env (e.g. 'gemini-3.1-flash-lite') "
+            "or pass model= explicitly."
         )
 
     return _call_api(prompt, resolved_key, resolved_model)

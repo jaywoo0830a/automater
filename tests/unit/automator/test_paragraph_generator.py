@@ -48,13 +48,34 @@ def test_test_env_does_not_require_api_key(monkeypatch):
 def test_production_env_requires_api_key(monkeypatch):
     monkeypatch.setenv("ENV", "production")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-test-model")
     with pytest.raises(AuthenticationError, match="API key"):
         generate_paragraph("p")
+
+
+def test_production_env_requires_model(monkeypatch):
+    monkeypatch.setenv("ENV", "production")
+    monkeypatch.setenv("GEMINI_API_KEY", "fake")
+    monkeypatch.delenv("GEMINI_MODEL", raising=False)
+    with pytest.raises(InvalidRequestError, match="model"):
+        generate_paragraph("p")
+
+
+def test_explicit_model_overrides_env(monkeypatch):
+    """model= 인자가 env var를 덮어쓴다."""
+    monkeypatch.setenv("ENV", "production")
+    monkeypatch.setenv("GEMINI_API_KEY", "fake")
+    monkeypatch.delenv("GEMINI_MODEL", raising=False)
+    with patch("automator.paragraph_generator._call_api", return_value="ok") as mock:
+        generate_paragraph("p", model="gemini-explicit")
+    # _call_api(prompt, key, model)
+    assert mock.call_args[0][2] == "gemini-explicit"
 
 
 def test_explicit_key_overrides_env(monkeypatch):
     monkeypatch.setenv("ENV", "production")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-test-model")
     with patch("automator.paragraph_generator._call_api", return_value="generated text"):
         result = generate_paragraph("p", api_key="explicit-key")
     assert result == "generated text"
@@ -85,6 +106,7 @@ def test_prompt_passed_as_is(monkeypatch):
     """generate_paragraph sends the user's prompt to _call_api without modification."""
     monkeypatch.setenv("ENV", "production")
     monkeypatch.setenv("GEMINI_API_KEY", "fake")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-test-model")
 
     user_prompt = "강남 수학 과외 홍보 블로그 글을 써주세요."
     with patch("automator.paragraph_generator._call_api", return_value="ok") as mock:
@@ -116,6 +138,7 @@ def test_rate_limit_error_is_exception():
 def test_call_api_converts_429_to_rate_limit_error(monkeypatch):
     monkeypatch.setenv("ENV", "production")
     monkeypatch.setenv("GEMINI_API_KEY", "fake")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-test-model")
 
     with patch("automator.paragraph_generator._call_api",
                side_effect=RateLimitError("429")):
@@ -126,6 +149,7 @@ def test_call_api_converts_429_to_rate_limit_error(monkeypatch):
 def test_safety_block_error_propagates(monkeypatch):
     monkeypatch.setenv("ENV", "production")
     monkeypatch.setenv("GEMINI_API_KEY", "fake")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-test-model")
 
     with patch("automator.paragraph_generator._call_api",
                side_effect=SafetyBlockError("SAFETY")):
@@ -136,6 +160,7 @@ def test_safety_block_error_propagates(monkeypatch):
 def test_empty_response_error_propagates(monkeypatch):
     monkeypatch.setenv("ENV", "production")
     monkeypatch.setenv("GEMINI_API_KEY", "fake")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-test-model")
 
     with patch("automator.paragraph_generator._call_api",
                side_effect=EmptyResponseError("empty")):
@@ -146,6 +171,7 @@ def test_empty_response_error_propagates(monkeypatch):
 def test_server_error_propagates(monkeypatch):
     monkeypatch.setenv("ENV", "production")
     monkeypatch.setenv("GEMINI_API_KEY", "fake")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-test-model")
 
     with patch("automator.paragraph_generator._call_api",
                side_effect=ServerError("500")):
@@ -156,6 +182,7 @@ def test_server_error_propagates(monkeypatch):
 def test_non_gemini_errors_propagate(monkeypatch):
     monkeypatch.setenv("ENV", "production")
     monkeypatch.setenv("GEMINI_API_KEY", "fake")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-test-model")
 
     with patch("automator.paragraph_generator._call_api",
                side_effect=RuntimeError("connection failed")):
