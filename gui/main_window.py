@@ -782,7 +782,8 @@ class MainWindow(QMainWindow):
             elif clicked == btn_skip:
                 self._run_cli("--execute", "--resume", label="실행(이어서)")
             else:
-                self._run_cli("--execute", label="실행")
+                # --restart로 YAML의 on_resume 설정을 덮어써 확실히 reset
+                self._run_cli("--execute", "--restart", label="실행(처음부터)")
         else:
             reply = QMessageBox.question(
                 self, "캠페인 실행",

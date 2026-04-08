@@ -80,8 +80,14 @@ def main(argv: list[str] | None = None) -> int:
         _print_plan(plan)
         return 0
 
-    # --resume flag overrides on_resume to skip
-    if args.resume:
+    # --restart / --resume flags override YAML's on_resume.
+    # --restart has priority if both are passed (shouldn't happen, but defensive).
+    if args.restart and args.resume:
+        log.warning("--restart and --resume both given; --restart takes priority")
+    if args.restart:
+        config.setdefault("run", {})["on_resume"] = "restart"
+        log.info("Restart mode - progress will be reset")
+    elif args.resume:
         config.setdefault("run", {})["on_resume"] = "skip"
         log.info("Resume mode - skipping completed combos")
 
@@ -114,7 +120,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--prepare-manual", action="store_true", help="Prepare sessions with manual login (browser opens, you type).")
     p.add_argument("--limit", type=int, default=None, help="Max combinations.")
     p.add_argument("--account", action="append", default=[], help="Filter account (repeatable).")
-    p.add_argument("--resume", action="store_true", help="Resume: skip completed combos.")
+    p.add_argument("--resume", action="store_true", help="Resume: skip completed combos (overrides YAML on_resume).")
+    p.add_argument("--restart", action="store_true", help="Restart: reset progress and start from first combo (overrides YAML on_resume).")
     p.add_argument("--pack", nargs="?", const="", metavar="OUT", help="Pack campaign + assets into ZIP.")
     p.add_argument("--export-sessions", metavar="DIR", help="Export session files to directory.")
     p.add_argument("--import-sessions", metavar="DIR", help="Import session files from directory.")

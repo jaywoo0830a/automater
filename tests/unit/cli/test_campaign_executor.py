@@ -6,6 +6,7 @@ Campaign executor — orchestration, round-robin, preview, execute.
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -386,3 +387,50 @@ class TestSequentialSchedule:
 
         for spec in captured_specs:
             assert spec.schedule_at is not None
+
+    def test_resume_with_past_schedule_falls_back_to_now(self, tmp_path):
+        """복원된 last_schedule_at이 과거이면 현재 시각 기준으로 재계산."""
+        from datetime import datetime, timedelta, timezone
+        from unittest.mock import MagicMock
+        from cli.progress import ProgressTracker
+
+        _KST = timezone(timedelta(hours=9))
+
+        # 과거 시각을 progress 파일에 심어둔다
+        config_path = str(tmp_path / "test_campaign.yaml")
+        Path(config_path).write_text("{}", encoding="utf-8")
+        pt = ProgressTracker(config_path, str(tmp_path))
+        past = datetime.now(tz=_KST) - timedelta(hours=8)
+        pt.last_schedule_at = past.isoformat()
+        pt.mark_done(0)  # 첫 combo는 이미 완료로 간주
+        pt.mark_done(1)
+
+        captured_specs = []
+        mock_runner = MagicMock()
+        mock_runner.run.side_effect = lambda spec, editor: captured_specs.append(spec)
+        mock_editor = MagicMock()
+
+        executor = CampaignExecutor(
+            runner=mock_runner,
+            editor_factory=lambda acc: mock_editor,
+        )
+
+        config = _seq_config(n_keywords=5, schedule="++ 15m")
+        config["_config_path"] = config_path
+        config["_base_dir"] = str(tmp_path)
+        config["run"]["on_resume"] = "skip"
+
+        result = executor.execute(config, dry_run=False)
+
+        # 완료된 2개는 skip → 3개만 실행됨
+        assert len(captured_specs) == 3
+        # 모든 예약 시간이 현재 이후
+        now_kst = datetime.now(tz=_KST)
+        for spec in captured_specs:
+            assert spec.schedule_at > now_kst, (
+                f"과거 시간으로 예약됨: {spec.schedule_at}"
+            )
+        # 순차 증가 보장
+        times = [s.schedule_at for s in captured_specs]
+        for i in range(1, len(times)):
+            assert times[i] > times[i - 1]

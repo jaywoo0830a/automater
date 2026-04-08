@@ -335,11 +335,32 @@ class CampaignExecutor:
             progress.reset()
         elif on_resume == "skip" and progress.last_schedule_at:
             # resume 모드: 마지막 예약 시간 복원
+            # 단, 복원된 시각이 이미 과거면 현재 시각 기준으로 재계산 (방어)
             try:
-                self._seq_next_at = datetime.fromisoformat(progress.last_schedule_at)
-                logger.info("[campaign] 예약 시간 복원: %s", self._seq_next_at.strftime("%H:%M"))
-            except (ValueError, TypeError):
-                pass
+                restored = datetime.fromisoformat(progress.last_schedule_at)
+                now_kst = datetime.now(tz=_KST)
+                if restored < now_kst:
+                    logger.warning(
+                        "[campaign] 복원된 예약 시간(%s)이 현재(%s)보다 과거입니다 — "
+                        "현재 시각 기준으로 남은 조합을 새로 예약합니다",
+                        restored.strftime("%Y-%m-%d %H:%M"),
+                        now_kst.strftime("%Y-%m-%d %H:%M"),
+                    )
+                    # progress 파일에서도 제거 (다음 실행 시 혼동 방지)
+                    progress.last_schedule_at = ""
+                    self._seq_next_at = None
+                else:
+                    self._seq_next_at = restored
+                    logger.info(
+                        "[campaign] 예약 시간 복원: %s",
+                        self._seq_next_at.strftime("%Y-%m-%d %H:%M"),
+                    )
+            except (ValueError, TypeError) as exc:
+                logger.warning(
+                    "[campaign] 예약 시간 복원 실패 (%s) — 현재 시각 기준으로 새로 시작",
+                    exc,
+                )
+                self._seq_next_at = None
         progress.set_total(len(combos))
 
         if parallel and not dry_run and len(assignments) > 1:
