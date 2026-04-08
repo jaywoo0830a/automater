@@ -25,6 +25,7 @@ from automator.runner import JobRunner
 from automator.title_generator import generate_title, generate_unique_title
 
 from cli.combo_builder import Combo, build_combos
+from cli.notifier import build_notifier
 from cli.spec_builder import build_spec, merge_account_run
 
 logger = logging.getLogger(__name__)
@@ -70,6 +71,7 @@ class ExecutionResult:
     errors:             list[str] = field(default_factory=list)
     succeeded_combos:   list[ComboRecord] = field(default_factory=list)
     failed_combos:      list[ComboRecord] = field(default_factory=list)
+    stop_requested:     bool = False  # on_failure=stop 시 True로 설정
     _lock:              threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def record_success(self, combo: ComboRecord | None = None) -> None:
@@ -90,6 +92,11 @@ class ExecutionResult:
     def record_attempt(self) -> None:
         with self._lock:
             self.total_attempted += 1
+
+    def request_stop(self) -> None:
+        """on_failure=stop 트리거 — 캠페인 중단 요청."""
+        with self._lock:
+            self.stop_requested = True
 
 
 # ---------------------------------------------------------------------------
@@ -315,6 +322,10 @@ class CampaignExecutor:
         parallel = bool(global_run.get("parallel", False))
         max_workers = int(global_run.get("max_workers", len(assignments)))
 
+        # 즉시 알림을 위해 미리 notifier + 캠페인 이름 준비
+        notifier = build_notifier(config.get("notify")) if not dry_run else None
+        campaign_name = Path(config.get("_config_path", "campaign")).stem
+
         # Progress tracking
         config_path = config.get("_config_path", "campaign")
         base_dir = config.get("_base_dir", ".")
@@ -332,9 +343,15 @@ class CampaignExecutor:
         progress.set_total(len(combos))
 
         if parallel and not dry_run and len(assignments) > 1:
-            self._execute_parallel(assignments, config, global_run, max_workers, result, progress, on_resume)
+            self._execute_parallel(
+                assignments, config, global_run, max_workers, result,
+                progress, on_resume, notifier, campaign_name,
+            )
         else:
-            self._execute_serial(assignments, config, global_run, dry_run, result, progress, on_resume)
+            self._execute_serial(
+                assignments, config, global_run, dry_run, result,
+                progress, on_resume, notifier, campaign_name,
+            )
 
         logger.info("=" * 60)
         logger.info("[campaign] 실행 완료 (%s)", mode_label)
@@ -346,12 +363,9 @@ class CampaignExecutor:
                 logger.info("[campaign]   - %s", err)
         logger.info("=" * 60)
 
-        # 알림 전송
-        from cli.notifier import build_notifier
-        notifier = build_notifier(config.get("notify"))
+        # 캠페인 요약 알림
         if notifier and not dry_run:
-            campaign_name = Path(config.get("_config_path", "campaign")).stem
-            notifier.send(result, campaign_name)
+            notifier.send_summary(result, campaign_name)
 
         return result
 
@@ -364,8 +378,17 @@ class CampaignExecutor:
         result: ExecutionResult,
         progress=None,
         on_resume: str = "restart",
+        notifier=None,
+        campaign_name: str = "",
     ) -> None:
         for account, assigned_combos in assignments:
+            # on_failure=stop + 이미 실패 발생 → 다음 계정도 건너뛰기
+            if result.stop_requested:
+                logger.warning(
+                    "[campaign] on_failure=stop 활성 + 실패 감지 — 남은 계정 건너뜀: %s",
+                    account.get("username", ""),
+                )
+                continue
             account_idx = config["accounts"].index(account)
             merged_run = merge_account_run(global_run, account)
             interval = self._parse_interval(merged_run)
@@ -378,6 +401,8 @@ class CampaignExecutor:
                 result=result,
                 progress=progress,
                 on_resume=on_resume,
+                notifier=notifier,
+                campaign_name=campaign_name,
             )
 
     def _execute_parallel(
@@ -389,6 +414,8 @@ class CampaignExecutor:
         result: ExecutionResult,
         progress=None,
         on_resume: str = "restart",
+        notifier=None,
+        campaign_name: str = "",
     ) -> None:
         logger.info(
             "[campaign] 병렬 실행: %d 계정, max_workers=%d",
@@ -408,6 +435,8 @@ class CampaignExecutor:
                 result=result,
                 progress=progress,
                 on_resume=on_resume,
+                notifier=notifier,
+                campaign_name=campaign_name,
             )
 
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
@@ -446,10 +475,16 @@ class CampaignExecutor:
         result: ExecutionResult,
         progress=None,
         on_resume: str = "restart",
+        notifier=None,
+        campaign_name: str = "",
     ) -> None:
         account = config["accounts"][account_idx]
         username = account["username"]
         total = len(combos)
+
+        # on_failure 모드 (stop / continue) — merged config 우선, 없으면 global
+        merged_run = merge_account_run(config.get("run", {}), account)
+        on_failure_mode = str(merged_run.get("on_failure", "continue"))
 
         logger.info("=" * 50)
         logger.info("[batch] %s — %d개 조합 시작", username, total)
@@ -527,6 +562,14 @@ class CampaignExecutor:
         succeeded_in_batch = 0
 
         for i, combo in enumerate(combos):
+            # on_failure=stop 이전 실패로 인해 중단 요청된 경우 루프 탈출
+            if result.stop_requested:
+                logger.warning(
+                    "[batch] %s — on_failure=stop 활성 + 이전 실패 감지, 남은 combo 건너뜀",
+                    username,
+                )
+                break
+
             combo_index = combo.index - 1  # 0-based global index
             progress_label = f"[{i + 1}/{total}]"
 
@@ -568,6 +611,30 @@ class CampaignExecutor:
                 record = ComboRecord(combo_values=combo.values, title=title, error=str(exc))
                 result.record_failure(str(exc), record)
                 logger.error("[batch] %s FAIL %s | %s", progress_label, username, str(exc))
+
+                # ── 즉시 알림 ──
+                if notifier is not None:
+                    try:
+                        notifier.send_failure_alert(
+                            campaign=campaign_name,
+                            username=username,
+                            progress=f"{i + 1}/{total}",
+                            combo_values=combo.values,
+                            title=title,
+                            error=str(exc),
+                        )
+                    except Exception as alert_exc:
+                        logger.warning("[batch] 실시간 알림 전송 실패: %s", alert_exc)
+
+                # ── on_failure=stop 처리 ──
+                if on_failure_mode == "stop":
+                    logger.error(
+                        "[batch] %s — on_failure=stop: 캠페인 전체 중단 요청",
+                        username,
+                    )
+                    result.request_stop()
+                    break
+
                 continue
 
             if not dry_run and i < len(combos) - 1 and interval > 0:

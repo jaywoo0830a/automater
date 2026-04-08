@@ -45,10 +45,22 @@ post:
       path: body.jpg
       link: "tel:01012345678"
       wait: 3s
-  - quote: "교육은 미래를 여는 열쇠다"
+  - quote:
+      text: "교육은 미래를 여는 열쇠다"
+      type: 2                             # 인용구 스타일 1~6
   - text: "{keyword:region}에서 검증된 {keyword:subject} 과외 전문 선생님이 직접 지도합니다."
-  - paragraph: "{keyword:region} {keyword:subject} 과외 후기를 학부모 관점에서 200자 이상 써줘"
-  - divider
+
+  # ── ai_section: 1회 AI 호출로 구조화된 섹션 자동 생성 ──
+  - ai_section:
+      prompt: "{keyword:region} {keyword:subject} 과외의 장점을 학부모 관점에서 정리해줘"
+      structure:
+        - heading
+        - list
+        - paragraph
+      on_mismatch: lenient                # lenient (기본) | strict
+      auto_prompt: true                    # structure 가이드를 프롬프트에 자동 추가
+
+  - divider: 5                            # 구분선 스타일 1~8 (기본 2)
   - paragraph: "{keyword:region} {keyword:subject} 과외 홍보 마무리. 행동 유도 포함"
   - featured_image:
       path: thumb.jpg
@@ -75,5 +87,17 @@ publish:
 
 run:
   interval: 60s
-  on_failure: stop
+  on_failure: stop                        # 첫 실패 즉시 캠페인 전체 중단
+                                          # continue: 실패해도 다음 combo 계속 (기본)
+  on_resume: restart                      # restart | skip
   headless: true
+
+# ── 알림: 실시간 실패 + 완료 요약 ──
+notify:
+  on: always                              # always: 실패 즉시 + 완료 요약
+                                          # fail:    실패 있을 때만 요약 (실시간 실패 포함)
+                                          # complete: 성공 완료 시에만 (실패 알림 안 보냄)
+  channels:
+    - type: telegram
+      token: "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+      chat_id: "987654321"

@@ -1,0 +1,99 @@
+# ── ai_section 캠페인 ──────────────────────────────────
+# AI 1회 호출로 마크다운 기반 구조화된 섹션을 생성하는 예제.
+#
+# paragraph vs ai_section:
+#   paragraph    — AI가 plain text 한 덩어리 리턴 → 그대로 단락 삽입
+#   ai_section   — AI가 마크다운 리턴 → heading/list/quote/text 등으로 펼쳐짐
+#                  1회 호출로 여러 블록 생성 (호출 비용 최소화)
+
+platform: naver
+
+browser:
+  viewport: [1920, 1080]
+  locale: ko-KR
+  timezone: Asia/Seoul
+
+accounts:
+  - username: naver_id
+    password: pw
+    blog_id: myblog
+
+titles:
+  - "{keyword:region} 중등 {keyword:subject}학원 {pool:hook}"
+
+keywords:
+  region: [강남, 서초, 잠실]
+  subject: [수학]
+
+pools:
+  hook: [솔직 리뷰, 학부모 후기, 추천 BEST]
+
+title_check: true
+
+post:
+  - h1: "{keyword:region} {keyword:subject}학원 완벽 가이드"
+
+  - image:
+      path: intro.jpg
+      wait: 3s
+
+  # ── 장점 섹션: 1회 AI 호출 → heading + list + 단락 ──
+  - ai_section:
+      prompt: "{keyword:region} 중등 {keyword:subject}학원의 강점을 5가지로 정리해줘"
+      structure:
+        - heading       # ## 소제목 (H2)
+        - list          # 글머리 기호 목록
+        - paragraph     # 일반 단락
+
+  - divider: 3
+
+  # ── FAQ 섹션: heading + H3 + 단락 반복 구조 ──
+  - ai_section:
+      prompt: |
+        학부모가 자주 묻는 질문 3개와 답변을 FAQ 형식으로 써줘.
+        각 질문은 H3 소제목으로, 답변은 일반 단락으로.
+      structure:
+        - h2
+        - h3
+        - paragraph
+        - h3
+        - paragraph
+        - h3
+        - paragraph
+      on_mismatch: lenient
+
+  - divider
+
+  # ── 후기 섹션: heading + quote + 단락 ──
+  - ai_section:
+      prompt: "학부모 후기 형식으로 자연스럽게 써줘"
+      structure:
+        - heading
+        - quote         # > 인용문
+        - paragraph
+
+  - featured_image:
+      path: thumb.jpg
+      overlay_text: "{keyword:region} {keyword:subject}학원"
+      overlay_background: 0.5
+      overlay_position: bottom
+
+assets: ./images
+
+publish:
+  schedule: '++ 15m ~ 30m'
+  tags: [교육, 학원, 과외]
+  visibility: public
+
+run:
+  interval: 30s
+  on_failure: stop
+  on_resume: skip
+  headless: true
+
+notify:
+  on: always
+  channels:
+    - type: telegram
+      token: "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+      chat_id: "987654321"

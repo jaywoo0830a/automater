@@ -221,10 +221,86 @@ class TestLiveExecute:
             runner=mock_runner,
             editor_factory=lambda acc: mock_editor,
         )
-        result = executor.execute(_config(n_accounts=1, n_keywords=3), dry_run=False)
+        # 명시적 on_failure=continue (interval 보존)
+        config = _config(n_accounts=1, n_keywords=3)
+        config["run"]["on_failure"] = "continue"
+        result = executor.execute(config, dry_run=False)
         assert result.total_attempted == 3
         assert result.total_succeeded == 2
         assert result.total_failed == 1
+        assert result.stop_requested is False
+
+    def test_stops_on_first_failure(self):
+        """on_failure=stop: 첫 실패 즉시 캠페인 중단."""
+        mock_runner = MagicMock()
+        mock_runner.run.side_effect = [None, RuntimeError("fail"), None, None, None]
+        mock_editor = MagicMock()
+
+        executor = CampaignExecutor(
+            runner=mock_runner,
+            editor_factory=lambda acc: mock_editor,
+        )
+        config = _config(n_accounts=1, n_keywords=5)
+        config["run"]["on_failure"] = "stop"
+        result = executor.execute(config, dry_run=False)
+
+        # 첫 성공 → 두 번째 실패 → 나머지 3개 건너뜀
+        assert result.total_attempted == 2
+        assert result.total_succeeded == 1
+        assert result.total_failed == 1
+        assert result.stop_requested is True
+        # runner.run은 2번만 호출됨
+        assert mock_runner.run.call_count == 2
+
+    def test_stop_across_multiple_accounts(self):
+        """여러 계정 중 하나에서 실패 발생 → 다음 계정도 건너뜀."""
+        mock_runner = MagicMock()
+        mock_runner.run.side_effect = [RuntimeError("fail"), None, None, None]
+        mock_editor = MagicMock()
+
+        executor = CampaignExecutor(
+            runner=mock_runner,
+            editor_factory=lambda acc: mock_editor,
+        )
+        config = _config(n_accounts=2, n_keywords=2)  # 4 combos total
+        config["run"]["on_failure"] = "stop"
+        result = executor.execute(config, dry_run=False)
+
+        assert result.stop_requested is True
+        # 첫 번째 호출이 실패 → 즉시 중단
+        assert result.total_failed == 1
+        assert mock_runner.run.call_count == 1
+
+    def test_immediate_failure_alert_sent(self):
+        """실패 발생 시 notifier.send_failure_alert 즉시 호출."""
+        from unittest.mock import patch
+
+        mock_runner = MagicMock()
+        mock_runner.run.side_effect = [None, RuntimeError("ugly error"), None]
+        mock_editor = MagicMock()
+        mock_notifier = MagicMock()
+
+        executor = CampaignExecutor(
+            runner=mock_runner,
+            editor_factory=lambda acc: mock_editor,
+        )
+        config = _config(n_accounts=1, n_keywords=3)
+        config["notify"] = {
+            "on": "always",
+            "channels": [
+                {"type": "telegram", "token": "t", "chat_id": "c"},
+            ],
+        }
+
+        with patch("cli.campaign_executor.build_notifier", return_value=mock_notifier):
+            executor.execute(config, dry_run=False)
+
+        # 실패 1번 → 즉시 알림 1번
+        assert mock_notifier.send_failure_alert.call_count == 1
+        call_kwargs = mock_notifier.send_failure_alert.call_args.kwargs
+        assert "ugly error" in call_kwargs["error"]
+        # 캠페인 완료 요약 알림
+        mock_notifier.send_summary.assert_called_once()
 
     def test_limit_respected(self):
         mock_runner = MagicMock()

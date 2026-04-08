@@ -472,6 +472,39 @@ class SmartEditorOne(BlogEditor):
     # Publish helpers
     # ------------------------------------------------------------------
 
+    # 글쓰기 도중 뜰 수 있는 방해 요소들. 각 step 실행 직전에 probe된다.
+    _RUNTIME_OVERLAYS = (
+        "overlay_draft_cancel",
+        "overlay_help_close",
+        "library_close",
+    )
+
+    def dismiss_overlays(self, probe_ms: int = 200) -> bool:
+        """런타임 오버레이를 한 번만 털어낸다 (각 step 직전 호출용).
+
+        ``_wait_for_editor_ready``는 editor.open() 시점에 루프 기반으로
+        오래 기다리지만, 이 메서드는 짧게 한 번만 probe하고 즉시 반환한다.
+        각 PostStep 실행 직전에 부담 없이 호출할 수 있도록 설계되었다.
+
+        Returns:
+            True  — 오버레이를 최소 하나 닫음
+            False — 닫을 오버레이가 없었음 (가장 일반적)
+        """
+        try:
+            frame = self._frame()
+        except Exception:
+            return False
+        sel = self._sel()
+
+        clicked = False
+        for key in self._RUNTIME_OVERLAYS:
+            try:
+                if click_if_visible(sel.locator(frame, key).first, timeout_ms=probe_ms):
+                    clicked = True
+            except Exception:
+                pass
+        return clicked
+
     def _wait_for_editor_ready(
         self,
         frame,

@@ -81,6 +81,11 @@ class JobRunner:
                 if i > 0:
                     editor.move_cursor("end")
 
+                # 각 step 직전에 방해 오버레이 제거 (초안 복구, 도움말, 미디어 라이브러리)
+                # 도중에 뜨는 팝업이 도미노 실패를 일으키는 걸 방지한다.
+                if editor.dismiss_overlays():
+                    logger.info("[editor] [%d/%d] 오버레이 감지 및 제거", i + 1, total_steps)
+
                 logger.info("[editor] [%d/%d] %s 실행 중...", i + 1, total_steps, step_name)
                 step.execute(editor)
 
@@ -91,6 +96,8 @@ class JobRunner:
 
                 if isinstance(step, (ImageStep, FeaturedImageStep)):
                     if isinstance(step, FeaturedImageStep) and hasattr(editor, "set_representative_media"):
+                        # 대표이미지 설정 직전에도 오버레이 probe
+                        editor.dismiss_overlays()
                         logger.info("[editor] [%d/%d] 대표 이미지 설정 (index=%d)", i + 1, total_steps, image_upload_count)
                         editor.set_representative_media(image_upload_count)
                     image_upload_count += 1
@@ -106,17 +113,21 @@ class JobRunner:
 
         # Platform-specific: schedule if supported and requested
         if post.schedule_at is not None and hasattr(editor, "schedule"):
+            editor.dismiss_overlays()
             logger.info("[editor] 예약 발행 설정: %s", post.schedule_at.strftime("%Y-%m-%d %H:%M"))
             editor.schedule(post.schedule_at)
 
         if post.tags:
+            editor.dismiss_overlays()
             logger.info("[editor] 태그 삽입: %s", ", ".join(post.tags))
             editor.insert_tags(post.tags)
 
         if post.visibility != "public":
+            editor.dismiss_overlays()
             logger.info("[editor] 공개 설정: %s", post.visibility)
             editor.set_visibility(post.visibility)
 
+        editor.dismiss_overlays()
         logger.info("[editor] 발행 중...")
         editor.publish()
         logger.info("[editor] 발행 완료")

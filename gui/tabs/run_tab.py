@@ -25,7 +25,11 @@ class RunTab(QWidget):
         self._headless.setChecked(True)
 
         self._on_failure = QComboBox()
-        self._on_failure.addItems(["중단 (stop)", "계정 전환 (switch_account)"])
+        self._on_failure.addItems(["계속 진행 (continue)", "즉시 중단 (stop)"])
+        self._on_failure.setToolTip(
+            "continue: 실패해도 다음 조합 계속 실행\n"
+            "stop: 첫 실패 즉시 캠페인 전체 중단"
+        )
 
         self._on_resume = QComboBox()
         self._on_resume.addItems(["처음부터 (restart)", "이어서 (skip)"])
@@ -62,10 +66,15 @@ class RunTab(QWidget):
         self._tg_chat_id = QLineEdit()
         self._tg_chat_id.setPlaceholderText("채팅 ID")
 
-        advanced_notify = CollapsibleSection("완료 알림")
+        advanced_notify = CollapsibleSection("알림 (실패 즉시 + 완료 요약)")
         advanced_notify.add_row("알림 조건:", self._notify_on)
         advanced_notify.add_row("Telegram 토큰:", self._tg_token)
         advanced_notify.add_row("Telegram 채팅 ID:", self._tg_chat_id)
+        self._notify_on.setToolTip(
+            "always: 완료 요약 항상 + 실패 발생 시 즉시 알림\n"
+            "fail: 실패 발생 시 즉시 알림 + 실패 있는 경우만 완료 요약\n"
+            "complete: 성공 완료 시에만 알림 (실패 알림 없음)"
+        )
 
         layout = QVBoxLayout()
         layout.addWidget(basic_group)
@@ -74,7 +83,7 @@ class RunTab(QWidget):
         layout.addStretch()
         self.setLayout(layout)
 
-    _FAIL_MAP = {"중단 (stop)": "stop", "계정 전환 (switch_account)": "switch_account"}
+    _FAIL_MAP = {"계속 진행 (continue)": "continue", "즉시 중단 (stop)": "stop"}
     _FAIL_REV = {v: k for k, v in _FAIL_MAP.items()}
     _RESUME_MAP = {"처음부터 (restart)": "restart", "이어서 (skip)": "skip"}
     _RESUME_REV = {v: k for k, v in _RESUME_MAP.items()}
@@ -90,7 +99,7 @@ class RunTab(QWidget):
         run: dict = {}
 
         run["interval"] = f"{self._interval.value()}s"
-        run["on_failure"] = self._FAIL_MAP.get(self._on_failure.currentText(), "stop")
+        run["on_failure"] = self._FAIL_MAP.get(self._on_failure.currentText(), "continue")
         run["on_resume"] = self._RESUME_MAP.get(self._on_resume.currentText(), "restart")
         run["headless"] = self._headless.isChecked()
         run["parallel"] = self._parallel.isChecked()
@@ -121,8 +130,8 @@ class RunTab(QWidget):
 
         self._headless.setChecked(run.get("headless", True))
 
-        on_failure = run.get("on_failure", "stop")
-        display = self._FAIL_REV.get(on_failure, "중단 (stop)")
+        on_failure = run.get("on_failure", "continue")
+        display = self._FAIL_REV.get(on_failure, "계속 진행 (continue)")
         idx = self._on_failure.findText(display)
         if idx >= 0:
             self._on_failure.setCurrentIndex(idx)

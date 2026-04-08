@@ -167,6 +167,21 @@ class BlogEditor(ABC):
     def publish(self) -> None:
         """Confirm and publish the post."""
 
+    def dismiss_overlays(self) -> bool:
+        """Probe and dismiss any runtime overlays (optional hook).
+
+        Default implementation is a no-op. Platform-specific editors may
+        override this to handle draft-recovery popups, help panels,
+        media library dialogs, etc. that can appear mid-execution.
+
+        Called before each PostStep by JobRunner so that transient
+        overlays cannot cascade into domino failures.
+
+        Returns:
+            True if any overlay was dismissed, False otherwise.
+        """
+        return False
+
 
 # ---------------------------------------------------------------------------
 # PostStep ABC — self-executing command

@@ -31,30 +31,60 @@ def _format_combo(values: dict[str, str]) -> str:
     return ", ".join(f"{k}={v}" for k, v in values.items())
 
 
-def _build_message(campaign: str, result: Any) -> str:
-    """ExecutionResult에서 알림 메시지를 생성한다."""
+def _build_summary_message(campaign: str, result: Any) -> str:
+    """캠페인 완료 시 전송하는 요약 메시지. 모든 combo를 전부 나열한다."""
+    stopped = getattr(result, "stop_requested", False)
+    header = (
+        f"<b>[{campaign}] 캠페인 중단됨 (on_failure=stop)</b>"
+        if stopped else
+        f"<b>[{campaign}] 캠페인 완료</b>"
+    )
     lines = [
-        f"<b>[{campaign}] 캠페인 완료</b>",
+        header,
         f"성공: {result.total_succeeded} / 실패: {result.total_failed}",
     ]
 
     if result.succeeded_combos:
         lines.append(f"\n<b>✓ 성공 ({len(result.succeeded_combos)}건)</b>")
-        for rec in result.succeeded_combos[:20]:
-            lines.append(f"  [{_format_combo(rec.combo_values)}]")
-        if len(result.succeeded_combos) > 20:
-            lines.append(f"  ... 외 {len(result.succeeded_combos) - 20}건")
+        for rec in result.succeeded_combos:
+            entry = f"  [{_format_combo(rec.combo_values)}]"
+            title = getattr(rec, "title", "")
+            if title:
+                entry += f"\n    → {title}"
+            lines.append(entry)
 
     if result.failed_combos:
         lines.append(f"\n<b>✗ 실패 ({len(result.failed_combos)}건)</b>")
-        for rec in result.failed_combos[:20]:
-            line = f"  [{_format_combo(rec.combo_values)}]"
+        for rec in result.failed_combos:
+            entry = f"  [{_format_combo(rec.combo_values)}]"
+            title = getattr(rec, "title", "")
+            if title:
+                entry += f"\n    제목: {title}"
             if rec.error:
-                line += f"\n    → {rec.error[:80]}"
-            lines.append(line)
-        if len(result.failed_combos) > 20:
-            lines.append(f"  ... 외 {len(result.failed_combos) - 20}건")
+                entry += f"\n    에러: {rec.error}"
+            lines.append(entry)
 
+    return "\n".join(lines)
+
+
+def _build_failure_alert_message(
+    campaign: str,
+    username: str,
+    progress: str,
+    combo_values: dict[str, str],
+    title: str,
+    error: str,
+) -> str:
+    """개별 combo 실패 시 즉시 전송하는 실시간 알림 메시지."""
+    lines = [
+        f"<b>🚨 [{campaign}] 실패 발생</b>",
+        f"계정: <code>{username}</code>",
+        f"진행: {progress}",
+        f"조합: [{_format_combo(combo_values)}]",
+    ]
+    if title:
+        lines.append(f"제목: {title}")
+    lines.append(f"\n<b>에러:</b>\n<pre>{error}</pre>")
     return "\n".join(lines)
 
 
@@ -126,7 +156,12 @@ def _build_channel(cfg: dict[str, Any]) -> NotifyChannel | None:
 
 
 class Notifier:
-    """캠페인 결과에 따라 등록된 채널로 알림을 전송한다."""
+    """캠페인 결과에 따라 등록된 채널로 알림을 전송한다.
+
+    두 가지 종류의 알림:
+        send_failure_alert — 실패가 발생한 즉시 호출. on=complete면 스킵.
+        send_summary       — 캠페인 종료 시 1회 호출. on에 따라 전송 여부 결정.
+    """
 
     def __init__(
         self,
@@ -136,8 +171,15 @@ class Notifier:
         self._channels = channels
         self._on = on  # "complete" | "fail" | "always"
 
-    def send(self, result: Any, campaign: str = "campaign") -> None:
-        """result(ExecutionResult)를 기반으로 알림 전송 여부를 결정하고 전송한다."""
+    def _broadcast(self, message: str) -> None:
+        for channel in self._channels:
+            try:
+                channel.send(message)
+            except Exception as exc:
+                log.error("알림 전송 실패: %s", exc)
+
+    def send_summary(self, result: Any, campaign: str = "campaign") -> None:
+        """캠페인 완료 시 전송하는 요약 알림."""
         if not self._channels:
             return
 
@@ -148,12 +190,42 @@ class Notifier:
         if self._on == "fail" and not has_failure:
             return
 
-        message = _build_message(campaign, result)
-        for channel in self._channels:
-            try:
-                channel.send(message)
-            except Exception as exc:
-                log.error("알림 전송 실패: %s", exc)
+        message = _build_summary_message(campaign, result)
+        self._broadcast(message)
+
+    def send_failure_alert(
+        self,
+        campaign: str,
+        username: str,
+        progress: str,
+        combo_values: dict[str, str],
+        title: str,
+        error: str,
+    ) -> None:
+        """개별 combo 실패 시 즉시 전송하는 실시간 알림.
+
+        on=complete (성공 시에만 알림)인 경우에는 실패 알림도 보내지 않는다.
+        on=always / on=fail인 경우 모두 실패 시 알림 전송.
+        """
+        if not self._channels:
+            return
+        if self._on == "complete":
+            return
+
+        message = _build_failure_alert_message(
+            campaign=campaign,
+            username=username,
+            progress=progress,
+            combo_values=combo_values,
+            title=title,
+            error=error,
+        )
+        self._broadcast(message)
+
+    # 하위 호환을 위해 기존 send() 유지 — send_summary로 위임
+    def send(self, result: Any, campaign: str = "campaign") -> None:
+        """deprecated alias for send_summary()."""
+        self.send_summary(result, campaign)
 
 
 def build_notifier(notify_config: dict[str, Any] | None) -> Notifier | None:

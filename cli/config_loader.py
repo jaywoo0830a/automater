@@ -835,7 +835,7 @@ _INTERVAL_RE = re.compile(
     r"^\d+(\.\d+)?\s*(ms|s|m|min|h)?\s*$",
     re.IGNORECASE,
 )
-_ON_FAILURE_VALUES = {"stop", "continue", "switch_account"}
+_ON_FAILURE_VALUES = {"stop", "continue"}
 _ON_RESUME_VALUES = {"restart", "skip"}
 
 

@@ -80,7 +80,15 @@ publish:
 
 run:
   interval: 60s
-  on_failure: stop
+  on_failure: stop                        # 첫 실패 즉시 캠페인 전체 중단
+  on_resume: restart
   headless: true
   parallel: true
   max_workers: 2
+
+notify:
+  on: always                              # 실패 즉시 + 완료 요약
+  channels:
+    - type: telegram
+      token: "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+      chat_id: "987654321"
