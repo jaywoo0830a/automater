@@ -82,7 +82,7 @@ class InvalidRequestError(GeminiError):
 # Constants
 # ---------------------------------------------------------------------------
 
-GEMINI_MODEL = "gemini-flash-latest"
+GEMINI_MODEL = "gemini-3.1-flash-lite"
 
 _STUB_PARAGRAPHS = [
     (
