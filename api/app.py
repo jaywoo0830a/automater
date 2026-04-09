@@ -22,10 +22,15 @@ Endpoints:
 
 from __future__ import annotations
 
+import logging
 import tempfile
 from pathlib import Path
 
 from flask import Flask, request, jsonify
+
+logger = logging.getLogger(__name__)
+
+_UPLOAD_CHUNK_SIZE = 1024 * 1024  # 1MB
 from flask_sock import Sock
 
 from api.auth import require_api_key
@@ -58,8 +63,22 @@ def upload_campaign():
     if not file.filename or not file.filename.endswith(".zip"):
         return jsonify({"error": ".zip only"}), 400
 
+    # 요청 바디 전체 크기 (파일 + multipart 오버헤드). 정확하진 않지만 근사치로 충분.
+    total = request.content_length or 0
+    written = 0
+    last_logged_pct = -1
     with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
-        file.save(tmp)
+        while True:
+            chunk = file.stream.read(_UPLOAD_CHUNK_SIZE)
+            if not chunk:
+                break
+            tmp.write(chunk)
+            written += len(chunk)
+            if total:
+                pct = min(100, int(written * 100 / total))
+                if pct != last_logged_pct and pct % 5 == 0:
+                    logger.info("[api] 업로드 수신 %d%% (%d/%d bytes)", pct, written, total)
+                    last_logged_pct = pct
         tmp_path = tmp.name
 
     try:

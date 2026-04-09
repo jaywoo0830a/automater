@@ -28,26 +28,42 @@ export async function verifyApiKey(key) {
   return res.ok;
 }
 
-export async function uploadCampaign(file, name = "") {
-  const form = new FormData();
-  form.append("file", file);
-  if (name) form.append("name", name);
-  const res = await fetch("/campaigns", {
-    method: "POST",
-    headers: headers(),
-    body: form,
+export function uploadCampaign(file, name = "", onProgress) {
+  // fetch 는 업로드 progress 이벤트를 지원하지 않으므로 XHR 사용.
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.append("file", file);
+    if (name) form.append("name", name);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/campaigns");
+    const hs = headers();
+    for (const k in hs) xhr.setRequestHeader(k, hs[k]);
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) {
+        onProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    };
+
+    xhr.onload = () => {
+      let body = {};
+      try { body = JSON.parse(xhr.responseText); } catch {}
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(body);
+      } else {
+        const msg = body.detail
+          ? `${body.error || xhr.statusText}\n\n${body.detail}`
+          : (body.error || xhr.statusText);
+        const e = new Error(msg);
+        e.detail = body.detail || "";
+        e.status = xhr.status;
+        reject(e);
+      }
+    };
+    xhr.onerror = () => reject(new Error("network error"));
+    xhr.send(form);
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    const msg = err.detail
-      ? `${err.error || res.statusText}\n\n${err.detail}`
-      : (err.error || res.statusText);
-    const e = new Error(msg);
-    e.detail = err.detail || "";
-    e.status = res.status;
-    throw e;
-  }
-  return res.json();
 }
 
 export async function validateCampaign(campaignId) {

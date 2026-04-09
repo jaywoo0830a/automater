@@ -21,9 +21,11 @@ export default function Upload({ onUploaded }) {
   async function handleUpload(e) {
     e.preventDefault();
     if (!file) return;
-    setStatus({ type: "loading", msg: "Uploading..." });
+    setStatus({ type: "loading", msg: "Uploading... 0%" });
     try {
-      const res = await uploadCampaign(file, name);
+      const res = await uploadCampaign(file, name, (pct) => {
+        setStatus({ type: "loading", msg: `Uploading... ${pct}%` });
+      });
       setStatus({ type: "success", msg: `Uploaded — ${name || res.id}` });
       setFile(null);
       setName("");
