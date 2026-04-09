@@ -36,8 +36,16 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 
 from automator.config import is_production
+
+# 서버측 일시적 오류(5xx) 재시도 정책
+# 500 INTERNAL / 503 UNAVAILABLE / 504 DEADLINE_EXCEEDED 는 우리 요청 문제가
+# 아니라 Gemini 서버 상태에 따른 일시적 실패이므로 일정 시간 대기 후 재시도한다.
+_RETRY_SERVER_ERROR_CODES = frozenset({500, 503, 504})
+_RETRY_DELAY_SEC = 10
+_RETRY_MAX_ATTEMPTS = 10  # 최초 시도 포함 총 10회
 
 logger = logging.getLogger(__name__)
 
@@ -169,9 +177,21 @@ def _classify_http_error(exc: Exception) -> GeminiError:
     """Classify an SDK exception into the appropriate GeminiError subclass."""
     msg = str(exc)
 
-    # 429 Rate limit
+    # 429 Rate limit — API 사용량 한도 초과 (RPM / TPM / RPD 중 하나)
     if "429" in msg or "RESOURCE_EXHAUSTED" in msg:
-        return RateLimitError(f"Rate limit exceeded: {msg}")
+        logger.error(
+            "[gemini] API 사용량 한도 초과로 요청 실패 (HTTP 429 RESOURCE_EXHAUSTED). "
+            "원인: 분당 요청(RPM) / 분당 토큰(TPM) / 일일 요청(RPD) 쿼터 중 하나를 "
+            "모두 소진했습니다. 조치: (1) 쿼터가 리셋될 때까지 대기, "
+            "(2) Google AI Studio 콘솔에서 사용량 및 티어 확인, "
+            "(3) 필요 시 유료 티어로 업그레이드. 원본 메시지: %s",
+            msg,
+        )
+        return RateLimitError(
+            "Gemini API quota exhausted (429 RESOURCE_EXHAUSTED). "
+            "Check RPM/TPM/RPD limits in Google AI Studio. "
+            f"Original: {msg}"
+        )
 
     # 403 Permission
     if "403" in msg or "PERMISSION_DENIED" in msg:
@@ -198,22 +218,37 @@ def _call_api(prompt: str, api_key: str, model: str) -> str:
     Raises the appropriate GeminiError subclass on any failure.
     """
     from google import genai
+    from google.genai import errors as genai_errors
     from google.genai import types
 
     client = genai.Client(api_key=api_key)
 
-    # ── HTTP 요청 ──
-    try:
-        response = client.models.generate_content(
-            model=model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.8,
-                max_output_tokens=65536,
-            ),
-        )
-    except Exception as exc:
-        raise _classify_http_error(exc) from exc
+    # ── HTTP 요청 (5xx 서버 오류는 10초 대기 후 재시도) ──
+    response = None
+    for attempt in range(1, _RETRY_MAX_ATTEMPTS + 1):
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.8,
+                    max_output_tokens=65536,
+                ),
+            )
+            break
+        except genai_errors.APIError as exc:
+            # code 는 HTTP 상태 코드 (google-genai SDK 공식 속성)
+            code = getattr(exc, "code", None)
+            if code in _RETRY_SERVER_ERROR_CODES and attempt < _RETRY_MAX_ATTEMPTS:
+                logger.warning(
+                    "[gemini] %s 서버 오류 — %d초 뒤 재시도 (%d/%d)",
+                    code, _RETRY_DELAY_SEC, attempt, _RETRY_MAX_ATTEMPTS,
+                )
+                time.sleep(_RETRY_DELAY_SEC)
+                continue
+            raise _classify_http_error(exc) from exc
+        except Exception as exc:
+            raise _classify_http_error(exc) from exc
 
     # ── 프롬프트 차단 확인 ──
     prompt_feedback = getattr(response, "prompt_feedback", None)
