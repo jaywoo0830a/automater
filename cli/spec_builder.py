@@ -716,11 +716,37 @@ def _parse_list(
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _normalize_win_path(filename: str) -> str:
+    """GUI에서 지정된 윈도우 절대경로를 assets 기준 상대경로로 변환.
+
+    예: 'C:/Users/.../assets/images/photo.png' → 'images/photo.png'
+         'D:\\Work\\assets\\img\\a.jpg'         → 'img/a.jpg'
+         'images/photo.png'                     → 그대로 반환
+    """
+    import re
+    # 윈도우 절대경로 패턴: C:/ 또는 C:\
+    if not re.match(r"^[A-Za-z]:[/\\]", filename):
+        return filename
+
+    # 백슬래시 → 슬래시로 통일
+    normalized = filename.replace("\\", "/")
+
+    # 'assets/' 이후 부분을 상대경로로 추출
+    marker = "/assets/"
+    idx = normalized.rfind(marker)
+    if idx != -1:
+        return normalized[idx + len(marker):]
+
+    # assets 마커가 없으면 파일명만 추출
+    return normalized.rsplit("/", 1)[-1]
+
+
 def _resolve_path(images_dir: str, filename: str) -> str:
     # 빈 값 또는 현재 디렉터리(.) 는 경로 없음으로 처리
     # ImageHandler/FeaturedImageHandler에서 명확한 에러로 잡힌다
     if not filename or filename.strip() in ("", "."):
         return ""
+    filename = _normalize_win_path(filename)
     if not images_dir or images_dir == ".":
         return filename
     resolved = Path(images_dir) / filename
