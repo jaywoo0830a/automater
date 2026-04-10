@@ -277,6 +277,7 @@ class SmartEditorOne(BlogEditor):
         """Upload a file via toolbar button.
 
         네트워크/DOM 지연에 대비하여 업로드 실패 시 재시도한다.
+        재시도 전 이미지 수를 다시 확인하여 중복 업로드를 방지한다.
         """
         file_path = Path(path)
         if not file_path.exists():
@@ -285,10 +286,17 @@ class SmartEditorOne(BlogEditor):
         frame = self._frame()
         sel   = self._sel()
 
+        # 업로드 전 이미지 수 기록 (루프 밖에서 1회만)
+        before_count = sel.locator(frame, "editor_image").count()
+
         for attempt in range(1, _max_retries + 1):
             try:
-                # 업로드 전 이미지 수 기록
-                before_count = sel.locator(frame, "editor_image").count()
+                # 재시도 시 이미지가 이미 늘어났으면 (1차에서 실제론 성공) 스킵
+                if attempt > 1:
+                    current = sel.locator(frame, "editor_image").count()
+                    if current > before_count:
+                        log.info("[editor] upload_file — 이전 시도에서 이미 업로드 완료 감지")
+                        return
 
                 trigger = sel.locator(frame, "toolbar_image")
                 trigger.wait_for(state="visible", timeout=10_000)
@@ -504,13 +512,18 @@ class SmartEditorOne(BlogEditor):
             return
 
         for attempt in range(1, _max_retries + 1):
+            # 재시도 전 이미 발행 완료됐는지 확인 (중복 발행 방지)
+            if attempt > 1 and "Redirect=Write" not in self._page.url:
+                log.info("[editor] 발행 이미 완료 감지 — 재시도 불필요")
+                return
+
             self._click_publish_confirm()
             if self._wait_for_publish_complete():
                 return
             if attempt < _max_retries:
                 log.warning("[editor] 발행 확인 시도 %d/%d — 리다이렉트 미감지, 재시도", attempt, _max_retries)
                 self._click_publish_trigger()
-                time.sleep(1)
+                time.sleep(5)
 
     # ------------------------------------------------------------------
     # Private helpers
