@@ -13,7 +13,10 @@ delegated to injected collaborators. JobRunner owns only the sequence.
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
+
+from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
 from automator.contracts import PostingSpec
 from automator.editor import BlogEditor, ImageStep, FeaturedImageStep, _PostContent
@@ -21,6 +24,10 @@ from automator.spec_validator import SpecValidator
 from automator.content_builder import ContentBuilder
 
 logger = logging.getLogger(__name__)
+
+# 에디터 열기 재시도 설정
+_OPEN_MAX_RETRIES = 2
+_OPEN_RETRY_DELAY = 3  # seconds
 
 
 class JobRunner:
@@ -62,8 +69,22 @@ class JobRunner:
         post: _PostContent,
     ) -> None:
         """Drive the editor to publish the post."""
-        logger.info("[editor] 에디터 페이지 열기...")
-        editor.open()
+        # 에디터 열기 — 네트워크/세션 문제에 대비하여 재시도
+        for attempt in range(1, _OPEN_MAX_RETRIES + 1):
+            try:
+                logger.info("[editor] 에디터 페이지 열기...")
+                editor.open()
+                break
+            except (PlaywrightTimeout, Exception) as exc:
+                if attempt < _OPEN_MAX_RETRIES:
+                    logger.warning(
+                        "[editor] 에디터 열기 실패 (시도 %d/%d): %s — %d초 후 재시도",
+                        attempt, _OPEN_MAX_RETRIES, exc, _OPEN_RETRY_DELAY,
+                    )
+                    time.sleep(_OPEN_RETRY_DELAY)
+                else:
+                    logger.error("[editor] 에디터 열기 최종 실패: %s", exc)
+                    raise
 
         if post.align is not None:
             logger.info("[editor] 정렬 설정: %s", post.align)

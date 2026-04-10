@@ -379,12 +379,33 @@ def _build_live_executor(
 
         merged_cfg = merge_browser_config(global_browser_cfg, account_browser_cfg)
 
-        browser = pw.chromium.launch(headless=headless, slow_mo=slow_mo)
-        ctx = build_context(browser, merged_cfg, storage_state=state)
-        page = ctx.new_page()
+        browser = None
+        ctx = None
+        try:
+            browser = pw.chromium.launch(headless=headless, slow_mo=slow_mo)
+            ctx = build_context(browser, merged_cfg, storage_state=state)
+            page = ctx.new_page()
+        except Exception:
+            # 초기화 실패 시 리소스 정리
+            try:
+                if ctx is not None:
+                    ctx.close()
+            except Exception:
+                pass
+            try:
+                if browser is not None:
+                    browser.close()
+            except Exception:
+                pass
+            raise
+
         blog_id = account.get("blog_id", account["username"])
         write_url = f"https://blog.naver.com/{blog_id}?Redirect=Write&"
-        return SmartEditorOne(page, write_url, dry_run=False)
+        editor = SmartEditorOne(page, write_url, dry_run=False)
+        # 나중에 정리할 수 있도록 리소스 참조 보존
+        editor._browser = browser  # type: ignore[attr-defined]
+        editor._context = ctx      # type: ignore[attr-defined]
+        return editor
 
     def checker_factory(account: dict[str, Any]):
         from automator.naver_checker import PlaywrightTitleChecker

@@ -580,87 +580,102 @@ class CampaignExecutor:
                     result.record_failure(str(exc))
                 return
 
+        def _close_editor():
+            """에디터 및 연결된 브라우저 리소스 정리."""
+            if editor is None:
+                return
+            for attr in ("_context", "_browser"):
+                res = getattr(editor, attr, None)
+                if res is not None:
+                    try:
+                        res.close()
+                    except Exception:
+                        pass
+
         succeeded_in_batch = 0
 
-        for i, combo in enumerate(combos):
-            # on_failure=stop 이전 실패로 인해 중단 요청된 경우 루프 탈출
-            if result.stop_requested:
-                logger.warning(
-                    "[batch] %s — on_failure=stop 활성 + 이전 실패 감지, 남은 combo 건너뜀",
-                    username,
-                )
-                break
-
-            combo_index = combo.index - 1  # 0-based global index
-            progress_label = f"[{i + 1}/{total}]"
-
-            # skip 모드: 이미 완료된 조합 건너뛰기
-            if on_resume == "skip" and progress and progress.is_done(combo_index):
-                logger.info("[batch] %s SKIP #%d (이전 실행에서 완료)", progress_label, combo.index)
-                continue
-
-            title = ""
-            try:
-                spec = build_spec(combo, config, account_idx)
-
-                # Phase 1에서 확정된 제목이 있으면 사용, 없으면 기본 생성
-                title = resolved_titles.get(combo.index) or generate_title(spec.title)
-
-                # Sequential mode: compute schedule_at for each post progressively
-                spec = self._resolve_sequential(spec, i, config, progress)
-                at_label = spec.schedule_at.strftime("%H:%M") if spec.schedule_at else "즉시"
-
-                logger.info("[batch] %s START %s | %s (예약: %s)", progress_label, username, title, at_label)
-
-                record = ComboRecord(combo_values=combo.values, title=title)
-
-                if dry_run:
-                    result.record_success(record)
-                    logger.info("[batch] %s DRY-RUN %s | %s", progress_label, username, title)
-                    succeeded_in_batch += 1
-                    continue
-
-                # 실행 — 실패 시 즉시 예외, 재시도 없음
-                self._run_spec(spec, editor)
-                result.record_success(record)
-                succeeded_in_batch += 1
-                logger.info("[batch] %s DONE %s | %s", progress_label, username, title)
-                if progress:
-                    progress.mark_done(combo_index)
-
-            except Exception as exc:
-                record = ComboRecord(combo_values=combo.values, title=title, error=str(exc))
-                result.record_failure(str(exc), record)
-                logger.error("[batch] %s FAIL %s | %s", progress_label, username, str(exc))
-
-                # ── 즉시 알림 ──
-                if notifier is not None:
-                    try:
-                        notifier.send_failure_alert(
-                            campaign=campaign_name,
-                            username=username,
-                            progress=f"{i + 1}/{total}",
-                            combo_values=combo.values,
-                            title=title,
-                            error=str(exc),
-                        )
-                    except Exception as alert_exc:
-                        logger.warning("[batch] 실시간 알림 전송 실패: %s", alert_exc)
-
-                # ── on_failure=stop 처리 ──
-                if on_failure_mode == "stop":
-                    logger.error(
-                        "[batch] %s — on_failure=stop: 캠페인 전체 중단 요청",
+        try:
+            for i, combo in enumerate(combos):
+                # on_failure=stop 이전 실패로 인해 중단 요청된 경우 루프 탈출
+                if result.stop_requested:
+                    logger.warning(
+                        "[batch] %s — on_failure=stop 활성 + 이전 실패 감지, 남은 combo 건너뜀",
                         username,
                     )
-                    result.request_stop()
                     break
 
-                continue
+                combo_index = combo.index - 1  # 0-based global index
+                progress_label = f"[{i + 1}/{total}]"
 
-            if not dry_run and i < len(combos) - 1 and interval > 0:
-                logger.info("[batch] %s — %d초 대기 중...", username, interval)
-                time.sleep(interval)
+                # skip 모드: 이미 완료된 조합 건너뛰기
+                if on_resume == "skip" and progress and progress.is_done(combo_index):
+                    logger.info("[batch] %s SKIP #%d (이전 실행에서 완료)", progress_label, combo.index)
+                    continue
+
+                title = ""
+                try:
+                    spec = build_spec(combo, config, account_idx)
+
+                    # Phase 1에서 확정된 제목이 있으면 사용, 없으면 기본 생성
+                    title = resolved_titles.get(combo.index) or generate_title(spec.title)
+
+                    # Sequential mode: compute schedule_at for each post progressively
+                    spec = self._resolve_sequential(spec, i, config, progress)
+                    at_label = spec.schedule_at.strftime("%H:%M") if spec.schedule_at else "즉시"
+
+                    logger.info("[batch] %s START %s | %s (예약: %s)", progress_label, username, title, at_label)
+
+                    record = ComboRecord(combo_values=combo.values, title=title)
+
+                    if dry_run:
+                        result.record_success(record)
+                        logger.info("[batch] %s DRY-RUN %s | %s", progress_label, username, title)
+                        succeeded_in_batch += 1
+                        continue
+
+                    # 실행 — 실패 시 즉시 예외, 재시도 없음
+                    self._run_spec(spec, editor)
+                    result.record_success(record)
+                    succeeded_in_batch += 1
+                    logger.info("[batch] %s DONE %s | %s", progress_label, username, title)
+                    if progress:
+                        progress.mark_done(combo_index)
+
+                except Exception as exc:
+                    record = ComboRecord(combo_values=combo.values, title=title, error=str(exc))
+                    result.record_failure(str(exc), record)
+                    logger.error("[batch] %s FAIL %s | %s", progress_label, username, str(exc))
+
+                    # ── 즉시 알림 ──
+                    if notifier is not None:
+                        try:
+                            notifier.send_failure_alert(
+                                campaign=campaign_name,
+                                username=username,
+                                progress=f"{i + 1}/{total}",
+                                combo_values=combo.values,
+                                title=title,
+                                error=str(exc),
+                            )
+                        except Exception as alert_exc:
+                            logger.warning("[batch] 실시간 알림 전송 실패: %s", alert_exc)
+
+                    # ── on_failure=stop 처리 ──
+                    if on_failure_mode == "stop":
+                        logger.error(
+                            "[batch] %s — on_failure=stop: 캠페인 전체 중단 요청",
+                            username,
+                        )
+                        result.request_stop()
+                        break
+
+                    continue
+
+                if not dry_run and i < len(combos) - 1 and interval > 0:
+                    logger.info("[batch] %s — %d초 대기 중...", username, interval)
+                    time.sleep(interval)
+        finally:
+            _close_editor()
 
         logger.info("=" * 50)
         logger.info("[batch] %s — 완료 (%d/%d 성공)", username, succeeded_in_batch, total)

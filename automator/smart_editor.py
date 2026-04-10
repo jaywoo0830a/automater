@@ -10,6 +10,7 @@ Dependencies:
 
 from __future__ import annotations
 
+import logging
 import sys
 import time
 from datetime import datetime
@@ -30,6 +31,8 @@ from automator.browser_actions import (
     select_option_by_value,
     wait_until_attached,
 )
+
+log = logging.getLogger(__name__)
 
 _EDITOR_JSON = Path("selectors/naver/editor.yaml")
 _MAIN_FRAME  = "#mainFrame"
@@ -295,31 +298,58 @@ class SmartEditorOne(BlogEditor):
             state="visible", timeout=10_000
         )
 
-    def insert_link(self, url: str) -> None:
-        """Attach a hyperlink to the last uploaded image."""
+    def insert_link(self, url: str, *, _max_retries: int = 2) -> None:
+        """Attach a hyperlink to the last uploaded image.
+
+        링크 팝오버가 열리지 않는 경우를 대비하여 최대 ``_max_retries`` 회 재시도한다.
+        """
         if not url:
             return
 
         frame = self._frame()
         sel   = self._sel()
 
-        image_block = sel.locator(frame, "editor_image_block").last
-        image_block.wait_for(state="visible", timeout=5_000)
-        image_block.click()
+        for attempt in range(1, _max_retries + 1):
+            try:
+                # 1. 이미지 블록 선택
+                image_block = sel.locator(frame, "editor_image_block").last
+                image_block.wait_for(state="visible", timeout=5_000)
+                image_block.click()
+                time.sleep(0.3)
 
-        link_btn = sel.locator(frame, "editor_link_button")
-        if not click_if_visible(link_btn, timeout_ms=3_000):
-            return
+                # 2. 링크 버튼 클릭
+                link_btn = sel.locator(frame, "editor_link_button")
+                if not click_if_visible(link_btn, timeout_ms=5_000):
+                    log.warning("[editor] insert_link 시도 %d/%d — 링크 버튼 미발견", attempt, _max_retries)
+                    # 이미지 선택 해제 후 재시도
+                    self._click_last_paragraph(frame)
+                    time.sleep(0.5)
+                    continue
 
-        link_input = sel.locator(frame, "editor_link_input")
-        link_input.wait_for(state="visible", timeout=3_000)
-        link_input.fill(url)
+                # 3. 링크 입력 필드 대기 + 입력
+                link_input = sel.locator(frame, "editor_link_input")
+                link_input.wait_for(state="visible", timeout=5_000)
+                link_input.fill(url)
 
-        confirm_btn = sel.locator(frame, "editor_link_confirm")
-        if not click_if_visible(confirm_btn, timeout_ms=3_000):
-            return
+                # 4. 확인 버튼
+                confirm_btn = sel.locator(frame, "editor_link_confirm")
+                if not click_if_visible(confirm_btn, timeout_ms=5_000):
+                    log.warning("[editor] insert_link 시도 %d/%d — 확인 버튼 미발견", attempt, _max_retries)
+                    continue
 
-        self._click_last_paragraph(frame)
+                self._click_last_paragraph(frame)
+                return  # 성공
+
+            except Exception as exc:
+                log.warning("[editor] insert_link 시도 %d/%d 실패: %s", attempt, _max_retries, exc)
+                # 팝오버가 열려 있을 수 있으므로 Esc로 닫기
+                try:
+                    frame.press("body", "Escape")
+                except Exception:
+                    pass
+                time.sleep(0.5)
+
+        log.error("[editor] insert_link 최종 실패 — url=%s", url)
 
     def set_representative_media(self, index: int) -> None:
         """Set representative (thumbnail) image by insertion index.

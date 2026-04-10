@@ -145,6 +145,8 @@ class SessionManager:
         nidlogin으로 리다이렉트되면 만료로 판단한다.
         """
         check_url = f"https://blog.naver.com/{blog_id}?Redirect=Write&"
+        browser = None
+        ctx = None
         try:
             browser = self._pw.chromium.launch(headless=True)
             ctx = build_context(browser, browser_config, storage_state=state)
@@ -152,14 +154,21 @@ class SessionManager:
             page.goto(check_url, wait_until="domcontentloaded", timeout=15_000)
 
             logged_in = "nidlogin" not in page.url
-
-            page.close()
-            ctx.close()
-            browser.close()
             return logged_in
         except Exception as exc:
             log.debug("validate 실패: %s", exc)
             return False
+        finally:
+            try:
+                if ctx is not None:
+                    ctx.close()
+            except Exception:
+                pass
+            try:
+                if browser is not None:
+                    browser.close()
+            except Exception:
+                pass
 
     @staticmethod
     def _has_display() -> bool:
@@ -206,7 +215,7 @@ class SessionManager:
             submit_btn.click()
 
             log.info("[%s] ID/PW 자동 입력 완료 — 리다이렉트 대기 중", username)
-            print(f"          >> 로그인 중... CAPTCHA/2차 인증이 뜨면 직접 처리해주세요. ({username})")
+            log.info("[%s] 로그인 중... CAPTCHA/2차 인증이 뜨면 직접 처리해주세요.", username)
 
         return self._login_flow(account, browser_config, _do_login)
 
