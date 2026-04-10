@@ -73,7 +73,7 @@ def wait_until_visible(locator, timeout_ms: int = 5_000) -> bool:
         return False
 
 
-def wait_until_hidden(locator, timeout_ms: int = 3_000) -> bool:
+def wait_until_hidden(locator, timeout_ms: int = 5_000) -> bool:
     """
     Wait for locator to become hidden / detached.
     Returns True if hidden within timeout, False otherwise. Never raises.
@@ -242,7 +242,7 @@ def clear_and_fill(locator, text: str, timeout_ms: int = 5_000) -> bool:
         return False
 
 
-def press_key(locator, key: str, timeout_ms: int = 3_000) -> bool:
+def press_key(locator, key: str, timeout_ms: int = 5_000) -> bool:
     """
     Wait for locator to be visible, then press ``key``.
 
@@ -313,7 +313,7 @@ def select_option_by_label(locator, label: str, timeout_ms: int = 5_000) -> bool
 # Hovering
 # ---------------------------------------------------------------------------
 
-def hover_if_visible(locator, timeout_ms: int = 3_000) -> bool:
+def hover_if_visible(locator, timeout_ms: int = 5_000) -> bool:
     """
     Move the mouse over locator if it is visible.
 
@@ -562,7 +562,7 @@ def all_visible(locators: list) -> bool:
     return len(locators) > 0
 
 
-def click_parallel(locators: list, timeout_ms: int = 3_000) -> list[bool]:
+def click_parallel(locators: list, timeout_ms: int = 5_000) -> list[bool]:
     """
     Click every locator that is visible within timeout_ms.
 
@@ -665,7 +665,7 @@ def get_attributes_parallel(locators: list, name: str, default: str = "") -> lis
     return results
 
 
-def dismiss(locator, panel_locator=None, timeout_ms: int = 6_000) -> bool:
+def dismiss(locator, panel_locator=None, timeout_ms: int = 10_000) -> bool:
     """
     Click locator (single attempt), then optionally wait for panel to hide.
 
@@ -690,7 +690,7 @@ def dismiss_polling(locator, panel_locator=None, timeout_ms: int = 10_000) -> bo
     return clicked
 
 
-def dismiss_parallel(locators: list, timeout_ms: int = 12_000) -> list[bool]:
+def dismiss_parallel(locators: list, timeout_ms: int = 15_000) -> list[bool]:
     """
     Poll all locators simultaneously until each is clicked or deadline expires.
 
@@ -753,7 +753,7 @@ def js_dispatch_click(js_frame, css: str, index: int) -> str:
     )
 
 
-def locator_dispatch_click(locator, index: int = 0) -> str:
+def locator_dispatch_click(locator, index: int = 0, timeout_ms: int = 10_000) -> str:
     """
     Fire a MouseEvent via Playwright locator.evaluate — pierces shadow DOM.
 
@@ -769,7 +769,9 @@ def locator_dispatch_click(locator, index: int = 0) -> str:
     Never raises.
     """
     try:
-        return locator.nth(index).evaluate("""el => {
+        target = locator.nth(index)
+        target.wait_for(state="attached", timeout=timeout_ms)
+        return target.evaluate("""el => {
             el.dispatchEvent(
                 new MouseEvent('click', {bubbles: true, cancelable: true})
             );

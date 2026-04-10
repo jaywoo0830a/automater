@@ -26,8 +26,8 @@ from automator.content_builder import ContentBuilder
 logger = logging.getLogger(__name__)
 
 # 에디터 열기 재시도 설정
-_OPEN_MAX_RETRIES = 2
-_OPEN_RETRY_DELAY = 3  # seconds
+_OPEN_MAX_RETRIES = 3
+_OPEN_RETRY_DELAY = 5  # seconds
 
 
 class JobRunner:

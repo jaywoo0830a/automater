@@ -273,7 +273,7 @@ class SmartEditorOne(BlogEditor):
 
         self._click_editor_bottom(frame)
 
-    def upload_file(self, path: str, *, _max_retries: int = 2) -> None:
+    def upload_file(self, path: str, *, _max_retries: int = 3) -> None:
         """Upload a file via toolbar button.
 
         네트워크/DOM 지연에 대비하여 업로드 실패 시 재시도한다.
@@ -293,13 +293,13 @@ class SmartEditorOne(BlogEditor):
                 trigger = sel.locator(frame, "toolbar_image")
                 trigger.wait_for(state="visible", timeout=10_000)
 
-                with self._page.expect_file_chooser(timeout=10_000) as fc_info:
+                with self._page.expect_file_chooser(timeout=15_000) as fc_info:
                     trigger.click()
                 fc_info.value.set_files(str(path))
 
                 dismiss_polling(
                     locator    = sel.locator(frame, "library_close").first,
-                    timeout_ms = 8_000,
+                    timeout_ms = 10_000,
                 )
 
                 # 새 이미지가 DOM에 나타날 때까지 대기
@@ -320,11 +320,11 @@ class SmartEditorOne(BlogEditor):
                         attempt, _max_retries, exc,
                     )
                     self.dismiss_overlays()
-                    time.sleep(2)
+                    time.sleep(5)
                 else:
                     raise
 
-    def insert_link(self, url: str, *, _max_retries: int = 2) -> None:
+    def insert_link(self, url: str, *, _max_retries: int = 3) -> None:
         """Attach a hyperlink to the last uploaded image.
 
         링크 팝오버가 열리지 않는 경우를 대비하여 최대 ``_max_retries`` 회 재시도한다.
@@ -341,7 +341,7 @@ class SmartEditorOne(BlogEditor):
                 image_block = sel.locator(frame, "editor_image_block").last
                 image_block.wait_for(state="visible", timeout=5_000)
                 image_block.click()
-                time.sleep(0.3)
+                time.sleep(0.5)
 
                 # 2. 링크 버튼 클릭
                 link_btn = sel.locator(frame, "editor_link_button")
@@ -349,7 +349,7 @@ class SmartEditorOne(BlogEditor):
                     log.warning("[editor] insert_link 시도 %d/%d — 링크 버튼 미발견", attempt, _max_retries)
                     # 이미지 선택 해제 후 재시도
                     self._click_last_paragraph(frame)
-                    time.sleep(0.5)
+                    time.sleep(1)
                     continue
 
                 # 3. 링크 입력 필드 대기 + 입력
@@ -373,11 +373,11 @@ class SmartEditorOne(BlogEditor):
                     frame.press("body", "Escape")
                 except Exception:
                     pass
-                time.sleep(0.5)
+                time.sleep(5)
 
         log.error("[editor] insert_link 최종 실패 — url=%s", url)
 
-    def set_representative_media(self, index: int, *, _max_retries: int = 2) -> None:
+    def set_representative_media(self, index: int, *, _max_retries: int = 3) -> None:
         """Set representative (thumbnail) image by insertion index.
 
         After selecting the rep image, the image component remains
@@ -422,7 +422,7 @@ class SmartEditorOne(BlogEditor):
                 )
                 # 오버레이가 가리고 있을 수 있으므로 해제 후 재시도
                 self.dismiss_overlays()
-                time.sleep(1)
+                time.sleep(5)
                 continue
 
             raise RuntimeError(
@@ -485,14 +485,14 @@ class SmartEditorOne(BlogEditor):
         frame = self._popover_frame()
 
         tag_input = sel.locator(frame, "tag_textarea")
-        if not click_if_visible(tag_input, timeout_ms=3_000):
+        if not click_if_visible(tag_input, timeout_ms=5_000):
             return
 
         for tag in tags:
             self._page.keyboard.type(tag)
             self._page.keyboard.press("Space")
 
-    def publish(self, *, _max_retries: int = 2) -> None:
+    def publish(self, *, _max_retries: int = 3) -> None:
         """Open publish popover and confirm (skipped in dry_run)."""
         self._click_publish_trigger()
 
@@ -646,7 +646,7 @@ class SmartEditorOne(BlogEditor):
             time.sleep(0.05)
 
         for k in _OVERLAYS:
-            click_if_visible(sel.locator(frame, k).first, timeout_ms=1_000)
+            click_if_visible(sel.locator(frame, k).first, timeout_ms=5_000)
 
     def _wait_for_publish_complete(self, timeout: int = 30_000) -> bool:
         """Wait for publish navigation. Returns True if redirect detected."""
@@ -671,15 +671,15 @@ class SmartEditorOne(BlogEditor):
                 state="attached", timeout=timeout_ms
             )
         except Exception:
-            time.sleep(1.5)
+            time.sleep(2)
 
-    def _click_publish_trigger(self, timeout: int = 8_000) -> None:
+    def _click_publish_trigger(self, timeout: int = 10_000) -> None:
         sel = self._sel()
         for ctx in (self._popover_frame(), self._page):
             if click_if_visible(sel.locator(ctx, "toolbar_publish"), timeout):
                 return
 
-    def _click_publish_confirm(self, timeout: int = 8_000) -> None:
+    def _click_publish_confirm(self, timeout: int = 10_000) -> None:
         sel = self._sel()
         for ctx in (self._page, self._popover_frame()):
             if click_if_visible(sel.locator(ctx, "publish_confirm"), timeout):
