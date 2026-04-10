@@ -139,7 +139,7 @@ def wait_for_url_contains(page: Any, fragment: str, timeout_ms: int = 10_000) ->
 # Clicking
 # ---------------------------------------------------------------------------
 
-def click_if_visible(locator, timeout_ms: int = 3_000) -> bool:
+def click_if_visible(locator, timeout_ms: int = 5_000) -> bool:
     """
     Click locator if it becomes visible within timeout_ms.
     Returns True when clicked, False when not found / not visible. Never raises.
@@ -153,7 +153,7 @@ def click_if_visible(locator, timeout_ms: int = 3_000) -> bool:
     return False
 
 
-def click_polling(locator, timeout_ms: int = 6_000, probe_ms: int = 200) -> bool:
+def click_polling(locator, timeout_ms: int = 10_000, probe_ms: int = 200) -> bool:
     """
     Poll locator repeatedly until visible, then click.
 
@@ -167,7 +167,7 @@ def click_polling(locator, timeout_ms: int = 6_000, probe_ms: int = 200) -> bool
     return False
 
 
-def click_nth(locator, index: int, timeout_ms: int = 3_000) -> bool:
+def click_nth(locator, index: int, timeout_ms: int = 5_000) -> bool:
     """
     Click the nth element matched by locator.
 
@@ -678,7 +678,7 @@ def dismiss(locator, panel_locator=None, timeout_ms: int = 6_000) -> bool:
     return clicked
 
 
-def dismiss_polling(locator, panel_locator=None, timeout_ms: int = 6_000) -> bool:
+def dismiss_polling(locator, panel_locator=None, timeout_ms: int = 10_000) -> bool:
     """
     Poll-click locator, then optionally wait for panel to hide.
 
@@ -690,7 +690,7 @@ def dismiss_polling(locator, panel_locator=None, timeout_ms: int = 6_000) -> boo
     return clicked
 
 
-def dismiss_parallel(locators: list, timeout_ms: int = 8_000) -> list[bool]:
+def dismiss_parallel(locators: list, timeout_ms: int = 12_000) -> list[bool]:
     """
     Poll all locators simultaneously until each is clicked or deadline expires.
 

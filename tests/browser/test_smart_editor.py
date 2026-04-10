@@ -34,7 +34,7 @@ def editor(mock_page):
 def test_open_navigates_to_write_url(editor, mock_page):
     with patch.object(editor, "_wait_for_editor_ready"):
         editor.open()
-    mock_page.goto.assert_called_once_with(_WRITE_URL)
+    mock_page.goto.assert_called_once_with(_WRITE_URL, timeout=60_000)
 
 
 def test_open_raises_on_login_redirect(editor, mock_page):

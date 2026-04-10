@@ -69,7 +69,7 @@ class SmartEditorOne(BlogEditor):
 
     def open(self) -> None:
         """Navigate to write page and wait for editor to be ready."""
-        self._page.goto(self._write_url)
+        self._page.goto(self._write_url, timeout=60_000)
         self._page.wait_for_load_state("domcontentloaded")
 
         if self._write_url.split("?")[0] in self._page.url:
@@ -82,7 +82,7 @@ class SmartEditorOne(BlogEditor):
             )
 
         self._page.frame_locator(_MAIN_FRAME).locator(_EDITOR_BODY).wait_for(
-            state="visible", timeout=30_000
+            state="visible", timeout=45_000
         )
         self._wait_for_editor_ready(self._frame(), self._sel())
 
@@ -101,12 +101,12 @@ class SmartEditorOne(BlogEditor):
         self._page.keyboard.press("Control+a")
 
         trigger = sel.locator(frame, "align_trigger")
-        if not click_if_visible(trigger, timeout_ms=3_000):
+        if not click_if_visible(trigger, timeout_ms=5_000):
             self._page.keyboard.press("Escape")
             return
 
         align_key = self._ALIGN_KEY_MAP.get(align, "align_left")
-        click_if_visible(sel.locator(frame, align_key), timeout_ms=3_000)
+        click_if_visible(sel.locator(frame, align_key), timeout_ms=5_000)
         self._page.keyboard.press("Escape")
 
     def write_title(self, title: str) -> None:
@@ -114,7 +114,7 @@ class SmartEditorOne(BlogEditor):
         frame = self._frame()
         sel   = self._sel()
         el    = sel.locator(frame, "editor_title")
-        el.wait_for(state="visible", timeout=5_000)
+        el.wait_for(state="visible", timeout=10_000)
         el.click()
         self._page.keyboard.type(title)
 
@@ -129,9 +129,9 @@ class SmartEditorOne(BlogEditor):
             if i < len(lines) - 1:
                 self._page.keyboard.press("Enter")
 
-        # Editor DOM lags on long text — wait proportionally.
+        # Editor DOM lags on long text — poll paragraph count stabilization.
         if len(text) >= 100:
-            time.sleep(min(60, max(2, len(text) // 100)))
+            self._wait_for_dom_stable(max_wait=min(60, max(3, len(text) // 80)))
 
         for _ in range(max(newlines, 1)):
             self._page.keyboard.press("Enter")
@@ -160,12 +160,12 @@ class SmartEditorOne(BlogEditor):
         self._click_last_paragraph(frame)
 
         trigger = sel.locator(frame, "heading_trigger")
-        if not click_if_visible(trigger, timeout_ms=3_000):
+        if not click_if_visible(trigger, timeout_ms=5_000):
             self.insert_text(text, 1)
             return
 
         heading_btn = sel.locator(frame, "heading_button")
-        if not click_if_visible(heading_btn, timeout_ms=3_000):
+        if not click_if_visible(heading_btn, timeout_ms=5_000):
             self.insert_text(text, 1)
             return
 
@@ -176,10 +176,10 @@ class SmartEditorOne(BlogEditor):
         self._page.keyboard.press("Shift+End")
         size_key = self._HEADING_SIZE_MAP.get(level, "size_34")
         size_trigger = sel.locator(frame, "size_trigger")
-        if click_if_visible(size_trigger, timeout_ms=3_000):
-            click_if_visible(sel.locator(frame, size_key), timeout_ms=3_000)
+        if click_if_visible(size_trigger, timeout_ms=5_000):
+            click_if_visible(sel.locator(frame, size_key), timeout_ms=5_000)
 
-        click_if_visible(sel.locator(frame, "bold_button"), timeout_ms=3_000)
+        click_if_visible(sel.locator(frame, "bold_button"), timeout_ms=5_000)
 
         # ── 소제목 모드 탈출 ──
         # 1. Escape으로 선택 해제
@@ -189,7 +189,7 @@ class SmartEditorOne(BlogEditor):
         #    (대표이미지에서 검증된 탈출 방법)
         click_if_visible(
             sel.locator(frame, "editor_canvas_bottom").first,
-            timeout_ms=3_000,
+            timeout_ms=5_000,
         )
 
     def insert_quote(self, text: str, quote_type: int = 1) -> None:
@@ -208,12 +208,12 @@ class SmartEditorOne(BlogEditor):
         self._click_last_paragraph(frame)
 
         trigger = sel.locator(frame, "quote_trigger")
-        if not click_if_visible(trigger, timeout_ms=3_000):
+        if not click_if_visible(trigger, timeout_ms=5_000):
             self.insert_text(text, 2)
             return
 
         quote_btn = sel.locator(frame, f"quote_{quote_type}")
-        if not click_if_visible(quote_btn, timeout_ms=3_000):
+        if not click_if_visible(quote_btn, timeout_ms=5_000):
             self.insert_text(text, 2)
             return
 
@@ -231,12 +231,12 @@ class SmartEditorOne(BlogEditor):
         self._click_last_paragraph(frame)
 
         trigger = sel.locator(frame, "list_trigger")
-        if not click_if_visible(trigger, timeout_ms=3_000):
+        if not click_if_visible(trigger, timeout_ms=5_000):
             self.insert_text("\n".join(items), 2)
             return
 
         list_btn = sel.locator(frame, "list_type_1")
-        if not click_if_visible(list_btn, timeout_ms=3_000):
+        if not click_if_visible(list_btn, timeout_ms=5_000):
             self.insert_text("\n".join(items), 2)
             return
 
@@ -264,17 +264,20 @@ class SmartEditorOne(BlogEditor):
         self._click_last_paragraph(frame)
 
         trigger = sel.locator(frame, "divider_trigger")
-        if not click_if_visible(trigger, timeout_ms=3_000):
+        if not click_if_visible(trigger, timeout_ms=5_000):
             return
 
         divider_btn = sel.locator(frame, f"divider_{divider_type}")
-        if not click_if_visible(divider_btn, timeout_ms=3_000):
+        if not click_if_visible(divider_btn, timeout_ms=5_000):
             return
 
         self._click_editor_bottom(frame)
 
-    def upload_file(self, path: str) -> None:
-        """Upload a file via toolbar button."""
+    def upload_file(self, path: str, *, _max_retries: int = 2) -> None:
+        """Upload a file via toolbar button.
+
+        네트워크/DOM 지연에 대비하여 업로드 실패 시 재시도한다.
+        """
         file_path = Path(path)
         if not file_path.exists():
             raise FileNotFoundError(f"File not found: {path!r}")
@@ -282,21 +285,44 @@ class SmartEditorOne(BlogEditor):
         frame = self._frame()
         sel   = self._sel()
 
-        trigger = sel.locator(frame, "toolbar_image")
-        trigger.wait_for(state="visible", timeout=10_000)
+        for attempt in range(1, _max_retries + 1):
+            try:
+                # 업로드 전 이미지 수 기록
+                before_count = sel.locator(frame, "editor_image").count()
 
-        with self._page.expect_file_chooser() as fc_info:
-            trigger.click()
-        fc_info.value.set_files(str(path))
+                trigger = sel.locator(frame, "toolbar_image")
+                trigger.wait_for(state="visible", timeout=10_000)
 
-        dismiss_polling(
-            locator    = sel.locator(frame, "library_close").first,
-            timeout_ms = 5_000,
-        )
+                with self._page.expect_file_chooser(timeout=10_000) as fc_info:
+                    trigger.click()
+                fc_info.value.set_files(str(path))
 
-        sel.locator(frame, "editor_image").last.wait_for(
-            state="visible", timeout=10_000
-        )
+                dismiss_polling(
+                    locator    = sel.locator(frame, "library_close").first,
+                    timeout_ms = 8_000,
+                )
+
+                # 새 이미지가 DOM에 나타날 때까지 대기
+                deadline = time.monotonic() + 20
+                while time.monotonic() < deadline:
+                    if sel.locator(frame, "editor_image").count() > before_count:
+                        break
+                    time.sleep(0.5)
+                else:
+                    raise TimeoutError("업로드된 이미지가 에디터에 나타나지 않음")
+
+                return  # 성공
+
+            except Exception as exc:
+                if attempt < _max_retries:
+                    log.warning(
+                        "[editor] upload_file 시도 %d/%d 실패: %s — 재시도",
+                        attempt, _max_retries, exc,
+                    )
+                    self.dismiss_overlays()
+                    time.sleep(2)
+                else:
+                    raise
 
     def insert_link(self, url: str, *, _max_retries: int = 2) -> None:
         """Attach a hyperlink to the last uploaded image.
@@ -466,7 +492,7 @@ class SmartEditorOne(BlogEditor):
             self._page.keyboard.type(tag)
             self._page.keyboard.press("Space")
 
-    def publish(self) -> None:
+    def publish(self, *, _max_retries: int = 2) -> None:
         """Open publish popover and confirm (skipped in dry_run)."""
         self._click_publish_trigger()
 
@@ -477,12 +503,41 @@ class SmartEditorOne(BlogEditor):
             )
             return
 
-        self._click_publish_confirm()
-        self._wait_for_publish_complete()
+        for attempt in range(1, _max_retries + 1):
+            self._click_publish_confirm()
+            if self._wait_for_publish_complete():
+                return
+            if attempt < _max_retries:
+                log.warning("[editor] 발행 확인 시도 %d/%d — 리다이렉트 미감지, 재시도", attempt, _max_retries)
+                self._click_publish_trigger()
+                time.sleep(1)
 
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    def _wait_for_dom_stable(self, max_wait: float = 5, poll: float = 0.5) -> None:
+        """에디터 DOM이 안정될 때까지 대기 (paragraph count 변화 감시)."""
+        try:
+            frame = self._frame()
+            sel = self._sel()
+            prev_count = sel.locator(frame, "editor_paragraph_container").count()
+            stable = 0
+            deadline = time.monotonic() + max_wait
+
+            while time.monotonic() < deadline:
+                time.sleep(poll)
+                cur_count = sel.locator(frame, "editor_paragraph_container").count()
+                if cur_count == prev_count:
+                    stable += 1
+                    if stable >= 2:
+                        return
+                else:
+                    stable = 0
+                    prev_count = cur_count
+        except Exception:
+            # fallback — 기존 고정 대기
+            time.sleep(min(max_wait, 3))
 
     def _click_last_paragraph(self, frame=None) -> None:
         """Click last paragraph (force=True to bypass image overlays)."""
@@ -531,7 +586,7 @@ class SmartEditorOne(BlogEditor):
         "library_close",
     )
 
-    def dismiss_overlays(self, probe_ms: int = 200) -> bool:
+    def dismiss_overlays(self, probe_ms: int = 500) -> bool:
         """런타임 오버레이를 한 번만 털어낸다 (각 step 직전 호출용).
 
         ``_wait_for_editor_ready``는 editor.open() 시점에 루프 기반으로
@@ -561,7 +616,7 @@ class SmartEditorOne(BlogEditor):
         self,
         frame,
         sel,
-        timeout_ms: int    = 20_000,
+        timeout_ms: int    = 30_000,
         stable_streak: int = 3,
         probe_ms: int      = 300,
     ) -> None:
@@ -588,23 +643,26 @@ class SmartEditorOne(BlogEditor):
                 except Exception:
                     streak = 0
 
-            time.sleep(0.1)
+            time.sleep(0.05)
 
         for k in _OVERLAYS:
             click_if_visible(sel.locator(frame, k).first, timeout_ms=1_000)
 
-    def _wait_for_publish_complete(self, timeout: int = 15_000) -> None:
-        """Wait for publish navigation."""
+    def _wait_for_publish_complete(self, timeout: int = 30_000) -> bool:
+        """Wait for publish navigation. Returns True if redirect detected."""
         try:
             self._page.wait_for_url(
                 lambda url: "Redirect=Write" not in url,
                 timeout=timeout,
             )
+            time.sleep(1)
+            return True
         except Exception:
-            pass
-        time.sleep(1)
+            time.sleep(1)
+            # fallback — URL이 실제로 바뀌었는지 한번 더 확인
+            return "Redirect=Write" not in self._page.url
 
-    def _wait_for_popover_ready(self, timeout_ms: int = 5_000) -> None:
+    def _wait_for_popover_ready(self, timeout_ms: int = 10_000) -> None:
         """Wait for publish popover to render."""
         frame = self._popover_frame()
         sel   = self._sel()
@@ -613,15 +671,15 @@ class SmartEditorOne(BlogEditor):
                 state="attached", timeout=timeout_ms
             )
         except Exception:
-            time.sleep(1.0)
+            time.sleep(1.5)
 
-    def _click_publish_trigger(self, timeout: int = 5_000) -> None:
+    def _click_publish_trigger(self, timeout: int = 8_000) -> None:
         sel = self._sel()
         for ctx in (self._popover_frame(), self._page):
             if click_if_visible(sel.locator(ctx, "toolbar_publish"), timeout):
                 return
 
-    def _click_publish_confirm(self, timeout: int = 5_000) -> None:
+    def _click_publish_confirm(self, timeout: int = 8_000) -> None:
         sel = self._sel()
         for ctx in (self._page, self._popover_frame()):
             if click_if_visible(sel.locator(ctx, "publish_confirm"), timeout):
