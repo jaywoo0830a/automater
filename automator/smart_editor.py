@@ -351,7 +351,7 @@ class SmartEditorOne(BlogEditor):
 
         log.error("[editor] insert_link 최종 실패 — url=%s", url)
 
-    def set_representative_media(self, index: int) -> None:
+    def set_representative_media(self, index: int, *, _max_retries: int = 2) -> None:
         """Set representative (thumbnail) image by insertion index.
 
         After selecting the rep image, the image component remains
@@ -368,15 +368,37 @@ class SmartEditorOne(BlogEditor):
         frame = self._frame()
         sel   = self._sel()
 
-        block = sel.locator(frame, "editor_image_block").nth(index)
-        block.wait_for(state="visible", timeout=5_000)
-        block.hover()
+        for attempt in range(1, _max_retries + 1):
+            # 실제 이미지 블록 수 확인
+            actual_count = sel.locator(frame, "editor_image_block").count()
+            if index >= actual_count:
+                log.warning(
+                    "[editor] set_representative_media — index=%d 이지만 이미지 블록 %d개만 존재, 마지막 블록으로 대체",
+                    index, actual_count,
+                )
+                index = max(0, actual_count - 1)
 
-        result = locator_dispatch_click(
-            sel.locator(frame, "editor_image_rep"),
-            index=index,
-        )
-        if result != "selected":
+            block = sel.locator(frame, "editor_image_block").nth(index)
+            block.wait_for(state="visible", timeout=5_000)
+            block.hover()
+
+            result = locator_dispatch_click(
+                sel.locator(frame, "editor_image_rep"),
+                index=index,
+            )
+            if result == "selected":
+                break
+
+            if attempt < _max_retries:
+                log.warning(
+                    "[editor] set_representative_media 시도 %d/%d 실패: %s — 재시도",
+                    attempt, _max_retries, result,
+                )
+                # 오버레이가 가리고 있을 수 있으므로 해제 후 재시도
+                self.dismiss_overlays()
+                time.sleep(1)
+                continue
+
             raise RuntimeError(
                 f"set_representative_media(index={index}) failed: "
                 f"JS returned {result!r}"
