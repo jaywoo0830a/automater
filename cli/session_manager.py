@@ -330,9 +330,22 @@ class SessionManager:
 
     def _load(self, account: dict[str, Any]) -> dict | None:
         username = account["username"]
+
+        # 1. YAML에 명시된 경로가 있으면 우선 시도
         explicit_path = account.get("session", "")
         if explicit_path and hasattr(self._store, "load_path"):
-            return self._store.load_path(explicit_path)
+            state = self._store.load_path(explicit_path)
+            if state is not None:
+                return state
+            # 명시된 경로에 파일이 없으면 같은 디렉터리에서 username으로 재탐색
+            from pathlib import Path
+            session_dir = Path(explicit_path).parent
+            if session_dir.is_dir():
+                for candidate in session_dir.iterdir():
+                    if candidate.is_file() and username in candidate.stem:
+                        log.debug("[%s] 세션 파일 fallback 발견: %s", username, candidate)
+                        return self._store.load_path(str(candidate))
+
         return self._store.load(username)
 
     def _save(self, account: dict[str, Any], state: dict) -> None:
