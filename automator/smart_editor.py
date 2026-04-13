@@ -25,6 +25,7 @@ from automator.ports import SelectorSource
 from automator.browser_actions import (
     click_if_visible,
     dismiss_polling,
+    dispatch_click_on_locator as _dispatch_click_on_locator,
     find_editor_frame,
     find_js_frame,
     locator_dispatch_click,
@@ -388,13 +389,16 @@ class SmartEditorOne(BlogEditor):
     def set_representative_media(self, index: int, *, _max_retries: int = 3) -> None:
         """Set representative (thumbnail) image by insertion index.
 
+        hover한 이미지 블록 **내부**에서 대표이미지 버튼을 찾아 클릭한다.
+        (기존: 페이지 전체에서 nth(index)로 찾았으나, 다른 블록의 버튼은
+        hover 전까지 숨겨져 있어 index 불일치가 발생했음)
+
         After selecting the rep image, the image component remains
         selected — its overlay (.se-selection, .se-floating-material-container)
         blocks all keyboard input to the text area.
 
         To escape, click ``div.se-canvas-bottom`` ("본문 추가" area) which
         deselects the image and moves the cursor to a fresh paragraph.
-        Verified in tests/e2e/test_debug_rep_media.py.
         """
         if index < 0:
             raise ValueError(f"index must be >= 0, got {index}")
@@ -415,20 +419,20 @@ class SmartEditorOne(BlogEditor):
             block = sel.locator(frame, "editor_image_block").nth(index)
             block.wait_for(state="visible", timeout=5_000)
             block.hover()
+            time.sleep(0.5)
 
-            result = locator_dispatch_click(
-                sel.locator(frame, "editor_image_rep"),
-                index=index,
-            )
+            # 해당 블록 내부에서 대표이미지 버튼을 찾는다 (전체 nth가 아님)
+            rep_btn = block.locator("button.se-set-rep-image-button")
+            result = _dispatch_click_on_locator(rep_btn)
+
             if result == "selected":
                 break
 
             if attempt < _max_retries:
                 log.warning(
-                    "[editor] set_representative_media 시도 %d/%d 실패: %s — 재시도",
-                    attempt, _max_retries, result,
+                    "[editor] set_representative_media 시도 %d/%d 실패 (index=%d): %s — 재시도",
+                    attempt, _max_retries, index, result,
                 )
-                # 오버레이가 가리고 있을 수 있으므로 해제 후 재시도
                 self.dismiss_overlays()
                 time.sleep(5)
                 continue

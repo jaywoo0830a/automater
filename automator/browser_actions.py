@@ -753,6 +753,33 @@ def js_dispatch_click(js_frame, css: str, index: int) -> str:
     )
 
 
+def dispatch_click_on_locator(locator, timeout_ms: int = 10_000) -> str:
+    """
+    Fire a MouseEvent on a **scoped** locator (e.g. block.locator("button")).
+
+    Unlike locator_dispatch_click which uses nth(index) across the whole page,
+    this targets the first match of an already-scoped locator.
+
+    Returns:
+        'selected'     — element gained 'se-is-selected' class after click
+        'not-selected' — event fired but class not set
+        'error: ...'   — exception message
+    Never raises.
+    """
+    try:
+        target = locator.first
+        target.wait_for(state="attached", timeout=timeout_ms)
+        return target.evaluate("""el => {
+            el.dispatchEvent(
+                new MouseEvent('click', {bubbles: true, cancelable: true})
+            );
+            return el.classList.contains('se-is-selected')
+                ? 'selected' : 'not-selected';
+        }""")
+    except Exception as e:
+        return f"error: {e}"
+
+
 def locator_dispatch_click(locator, index: int = 0, timeout_ms: int = 10_000) -> str:
     """
     Fire a MouseEvent via Playwright locator.evaluate — pierces shadow DOM.
