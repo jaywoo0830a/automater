@@ -20,6 +20,7 @@ Both absent -> e2e tests skip.
 from __future__ import annotations
 
 import os
+import random
 
 import pytest
 from dotenv import load_dotenv
@@ -43,6 +44,10 @@ NAVER_BLOG_ID = os.getenv("NAVER_BLOG_ID", "")
 SESSION_PATH  = os.getenv("SESSION_PATH",  "session_state.json")
 
 _LOGIN_SEL = SelectorLoader.load("selectors/naver/login.yaml")
+
+# 키 입력 간 지터 범위 (ms) — CLI session_manager와 동일
+_TYPE_DELAY_MIN = 80
+_TYPE_DELAY_MAX = 180
 
 
 # ---------------------------------------------------------------------------
@@ -103,22 +108,64 @@ def browser_instance():
 
 @pytest.fixture(scope="session")
 def auth_context(browser_instance: Browser, account: AccountOption):
+    """세션 파일이 있으면 재사용, 없으면 CLI auto_login과 동일한 방식으로 로그인."""
     if os.path.exists(account.resolved_session_path):
         ctx = browser_instance.new_context(
             storage_state=account.resolved_session_path,
             locale="ko-KR",
             timezone_id="Asia/Seoul",
         )
-    else:
-        ctx = browser_instance.new_context(locale="ko-KR", timezone_id="Asia/Seoul")
-        page = ctx.new_page()
-        page.goto("https://nid.naver.com/nidlogin.login")
-        _LOGIN_SEL.locator(page, "naver_login_id").fill(account.username)
-        _LOGIN_SEL.locator(page, "naver_login_pw").fill(account.password)
-        _LOGIN_SEL.locator(page, "naver_login_submit").click()
-        page.wait_for_url(lambda url: "nidlogin" not in url, timeout=15_000)
-        ctx.storage_state(path=account.resolved_session_path)
-        page.close()
+        # 세션 유효성 확인
+        check = ctx.new_page()
+        blog_id = NAVER_BLOG_ID or account.username
+        check.goto(
+            f"https://blog.naver.com/{blog_id}?Redirect=Write&",
+            wait_until="domcontentloaded",
+            timeout=15_000,
+        )
+        valid = "nidlogin" not in check.url
+        check.close()
+        if valid:
+            yield ctx
+            ctx.close()
+            return
+        # 세션 만료 — 다시 로그인
+        ctx.close()
+
+    ctx = browser_instance.new_context(locale="ko-KR", timezone_id="Asia/Seoul")
+    page = ctx.new_page()
+    page.goto("https://nid.naver.com/nidlogin.login", wait_until="domcontentloaded")
+
+    # CLI auto_login과 동일: press_sequentially + 랜덤 지터
+    id_field = _LOGIN_SEL.locator(page, "naver_login_id")
+    id_field.wait_for(state="visible", timeout=10_000)
+    id_field.click()
+    id_field.press_sequentially(
+        account.username,
+        delay=random.randint(_TYPE_DELAY_MIN, _TYPE_DELAY_MAX),
+    )
+
+    page.keyboard.press("Tab")
+    page.wait_for_timeout(random.randint(150, 350))
+
+    pw_field = _LOGIN_SEL.locator(page, "naver_login_pw")
+    pw_field.wait_for(state="visible", timeout=5_000)
+    pw_field.press_sequentially(
+        account.password,
+        delay=random.randint(_TYPE_DELAY_MIN, _TYPE_DELAY_MAX),
+    )
+
+    page.wait_for_timeout(random.randint(300, 700))
+    _LOGIN_SEL.locator(page, "naver_login_submit").click()
+
+    # 리다이렉트 대기 (CAPTCHA/2차 인증 시 최대 5분)
+    page.wait_for_url(
+        lambda url: "nidlogin" not in url and "naver.com" in url,
+        timeout=300_000,
+    )
+    ctx.storage_state(path=account.resolved_session_path)
+    page.close()
+
     yield ctx
     ctx.close()
 

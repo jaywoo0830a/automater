@@ -294,20 +294,6 @@ def select_option_by_value(locator, value: str, timeout_ms: int = 5_000) -> bool
     return False
 
 
-def select_option_by_label(locator, label: str, timeout_ms: int = 5_000) -> bool:
-    """
-    Select a <select> option by its visible label text.
-
-    Returns True on success, False otherwise. Never raises.
-    """
-    if wait_until_visible(locator, timeout_ms):
-        try:
-            locator.select_option(label=label)
-            return True
-        except Exception:
-            return False
-    return False
-
 
 # ---------------------------------------------------------------------------
 # Hovering
@@ -356,13 +342,6 @@ def is_disabled(locator) -> bool:
     except Exception:
         return True   # assume disabled on error (safe default)
 
-
-def is_editable(locator) -> bool:
-    """Return True if locator is editable (not readonly / disabled). Never raises."""
-    try:
-        return locator.is_editable()
-    except Exception:
-        return False
 
 
 def has_class(locator, class_name: str) -> bool:

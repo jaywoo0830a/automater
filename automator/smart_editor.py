@@ -133,6 +133,8 @@ class SmartEditorOne(BlogEditor):
         # Editor DOM lags on long text — poll paragraph count stabilization.
         if len(text) >= 100:
             self._wait_for_dom_stable(max_wait=min(60, max(3, len(text) // 80)))
+            # DOM 안정화 후 커서를 문서 끝으로 이동 (클릭하면 텍스트 중앙에 커서가 놓여 분할됨)
+            self._page.keyboard.press("Control+End")
 
         for _ in range(max(newlines, 1)):
             self._page.keyboard.press("Enter")
@@ -221,6 +223,10 @@ class SmartEditorOne(BlogEditor):
         self._page.keyboard.type(text)
         self._click_editor_bottom(frame)
 
+        # 인용구 블록 탈출 후 간격 확보 — 2 Enter로 빈 줄 생성
+        for _ in range(2):
+            self._page.keyboard.press("Enter")
+
     def insert_list(self, items: list[str], ordered: bool = False) -> None:
         """Insert list block with native formatting."""
         if not items:
@@ -274,6 +280,10 @@ class SmartEditorOne(BlogEditor):
 
         self._click_editor_bottom(frame)
 
+        # 구분선 블록 탈출 후 간격 확보 — 2 Enter로 빈 줄 생성
+        for _ in range(2):
+            self._page.keyboard.press("Enter")
+
     def upload_file(self, path: str, *, _max_retries: int = 3) -> None:
         """Upload a file via toolbar button.
 
@@ -287,15 +297,18 @@ class SmartEditorOne(BlogEditor):
         frame = self._frame()
         sel   = self._sel()
 
+        # .se-content 내부로 스코핑하여 오버레이/라이브러리 이미지와 혼동 방지
+        content_area = frame.locator(_EDITOR_BODY)
+        image_locator = content_area.locator("img.se-image-resource")
+
         # 업로드 전 이미지 수 기록 (루프 밖에서 1회만)
-        before_count = sel.locator(frame, "editor_image").count()
+        before_count = image_locator.count()
 
         for attempt in range(1, _max_retries + 1):
             try:
                 # 재시도 시 이미지가 이미 늘어났으면 (1차에서 실제론 성공) 스킵
                 if attempt > 1:
-                    current = sel.locator(frame, "editor_image").count()
-                    if current > before_count:
+                    if image_locator.count() > before_count:
                         log.info("[editor] upload_file — 이전 시도에서 이미 업로드 완료 감지")
                         return
 
@@ -311,10 +324,10 @@ class SmartEditorOne(BlogEditor):
                     timeout_ms = 10_000,
                 )
 
-                # 새 이미지가 DOM에 나타날 때까지 대기
+                # 새 이미지가 DOM에 나타날 때까지 대기 (content 영역 내부만 확인)
                 deadline = time.monotonic() + 20
                 while time.monotonic() < deadline:
-                    if sel.locator(frame, "editor_image").count() > before_count:
+                    if image_locator.count() > before_count:
                         break
                     time.sleep(0.5)
                 else:
@@ -346,22 +359,22 @@ class SmartEditorOne(BlogEditor):
 
         for attempt in range(1, _max_retries + 1):
             try:
-                # 1. 이미지 블록 선택
-                image_block = sel.locator(frame, "editor_image_block").last
+                # 1. 마지막 이미지 블록 선택 (.se-content 내부로 스코핑)
+                content_area = frame.locator(_EDITOR_BODY)
+                image_block = content_area.locator("div.se-component.se-image").last
                 image_block.wait_for(state="visible", timeout=5_000)
                 image_block.click()
                 time.sleep(0.5)
 
-                # 2. 링크 버튼 클릭
+                # 2. 링크 버튼 클릭 (이미지 선택 시 floating toolbar에 나타남)
                 link_btn = sel.locator(frame, "editor_link_button")
                 if not click_if_visible(link_btn, timeout_ms=5_000):
                     log.warning("[editor] insert_link 시도 %d/%d — 링크 버튼 미발견", attempt, _max_retries)
-                    # 이미지 선택 해제 후 재시도
                     self._click_last_paragraph(frame)
                     time.sleep(1)
                     continue
 
-                # 3. 링크 입력 필드 대기 + 입력
+                # 3. 링크 입력 필드 대기 + 입력 (floating popover)
                 link_input = sel.locator(frame, "editor_link_input")
                 link_input.wait_for(state="visible", timeout=5_000)
                 link_input.fill(url)
@@ -534,17 +547,18 @@ class SmartEditorOne(BlogEditor):
     # ------------------------------------------------------------------
 
     def _wait_for_dom_stable(self, max_wait: float = 5, poll: float = 0.5) -> None:
-        """에디터 DOM이 안정될 때까지 대기 (paragraph count 변화 감시)."""
+        """에디터 DOM이 안정될 때까지 대기 (.se-content 내 paragraph count 변화 감시)."""
         try:
             frame = self._frame()
-            sel = self._sel()
-            prev_count = sel.locator(frame, "editor_paragraph_container").count()
+            content_area = frame.locator(_EDITOR_BODY)
+            para_locator = content_area.locator("div.se-component.se-text")
+            prev_count = para_locator.count()
             stable = 0
             deadline = time.monotonic() + max_wait
 
             while time.monotonic() < deadline:
                 time.sleep(poll)
-                cur_count = sel.locator(frame, "editor_paragraph_container").count()
+                cur_count = para_locator.count()
                 if cur_count == prev_count:
                     stable += 1
                     if stable >= 2:
@@ -557,13 +571,29 @@ class SmartEditorOne(BlogEditor):
             time.sleep(min(max_wait, 3))
 
     def _click_last_paragraph(self, frame=None) -> None:
-        """Click last paragraph (force=True to bypass image overlays)."""
+        """Click last paragraph within .se-content (force=True to bypass image overlays).
+
+        직접 자식 ``> div.se-component.se-text`` 셀렉터를 사용하여
+        인용구/리스트 내부의 텍스트 요소와 혼동되지 않도록 한다.
+        """
         if frame is None:
             frame = self._frame()
-        sel = self._sel()
-        target = sel.locator(frame, "editor_paragraph_container").last
-        target.wait_for(state="visible", timeout=5_000)
-        target.click(force=True)
+        # .se-content 직접 자식 텍스트 컴포넌트만 (인용구 내부 .se-text 제외)
+        content_area = frame.locator(_EDITOR_BODY)
+        target = content_area.locator("> div.se-component.se-text").last
+        try:
+            target.wait_for(state="visible", timeout=5_000)
+            target.click(force=True)
+        except Exception:
+            # fallback 1: p.se-text-paragraph (yaml selector)
+            try:
+                sel = self._sel()
+                fallback = sel.locator(frame, "editor_paragraph_container").last
+                fallback.wait_for(state="visible", timeout=5_000)
+                fallback.click(force=True)
+            except Exception:
+                # fallback 2: 전체 스코프 .se-component.se-text
+                content_area.locator("div.se-component.se-text").last.click(force=True)
 
     def _click_editor_bottom(self, frame) -> None:
         """Click bottom of .se-content to exit quote/list/divider blocks."""

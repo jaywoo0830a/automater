@@ -30,6 +30,20 @@ _OPEN_MAX_RETRIES = 3
 _OPEN_RETRY_DELAY = 5  # seconds
 
 
+def _get_image_block_count(editor: BlogEditor) -> int:
+    """에디터에서 실제 이미지 블록 수를 DOM으로 확인한다.
+
+    SmartEditorOne처럼 _frame()/_sel()이 있으면 직접 카운트,
+    없으면 0을 반환 (fallback — set_representative_media가 자체 보정).
+    """
+    try:
+        frame = editor._frame()  # type: ignore[attr-defined]
+        sel = editor._sel()      # type: ignore[attr-defined]
+        return sel.locator(frame, "editor_image_block").count()
+    except Exception:
+        return 0
+
+
 class JobRunner:
     """
     Orchestrator — validate, generate content, execute on editor.
@@ -94,7 +108,6 @@ class JobRunner:
         editor.write_title(post.title)
 
         total_steps = len(post.steps)
-        image_upload_count = 0
 
         try:
             for i, step in enumerate(post.steps):
@@ -107,6 +120,11 @@ class JobRunner:
                 if editor.dismiss_overlays():
                     logger.info("[editor] [%d/%d] 오버레이 감지 및 제거", i + 1, total_steps)
 
+                # FeaturedImageStep: 업로드 전 실제 이미지 블록 수를 기록
+                pre_upload_count = None
+                if isinstance(step, FeaturedImageStep) and hasattr(editor, "set_representative_media"):
+                    pre_upload_count = _get_image_block_count(editor)
+
                 logger.info("[editor] [%d/%d] %s 실행 중...", i + 1, total_steps, step_name)
                 step.execute(editor)
 
@@ -115,13 +133,11 @@ class JobRunner:
                     logger.info("[editor] [%d/%d] %s 대기: %.1f초", i + 1, total_steps, step_name, wait_ms / 1000)
                 step.wait()
 
-                if isinstance(step, (ImageStep, FeaturedImageStep)):
-                    if isinstance(step, FeaturedImageStep) and hasattr(editor, "set_representative_media"):
-                        # 대표이미지 설정 직전에도 오버레이 probe
-                        editor.dismiss_overlays()
-                        logger.info("[editor] [%d/%d] 대표 이미지 설정 (index=%d)", i + 1, total_steps, image_upload_count)
-                        editor.set_representative_media(image_upload_count)
-                    image_upload_count += 1
+                # 대표이미지: 업로드 전 카운트를 index로 사용 (순차 카운터 대신 실제 DOM 기반)
+                if pre_upload_count is not None:
+                    editor.dismiss_overlays()
+                    logger.info("[editor] [%d/%d] 대표 이미지 설정 (index=%d)", i + 1, total_steps, pre_upload_count)
+                    editor.set_representative_media(pre_upload_count)
 
         finally:
             if post.tmp_files:
