@@ -41,7 +41,8 @@ post:
 assets: ./asset/images
 
 publish:
-  schedule: '++ 15m'
+  schedule: '++ 15m'                       # 지금부터 15분 간격 순차 예약
+  # schedule: '++ 15m from +1d 09:00'      # 내일 9시부터 15분 간격
   tags: [교육, 과외]
 
 run:

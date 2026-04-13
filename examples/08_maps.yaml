@@ -61,7 +61,8 @@ post:
 assets: ./images
 
 publish:
-  schedule: '++ 15m ~ 30m'
+  schedule: '++ 15m ~ 30m'                 # 지금부터 15~30분 랜덤 간격
+  # schedule: '++ 15m ~ 30m from +1d'      # 내일부터 랜덤 간격
   tags: [교육, 과외]
 
 run:
