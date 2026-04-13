@@ -737,13 +737,149 @@ class SmartEditorOne(BlogEditor):
         """Floor minute to nearest 10 (Naver UI step)."""
         return f"{(minute // 10) * 10:02d}"
 
-    def _set_scheduled_publish(self, schedule_at: datetime) -> None:
-        """Set scheduled time via JS click (label intercepts pointer events)."""
-        hour_str   = f"{schedule_at.hour:02d}"
-        minute_str = self._round_minute_to_10(schedule_at.minute)
+    # ------------------------------------------------------------------
+    # Schedule: 날짜/시간 설정
+    # ------------------------------------------------------------------
+    # 날짜: mainFrame의 jQuery UI Datepicker (input[class*="input_date"])
+    # 시간: PostWriteForm의 <select> (hour_option / minute_option)
+    # ------------------------------------------------------------------
 
-        js_frame = find_js_frame(self._page, url_fragment="PostWriteForm")
-        js_frame.evaluate(
+    # JS: 캘린더 헤더에서 현재 년/월 읽기 (mainFrame에서 실행)
+    _READ_CALENDAR_JS = """() => {
+        const title = document.querySelector('.ui-datepicker-title');
+        if (!title) return null;
+        const m = title.textContent.match(/(\\d{4})년\\s*(\\d{1,2})월/);
+        if (!m) return null;
+        return {year: parseInt(m[1]), month: parseInt(m[2])};
+    }"""
+
+    # JS: 캘린더에서 날짜 클릭 (mainFrame에서 실행)
+    # jQuery UI datepicker의 날짜 버튼은 button.ui-state-default
+    # (.ui-datepicker-calendar 래퍼는 커스텀 구현에서 없을 수 있음)
+    _CLICK_DAY_JS = """(day) => {
+        const buttons = document.querySelectorAll('button.ui-state-default');
+        for (const btn of buttons) {
+            if (btn.textContent.trim() === String(day)) {
+                btn.click();
+                return true;
+            }
+        }
+        return false;
+    }"""
+
+    # JS: 날짜 읽기 (mainFrame에서 실행)
+    _READ_DATE_JS = """() => {
+        const input = document.querySelector('input[class*="input_date"]');
+        if (!input) return null;
+        return input.value;
+    }"""
+
+    # JS: 시/분 <select> 설정 (PostWriteForm에서 실행)
+    _SET_TIME_JS = """(args) => {
+        const {hour, minute} = args;
+
+        function setVal(el, val) {
+            const setter = Object.getOwnPropertyDescriptor(
+                HTMLSelectElement.prototype, 'value'
+            ).set;
+            setter.call(el, String(val));
+            el.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+
+        const selects = [...document.querySelectorAll('select')];
+        const result = {};
+
+        for (const sel of selects) {
+            const vals = [...sel.options].map(o => o.value);
+            if (!result.hour && vals.includes('00') && vals.includes('23')) {
+                setVal(sel, hour);
+                result.hour = true;
+            } else if (!result.minute && vals.includes('00') && vals.includes('50')
+                       && !vals.includes('23')) {
+                setVal(sel, minute);
+                result.minute = true;
+            }
+        }
+        return result;
+    }"""
+
+    # JS: 시/분 읽기 (PostWriteForm에서 실행)
+    _READ_TIME_JS = """() => {
+        const selects = [...document.querySelectorAll('select')];
+        const found = {};
+
+        for (const sel of selects) {
+            const vals = [...sel.options].map(o => o.value);
+            if (!found.hour && vals.includes('00') && vals.includes('23')) {
+                found.hour = sel.value;
+            } else if (!found.minute && vals.includes('00') && vals.includes('50')
+                       && !vals.includes('23')) {
+                found.minute = sel.value;
+            }
+        }
+        return found;
+    }"""
+
+    def _find_main_frame(self):
+        """mainFrame을 Frame 객체로 반환한다 (JS evaluate용)."""
+        for frame in self._page.frames:
+            if frame.name == "mainFrame":
+                return frame
+        raise RuntimeError("mainFrame not found")
+
+    def _set_calendar_date(self, main_frame, year: int, month: int, day: int) -> None:
+        """jQuery UI Datepicker 캘린더를 클릭하여 날짜를 설정한다.
+
+        React가 input 값을 제어하므로 jQuery setDate()로는 값이 유지되지 않는다.
+        실제 사용자 클릭과 동일한 경로(캘린더 열기 → 월 이동 → 날짜 클릭)를
+        따라야 React의 onChange가 정상 호출된다.
+
+        jQuery UI 라이브러리 클래스 사용 (빌드 무관, 안정적):
+          - ``.ui-datepicker-title``    — 헤더 "2026년 4월"
+          - ``.ui-datepicker-next``     — 다음 달 버튼
+          - ``.ui-datepicker-prev``     — 이전 달 버튼
+          - ``.ui-state-default``       — 날짜 셀 버튼
+        """
+        # 1. 캘린더 열기 (input 클릭)
+        date_input = main_frame.locator('input[class*="input_date"]')
+        date_input.wait_for(state="visible", timeout=5_000)
+        date_input.click()
+        time.sleep(0.5)
+
+        # 2. 현재 표시 중인 월/년 읽기
+        current = main_frame.evaluate(self._READ_CALENDAR_JS)
+        if not current:
+            log.warning("[editor] 캘린더 헤더를 읽을 수 없음")
+            return
+
+        # 3. 목표 월까지 이동
+        diff = (year - current["year"]) * 12 + (month - current["month"])
+        nav_selector = ".ui-datepicker-next" if diff > 0 else ".ui-datepicker-prev"
+
+        for i in range(abs(diff)):
+            main_frame.locator(nav_selector).click()
+            time.sleep(0.3)
+
+        # 4. 날짜 셀 클릭
+        clicked = main_frame.evaluate(self._CLICK_DAY_JS, day)
+        if not clicked:
+            log.warning("[editor] 캘린더 날짜 %d 클릭 실패", day)
+        else:
+            log.info("[editor] 캘린더 날짜 설정: %d-%02d-%02d", year, month, day)
+        time.sleep(0.3)
+
+    def _set_scheduled_publish(self, schedule_at: datetime) -> None:
+        """예약 발행 날짜/시간을 설정한다.
+
+        날짜와 시간이 서로 다른 프레임에 있다:
+          - 날짜: mainFrame의 jQuery UI Datepicker ``input[class*="input_date"]``
+          - 시간: PostWriteForm의 ``<select>`` (hour/minute)
+        """
+        post_frame = find_js_frame(self._page, url_fragment="PostWriteForm")
+        main_frame = self._find_main_frame()
+
+        # 1. 예약 라디오 버튼 활성화
+        post_frame.evaluate(
             """() => {
                 const el = document.querySelector(
                     'input[name="radio_time"][value="pre"]'
@@ -751,8 +887,62 @@ class SmartEditorOne(BlogEditor):
                 if (el) el.click();
             }"""
         )
+        time.sleep(0.5)
 
-        sel   = self._sel()
-        frame = self._popover_frame()
-        select_option_by_value(sel.locator(frame, "publish_scheduled_hour"), hour_str)
-        select_option_by_value(sel.locator(frame, "publish_scheduled_min"),  minute_str)
+        # 2. 날짜 설정 (mainFrame — jQuery UI Datepicker 캘린더 클릭)
+        self._set_calendar_date(main_frame, schedule_at.year, schedule_at.month, schedule_at.day)
+
+        # 3. 시간 설정 (PostWriteForm — <select>)
+        time_result = post_frame.evaluate(self._SET_TIME_JS, {
+            "hour":   f"{schedule_at.hour:02d}",
+            "minute": self._round_minute_to_10(schedule_at.minute),
+        })
+        log.info("[editor] 시간 설정: %s → %s", schedule_at.strftime("%H:%M"), time_result)
+
+        # 4. 시간 CSS selector fallback
+        if not time_result.get("hour") or not time_result.get("minute"):
+            sel   = self._sel()
+            frame = self._popover_frame()
+            if not time_result.get("hour"):
+                select_option_by_value(
+                    sel.locator(frame, "publish_scheduled_hour"),
+                    f"{schedule_at.hour:02d}",
+                )
+            if not time_result.get("minute"):
+                select_option_by_value(
+                    sel.locator(frame, "publish_scheduled_min"),
+                    self._round_minute_to_10(schedule_at.minute),
+                )
+
+        # 5. 검증
+        actual = self.get_scheduled_values()
+        expected_date = f"{schedule_at.year}. {schedule_at.month:02d}. {schedule_at.day:02d}"
+        if actual.get("date") and actual["date"] != expected_date:
+            log.warning("[editor] 날짜 불일치: expected=%r, got=%r", expected_date, actual["date"])
+
+    def get_scheduled_values(self) -> dict[str, str]:
+        """현재 발행 팝오버에 설정된 예약 날짜/시간을 읽어온다.
+
+        Returns:
+            ``{"date": "2026. 04. 15", "hour": "15", "minute": "00"}``
+        """
+        result: dict[str, str] = {}
+
+        # 날짜 (mainFrame)
+        try:
+            main_frame = self._find_main_frame()
+            date_val = main_frame.evaluate(self._READ_DATE_JS)
+            if date_val:
+                result["date"] = date_val
+        except Exception:
+            pass
+
+        # 시간 (PostWriteForm)
+        try:
+            post_frame = find_js_frame(self._page, url_fragment="PostWriteForm")
+            time_vals = post_frame.evaluate(self._READ_TIME_JS) or {}
+            result.update(time_vals)
+        except Exception:
+            pass
+
+        return result

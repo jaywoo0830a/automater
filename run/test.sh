@@ -212,6 +212,8 @@ print(f'  세션 저장 완료: {out_path}')
 
   ── tests/e2e/                       Real browser (requires session)
       test_e2e_naver.py               E2E smoke
+        test_schedule_sets_date_and_time     예약 날짜/시간 설정 + 읽기 검증
+        test_schedule_different_date         +7일 미래 날짜 예약 검증
 
 HELP
     ;;

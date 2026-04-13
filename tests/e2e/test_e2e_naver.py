@@ -87,6 +87,90 @@ def _schedule(hours_ahead: int = 2) -> datetime:
 
 
 # ---------------------------------------------------------------------------
+# E2E: Schedule date/time via React state
+# ---------------------------------------------------------------------------
+
+@pytest.mark.slow
+def test_schedule_sets_date_and_time(editor: SmartEditorOne, account: AccountOption):
+    """예약 발행 날짜/시간 설정 → 읽기로 검증 (당일, 시간만 변경)."""
+    target = _schedule(hours_ahead=3)
+
+    spec = PostingSpec(
+        account=account,
+        title="예약 날짜 검증 테스트",
+        body=(Section(blocks=(
+            ParagraphBlock(prompt="예약 날짜 테스트 본문"),
+        )),),
+        schedule_at=target,
+    )
+    _run_spec(spec, editor)
+
+    actual = editor.get_scheduled_values()
+
+    expected_date = f"{target.year}. {target.month:02d}. {target.day:02d}"
+    assert actual.get("date") == expected_date, f"date: expected={expected_date!r}, actual={actual}"
+
+    assert actual.get("hour") == f"{target.hour:02d}", f"hour: {actual}"
+    expected_min = SmartEditorOne._round_minute_to_10(target.minute)
+    assert actual.get("minute") == expected_min, f"minute: {actual}"
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("days_ahead,description", [
+    (7,   "같은 달 내 이동"),
+    (14,  "같은 달 또는 다음 달 경계"),
+    (28,  "1개월 이동 (월 경계 확인)"),
+    (100, "3~4개월 이동 (다중 월 네비게이션)"),
+])
+def test_schedule_future_date(
+    editor: SmartEditorOne,
+    account: AccountOption,
+    days_ahead: int,
+    description: str,
+):
+    """미래 날짜 예약 설정 — 캘린더 월 이동 + 날짜 클릭 검증.
+
+    +7일:   같은 달 내 — 월 이동 없이 날짜만 클릭
+    +14일:  월 경계 근처 — 같은 달 또는 다음 달 1회 이동
+    +28일:  1개월 이동 — 다음 달 네비게이션 1~2회
+    +100일: 3~4개월 이동 — 다중 월 네비게이션
+    """
+    target = _schedule(hours_ahead=2) + timedelta(days=days_ahead)
+    expected_date = f"{target.year}. {target.month:02d}. {target.day:02d}"
+
+    spec = PostingSpec(
+        account=account,
+        title=f"예약 +{days_ahead}일 검증 ({description})",
+        body=(Section(blocks=(
+            ParagraphBlock(prompt=f"{days_ahead}일 뒤 예약 테스트"),
+        )),),
+        schedule_at=target,
+    )
+    _run_spec(spec, editor)
+
+    actual = editor.get_scheduled_values()
+
+    # 날짜 검증
+    assert actual.get("date") == expected_date, (
+        f"[+{days_ahead}일] date 불일치: "
+        f"expected={expected_date!r}, actual={actual.get('date')!r}\n"
+        f"target={target.strftime('%Y-%m-%d %H:%M')}, full={actual}"
+    )
+
+    # 시간 검증
+    assert actual.get("hour") == f"{target.hour:02d}", (
+        f"[+{days_ahead}일] hour 불일치: "
+        f"expected={target.hour:02d!r}, actual={actual.get('hour')!r}"
+    )
+
+    expected_min = SmartEditorOne._round_minute_to_10(target.minute)
+    assert actual.get("minute") == expected_min, (
+        f"[+{days_ahead}일] minute 불일치: "
+        f"expected={expected_min!r}, actual={actual.get('minute')!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
 # E2E: Editor loads
 # ---------------------------------------------------------------------------
 
