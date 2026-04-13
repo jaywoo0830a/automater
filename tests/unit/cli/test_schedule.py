@@ -260,3 +260,74 @@ class TestSequential:
         result = parse_schedule("++15m")
         assert result["mode"] == "sequential"
         assert result["interval_lo"] == 900
+
+    # -- from: 시작 시점 지정 --
+
+    def test_from_relative_day(self):
+        """++ 15m from +1d → 내일부터 시작."""
+        result = parse_schedule("++ 15m from +1d")
+        assert result["mode"] == "sequential"
+        assert result["interval_lo"] == 900
+        assert result["start_at"] is not None
+        # start_at이 현재보다 약 24시간 뒤
+        from datetime import datetime, timedelta, timezone
+        now = datetime.now(tz=timezone(timedelta(hours=9)))
+        diff = (result["start_at"] - now).total_seconds()
+        assert 86000 < diff < 87000, f"expected ~24h, got {diff}s"
+
+    def test_from_relative_day_with_time(self):
+        """++ 15m from +1d 09:00 → 내일 오전 9시 시작."""
+        result = parse_schedule("++ 15m from +1d 09:00")
+        assert result["mode"] == "sequential"
+        assert result["start_at"] is not None
+        assert result["start_at"].hour == 9
+        assert result["start_at"].minute == 0
+
+    def test_from_relative_hours(self):
+        """++ 30m from +2h → 2시간 뒤부터."""
+        result = parse_schedule("++ 30m from +2h")
+        assert result["interval_lo"] == 1800
+        assert result["start_at"] is not None
+        from datetime import datetime, timedelta, timezone
+        now = datetime.now(tz=timezone(timedelta(hours=9)))
+        diff = (result["start_at"] - now).total_seconds()
+        assert 7000 < diff < 7400, f"expected ~2h, got {diff}s"
+
+    def test_from_absolute_datetime(self):
+        """++ 15m from 2026-04-14 09:00 → 절대 시각."""
+        result = parse_schedule("++ 15m from 2026-04-14 09:00")
+        assert result["mode"] == "sequential"
+        assert result["start_at"] is not None
+        assert result["start_at"].year == 2026
+        assert result["start_at"].month == 4
+        assert result["start_at"].day == 14
+        assert result["start_at"].hour == 9
+        assert result["start_at"].minute == 0
+
+    def test_from_absolute_date_only(self):
+        """++ 15m from 2026-04-14 → 시각 생략 시 현재 시각 유지."""
+        result = parse_schedule("++ 15m from 2026-04-14")
+        assert result["start_at"] is not None
+        assert result["start_at"].year == 2026
+        assert result["start_at"].day == 14
+
+    def test_from_with_range_interval(self):
+        """++ 15m ~ 30m from +1d 10:00 → 랜덤 간격 + 시작 시점."""
+        result = parse_schedule("++ 15m ~ 30m from +1d 10:00")
+        assert result["mode"] == "sequential"
+        assert result["interval_lo"] == 900
+        assert result["interval_hi"] == 1800
+        assert result["start_at"] is not None
+        assert result["start_at"].hour == 10
+
+    def test_no_from_has_none_start_at(self):
+        """from 없으면 start_at은 None."""
+        result = parse_schedule("++ 15m")
+        assert result.get("start_at") is None
+
+    def test_bare_plus_plus_with_from(self):
+        """++ from +1d → 기본 15m 간격 + 내일 시작."""
+        result = parse_schedule("++ from +1d")
+        assert result["mode"] == "sequential"
+        assert result["interval_lo"] == 900
+        assert result["start_at"] is not None

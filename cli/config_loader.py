@@ -778,10 +778,12 @@ def _check_ai_section(value: Any, loc: str) -> None:
 
 
 _VISIBILITY_VALUES = {"public", "private"}
+# from 구문: from +1d, from +1d 09:00, from 2026-04-14 09:00
+_FROM_PAT = r"(\s+from\s+(\+\s*\d+\s*[smhd](\s+\d{1,2}:\d{2})?|\d{4}-\d{2}-\d{2}(\s+\d{1,2}:\d{2})?))?"""
 _SCHEDULE_RE = re.compile(
     r"^(now|immediate|"
     r"now\s*\+\s*\d+\s*[smhd](\s*~\s*\d+\s*[smhd])?|"
-    r"\+\+(\s*\d+\s*[smhd](\s*~\s*\d+\s*[smhd])?)?)\s*$",
+    r"\+\+(\s*\d+\s*[smhd](\s*~\s*\d+\s*[smhd])?)?" + _FROM_PAT + r")\s*$",
     re.IGNORECASE,
 )
 
@@ -806,7 +808,8 @@ def _validate_publish(config: dict[str, Any]) -> None:
                 raise ConfigError(
                     f"publish.schedule 형식이 잘못되었습니다: {sch!r}. "
                     f"허용 형식: 'now', 'now + 15m', 'now + 15m ~ 30m', "
-                    f"'++', '++ 15m', '++ 15m ~ 30m' (단위: s/m/h/d)"
+                    f"'++', '++ 15m', '++ 15m ~ 30m', "
+                    f"'++ 15m from +1d', '++ 15m from +1d 09:00' (단위: s/m/h/d)"
                 )
 
     # visibility

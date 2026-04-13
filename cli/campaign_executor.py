@@ -714,7 +714,9 @@ class CampaignExecutor:
         interval = random.randint(min(lo, hi), max(lo, hi))
 
         if self._seq_next_at is None:
-            self._seq_next_at = datetime.now(tz=_KST) + timedelta(seconds=interval)
+            # start_at이 지정되면 그 시각부터, 아니면 now부터
+            base = parsed.get("start_at") or datetime.now(tz=_KST)
+            self._seq_next_at = base + timedelta(seconds=interval)
         else:
             self._seq_next_at = self._seq_next_at + timedelta(seconds=interval)
 

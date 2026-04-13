@@ -785,22 +785,38 @@ _SEQ_FIXED_RE = re.compile(
 
 _DEFAULT_SEQ_INTERVAL = 900  # 15 minutes
 
+# from +1d, from +2d 09:00, from 2026-04-14 09:00
+_FROM_RELATIVE_RE = re.compile(
+    r"from\s*\+\s*(\d+)\s*([smhd])"
+    r"(?:\s+(\d{1,2}):(\d{2}))?",
+    re.IGNORECASE,
+)
+_FROM_ABSOLUTE_RE = re.compile(
+    r"from\s+(\d{4})-(\d{2})-(\d{2})"
+    r"(?:\s+(\d{1,2}):(\d{2}))?",
+    re.IGNORECASE,
+)
+
 
 def parse_schedule(raw: Any) -> dict[str, Any]:
     """
     Parse schedule string → {mode, at, ...}.
 
     Formats:
-        'now'              → immediate
-        'immediate'        → immediate (backward compat)
-        'now + 15s'        → scheduled, at = now + 15 seconds
-        'now + 15m'        → scheduled, at = now + 15 minutes
-        'now + 1h'         → scheduled, at = now + 1 hour
-        'now + 1d'         → scheduled, at = now + 1 day
-        'now + 15m ~ 30m'  → scheduled, at = now + random(15min, 30min)
-        '++'               → sequential, default 15m interval
-        '++ 15m'           → sequential, fixed 15m interval
-        '++ 15m ~ 30m'     → sequential, random 15m~30m interval per post
+        'now'                          → immediate
+        'immediate'                    → immediate (backward compat)
+        'now + 15s'                    → scheduled, at = now + 15 seconds
+        'now + 15m'                    → scheduled, at = now + 15 minutes
+        'now + 1h'                     → scheduled, at = now + 1 hour
+        'now + 1d'                     → scheduled, at = now + 1 day
+        'now + 15m ~ 30m'             → scheduled, at = now + random(15min, 30min)
+        '++'                           → sequential, default 15m interval
+        '++ 15m'                       → sequential, fixed 15m interval
+        '++ 15m ~ 30m'                 → sequential, random 15m~30m interval per post
+        '++ 15m from +1d'              → sequential, start tomorrow
+        '++ 15m from +1d 09:00'        → sequential, start tomorrow 9AM
+        '++ 15m ~ 30m from +2d'        → sequential, start in 2 days
+        '++ 15m from 2026-04-14 09:00' → sequential, start at absolute time
     """
     if not raw:
         return {"mode": "immediate", "at": None}
@@ -838,25 +854,87 @@ def parse_schedule(raw: Any) -> dict[str, Any]:
     return {"mode": "immediate", "at": None}
 
 
+def _parse_from(s: str) -> datetime | None:
+    """Parse 'from ...' suffix → start datetime.
+
+    Supported formats:
+        from +1d            → 내일 현재 시각
+        from +1d 09:00      → 내일 오전 9시
+        from +2h            → 2시간 후
+        from 2026-04-14 09:00  → 절대 시각
+    Returns None if no 'from' found.
+    """
+    if "from" not in s.lower():
+        return None
+
+    now = datetime.now(tz=_KST)
+
+    # from +1d 09:00 (relative + optional time)
+    m = _FROM_RELATIVE_RE.search(s)
+    if m:
+        amount = int(m.group(1))
+        unit = m.group(2).lower()
+        base = now + timedelta(seconds=amount * _UNIT_MAP[unit])
+        # 시각 지정이 있으면 해당 날짜의 그 시각으로 교체
+        if m.group(3) is not None:
+            hour, minute = int(m.group(3)), int(m.group(4))
+            base = base.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        return base
+
+    # from 2026-04-14 09:00 (absolute)
+    m = _FROM_ABSOLUTE_RE.search(s)
+    if m:
+        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        hour = int(m.group(4)) if m.group(4) else now.hour
+        minute = int(m.group(5)) if m.group(5) else now.minute
+        return datetime(y, mo, d, hour, minute, 0, tzinfo=_KST)
+
+    return None
+
+
+def _strip_from(s: str) -> str:
+    """Remove 'from ...' suffix from schedule string."""
+    # Remove 'from' and everything after it
+    idx = s.lower().find("from")
+    if idx >= 0:
+        return s[:idx].strip()
+    return s
+
+
 def _parse_sequential(s: str) -> dict[str, Any]:
-    """Parse '++', '++ 15m', '++ 15m ~ 30m' → sequential schedule dict."""
+    """Parse sequential schedule with optional 'from' start time.
+
+    Formats:
+        '++'                    → default 15m, start now
+        '++ 15m'                → fixed 15m, start now
+        '++ 15m ~ 30m'          → random interval, start now
+        '++ 15m from +1d'       → fixed 15m, start tomorrow
+        '++ 15m from +1d 09:00' → fixed 15m, start tomorrow 9AM
+        '++ 15m ~ 30m from +2d' → random interval, start in 2 days
+        '++ 15m from 2026-04-14 09:00' → fixed 15m, start at absolute time
+    """
+    start_at = _parse_from(s)
+    core = _strip_from(s)
+
     # ++ 15m ~ 30m (range)
-    m = _SEQ_RANGE_RE.match(s)
+    m = _SEQ_RANGE_RE.match(core)
     if m:
         lo = int(m.group(1)) * _UNIT_MAP[m.group(2).lower()]
         hi = int(m.group(3)) * _UNIT_MAP[m.group(4).lower()]
         return {
             "mode": "sequential", "at": None,
             "interval_lo": min(lo, hi), "interval_hi": max(lo, hi),
+            "start_at": start_at,
         }
 
     # ++ 15m (fixed)
-    m = _SEQ_FIXED_RE.match(s)
+    m = _SEQ_FIXED_RE.match(core)
     if m:
         sec = int(m.group(1)) * _UNIT_MAP[m.group(2).lower()]
         return {
             "mode": "sequential", "at": None,
             "interval_lo": sec, "interval_hi": sec,
+            "start_at": start_at,
         }
 
     # bare ++ (default 15m)
@@ -864,6 +942,7 @@ def _parse_sequential(s: str) -> dict[str, Any]:
         "mode": "sequential", "at": None,
         "interval_lo": _DEFAULT_SEQ_INTERVAL,
         "interval_hi": _DEFAULT_SEQ_INTERVAL,
+        "start_at": start_at,
     }
 
 

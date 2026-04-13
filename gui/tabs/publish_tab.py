@@ -33,13 +33,20 @@ class PublishTab(QWidget):
         self._seq_value.setPlaceholderText("15m 또는 15m ~ 30m")
         self._seq_value.setEnabled(False)
 
+        # 순차 예약 시작 시점 (from)
+        self._seq_from = QLineEdit()
+        self._seq_from.setPlaceholderText("+1d 09:00 또는 2026-04-14 09:00 (비우면 지금부터)")
+        self._seq_from.setEnabled(False)
+
         self._sched_delay.toggled.connect(self._delay_value.setEnabled)
         self._sched_seq.toggled.connect(self._seq_value.setEnabled)
+        self._sched_seq.toggled.connect(self._seq_from.setEnabled)
 
         sched_form = QFormLayout()
         sched_form.addRow(self._sched_now, QLabel(""))
         sched_form.addRow(self._sched_delay, self._delay_value)
         sched_form.addRow(self._sched_seq, self._seq_value)
+        sched_form.addRow("시작 시점:", self._seq_from)
 
         sched_group = QGroupBox("발행 시점")
         sched_group.setLayout(sched_form)
@@ -74,7 +81,11 @@ class PublishTab(QWidget):
             pub["schedule"] = f"now + {val}" if val else "now"
         elif self._sched_seq.isChecked():
             val = self._seq_value.text().strip()
-            pub["schedule"] = f"++ {val}" if val else "++"
+            from_val = self._seq_from.text().strip()
+            base = f"++ {val}" if val else "++"
+            if from_val:
+                base += f" from {from_val}"
+            pub["schedule"] = base
         else:
             pub["schedule"] = "now"
 
@@ -94,7 +105,15 @@ class PublishTab(QWidget):
 
         if schedule.startswith("++"):
             self._sched_seq.setChecked(True)
-            self._seq_value.setText(schedule.replace("++", "").strip())
+            # "++ 15m from +1d 09:00" → interval="15m", from="+1d 09:00"
+            rest = schedule.replace("++", "").strip()
+            if " from " in rest:
+                interval_part, from_part = rest.split(" from ", 1)
+                self._seq_value.setText(interval_part.strip())
+                self._seq_from.setText(from_part.strip())
+            else:
+                self._seq_value.setText(rest)
+                self._seq_from.setText("")
         elif schedule.startswith("now +"):
             self._sched_delay.setChecked(True)
             self._delay_value.setText(schedule.replace("now +", "").strip())

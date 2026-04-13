@@ -388,6 +388,152 @@ class TestSequentialSchedule:
         for spec in captured_specs:
             assert spec.schedule_at is not None
 
+    def test_midnight_crossing_increments_date(self):
+        """23시 시작 + 30분 간격 → 자정을 넘으면 날짜가 자동으로 +1일."""
+        from datetime import datetime, timedelta, timezone
+        from unittest.mock import patch
+
+        _KST = timezone(timedelta(hours=9))
+
+        captured_specs = []
+        mock_runner = MagicMock()
+        mock_runner.run.side_effect = lambda spec, editor: captured_specs.append(spec)
+        mock_editor = MagicMock()
+
+        executor = CampaignExecutor(
+            runner=mock_runner,
+            editor_factory=lambda acc: mock_editor,
+        )
+
+        # 23:30에 시작하도록 고정
+        fake_now = datetime(2026, 4, 13, 23, 30, 0, tzinfo=_KST)
+        with patch("cli.campaign_executor.datetime") as mock_dt:
+            mock_dt.now.return_value = fake_now
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+            executor.execute(
+                _seq_config(n_keywords=4, schedule="++ 30m"),
+                dry_run=False,
+            )
+
+        assert len(captured_specs) == 4
+        times = [s.schedule_at for s in captured_specs]
+
+        # 순차 증가
+        for i in range(1, len(times)):
+            assert times[i] > times[i - 1], f"post {i} not after post {i-1}"
+
+        # 자정 넘김 확인: 23:30 + 30m = 00:00 → 4/14일
+        assert times[0].day == 14, f"첫 포스트 날짜: {times[0]}"
+        # 마지막(4번째) 포스트: 23:30 + 30m*4 = 01:30 → 4/14일
+        assert times[-1].day == 14, f"마지막 포스트 날짜: {times[-1]}"
+        assert times[-1].hour >= 1, f"마지막 포스트 시간: {times[-1]}"
+
+    def test_midnight_crossing_month_boundary(self):
+        """월말 23시 시작 → 자정 넘기면 다음 달로 넘어가는지 확인."""
+        from datetime import datetime, timedelta, timezone
+        from unittest.mock import patch
+
+        _KST = timezone(timedelta(hours=9))
+
+        captured_specs = []
+        mock_runner = MagicMock()
+        mock_runner.run.side_effect = lambda spec, editor: captured_specs.append(spec)
+        mock_editor = MagicMock()
+
+        executor = CampaignExecutor(
+            runner=mock_runner,
+            editor_factory=lambda acc: mock_editor,
+        )
+
+        # 4/30 23:40에 시작
+        fake_now = datetime(2026, 4, 30, 23, 40, 0, tzinfo=_KST)
+        with patch("cli.campaign_executor.datetime") as mock_dt:
+            mock_dt.now.return_value = fake_now
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+            executor.execute(
+                _seq_config(n_keywords=3, schedule="++ 15m"),
+                dry_run=False,
+            )
+
+        times = [s.schedule_at for s in captured_specs]
+
+        # 순차 증가
+        for i in range(1, len(times)):
+            assert times[i] > times[i - 1]
+
+        # 첫 포스트: 23:40 + 15m = 23:55 → 4/30
+        assert times[0].month == 4, f"첫 포스트: {times[0]}"
+        # 마지막(3번째): 23:40 + 15m*3 = 00:25 → 5/1
+        assert times[-1].month == 5, f"마지막 포스트: {times[-1]}"
+        assert times[-1].day == 1, f"마지막 포스트 날짜: {times[-1]}"
+
+    def test_from_starts_at_future_base(self):
+        """++ 15m from +1d → 첫 포스트가 ~24시간 뒤부터 시작."""
+        from datetime import datetime, timedelta, timezone
+
+        _KST = timezone(timedelta(hours=9))
+
+        captured_specs = []
+        mock_runner = MagicMock()
+        mock_runner.run.side_effect = lambda spec, editor: captured_specs.append(spec)
+        mock_editor = MagicMock()
+
+        executor = CampaignExecutor(
+            runner=mock_runner,
+            editor_factory=lambda acc: mock_editor,
+        )
+        executor.execute(
+            _seq_config(n_keywords=3, schedule="++ 15m from +1d"),
+            dry_run=False,
+        )
+
+        now = datetime.now(tz=_KST)
+        times = [s.schedule_at for s in captured_specs]
+
+        # 모든 예약이 ~24시간 뒤
+        for t in times:
+            diff = (t - now).total_seconds()
+            assert diff > 86_000, f"너무 이름: {t} (diff={diff}s)"
+
+        # 순차 증가
+        for i in range(1, len(times)):
+            assert times[i] > times[i - 1]
+
+        # 간격이 15분 (900초)
+        for i in range(1, len(times)):
+            gap = (times[i] - times[i - 1]).total_seconds()
+            assert gap == 900, f"간격 불일치: {gap}s"
+
+    def test_from_with_time_starts_at_specified_hour(self):
+        """++ 15m from +1d 09:00 → 내일 9시부터 15분 간격."""
+        from datetime import datetime, timedelta, timezone
+
+        _KST = timezone(timedelta(hours=9))
+
+        captured_specs = []
+        mock_runner = MagicMock()
+        mock_runner.run.side_effect = lambda spec, editor: captured_specs.append(spec)
+        mock_editor = MagicMock()
+
+        executor = CampaignExecutor(
+            runner=mock_runner,
+            editor_factory=lambda acc: mock_editor,
+        )
+        executor.execute(
+            _seq_config(n_keywords=3, schedule="++ 15m from +1d 09:00"),
+            dry_run=False,
+        )
+
+        times = [s.schedule_at for s in captured_specs]
+
+        # 첫 포스트: 내일 09:15
+        assert times[0].hour == 9
+        assert times[0].minute == 15
+        # 두 번째: 09:30
+        assert times[1].minute == 30
+        # 세 번째: 09:45
+        assert times[2].minute == 45
+
     def test_resume_with_past_schedule_falls_back_to_now(self, tmp_path):
         """복원된 last_schedule_at이 과거이면 현재 시각 기준으로 재계산."""
         from datetime import datetime, timedelta, timezone
