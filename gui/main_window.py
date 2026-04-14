@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QInputDialog,
     QLabel,
+    QDialog,
 )
 
 from gui.tabs.platform_tab import PlatformTab
@@ -732,15 +733,48 @@ class MainWindow(QMainWindow):
         if not state:
             return
 
+        from gui.pack_dialog import PackDialog
+
+        base_dir = Path(state.file_path).parent
+        # state.config 에는 내부용 _maps_data 같은 키가 섞여 있을 수 있음 → 제거
+        job = {k: v for k, v in state.config.items() if not k.startswith("_")}
+
+        dlg = PackDialog(job, base_dir, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
         default_name = Path(state.file_path).stem + ".zip"
-        default_dir = str(Path(state.file_path).parent)
         path, _ = QFileDialog.getSaveFileName(
-            self, "패키징 저장", str(Path(default_dir) / default_name), "ZIP (*.zip)",
+            self, "패키징 저장", str(base_dir / default_name), "ZIP (*.zip)",
         )
         if not path:
             return
 
-        self._run_cli("--pack", path, label="패키징")
+        # 수정된 job dict를 base_dir 내 임시 YAML로 저장 후 pack_campaign 호출.
+        # base_dir 안에 써야 상대경로가 올바르게 resolve 됨.
+        tmp_yaml = base_dir / f".{Path(state.file_path).stem}.pack.tmp.yaml"
+        try:
+            tmp_yaml.write_text(
+                yaml.dump(
+                    dlg.job_copy,
+                    allow_unicode=True,
+                    default_flow_style=False,
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+            from cli.packer import pack_campaign
+
+            zip_path = pack_campaign(str(tmp_yaml), path)
+            self._status.showMessage(f"패키징 완료: {zip_path}", 5000)
+            QMessageBox.information(self, "패키징 완료", f"생성됨:\n{zip_path}")
+        except Exception as exc:
+            QMessageBox.critical(self, "패키징 실패", str(exc))
+        finally:
+            try:
+                tmp_yaml.unlink()
+            except OSError:
+                pass
 
     def _run_validate(self) -> None:
         self._run_cli("--validate", label="검증")
