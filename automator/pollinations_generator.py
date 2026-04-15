@@ -23,6 +23,7 @@ _log = logging.getLogger(__name__)
 
 _POLLINATIONS_URL = "https://image.pollinations.ai/prompt/{prompt}"
 _DEFAULT_TIMEOUT_S = 30.0
+_USER_AGENT = "Mozilla/5.0 (compatible; automator/1.0)"
 
 
 class PollinationsImageGenerator(ImageGenerator):
@@ -50,9 +51,10 @@ class PollinationsImageGenerator(ImageGenerator):
             return None
 
         url = self._build_url(prompt.strip(), width, height, seed, model)
+        req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
 
         try:
-            with urllib.request.urlopen(url, timeout=self._timeout_s) as resp:
+            with urllib.request.urlopen(req, timeout=self._timeout_s) as resp:
                 return resp.read()
         except (urllib.error.URLError, TimeoutError, OSError) as e:
             _log.warning("Pollinations generation failed (%s): %s", type(e).__name__, e)

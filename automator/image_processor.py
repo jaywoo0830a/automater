@@ -139,6 +139,10 @@ def _compose_layers(
                 _log.warning("AILayer generator raised %s: %s", type(e).__name__, e)
                 img_bytes = None
             if not img_bytes:
+                _log.warning(
+                    "AILayer generation returned empty — falling back to base image "
+                    "(prompt=%r)", layer.prompt[:80],
+                )
                 continue
             try:
                 overlay = Image.open(io.BytesIO(img_bytes)).convert("RGBA")

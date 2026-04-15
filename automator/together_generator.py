@@ -30,6 +30,8 @@ _ENDPOINT = "https://api.together.xyz/v1/images/generations"
 _DEFAULT_MODEL = "black-forest-labs/FLUX.1-schnell-Free"
 _DEFAULT_TIMEOUT_S = 60.0
 _DEFAULT_STEPS = 4  # FLUX.1-schnell only supports 1-4 steps
+# Cloudflare in front of Together blocks urllib's default UA (error 1010).
+_USER_AGENT = "Mozilla/5.0 (compatible; automator/1.0)"
 
 
 class TogetherImageGenerator(ImageGenerator):
@@ -89,6 +91,8 @@ class TogetherImageGenerator(ImageGenerator):
             headers={
                 "Authorization": f"Bearer {self._api_key}",
                 "Content-Type":  "application/json",
+                "Accept":        "application/json",
+                "User-Agent":    _USER_AGENT,
             },
         )
 
