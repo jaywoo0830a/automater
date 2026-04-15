@@ -54,7 +54,8 @@ class TestRequestBuilding:
             assert gen.generate("   ") is None
             m.assert_not_called()
 
-    def test_sends_bearer_token(self):
+    def test_sends_bearer_token(self, monkeypatch):
+        monkeypatch.delenv("TOGETHER_MODEL", raising=False)
         gen = TogetherImageGenerator(api_key="sk-test")
         captured = {}
 
@@ -70,15 +71,17 @@ class TestRequestBuilding:
         assert result == _png_bytes()
         assert captured["url"] == "https://api.together.xyz/v1/images/generations"
         # urllib normalizes header names (Title-Case)
-        auth = captured["headers"].get("Authorization")
-        assert auth == "Bearer sk-test"
+        assert captured["headers"]["Authorization"] == "Bearer sk-test"
+        assert captured["headers"]["User-agent"].startswith("Mozilla/")
         assert captured["body"]["prompt"] == "a cat"
-        assert captured["body"]["model"] == "black-forest-labs/FLUX.1-schnell-Free"
-        assert captured["body"]["response_format"] == "b64_json"
+        assert captured["body"]["model"] == "black-forest-labs/FLUX.1-schnell"
+        assert captured["body"]["response_format"] == "base64"
         assert captured["body"]["steps"] == 4
+        assert captured["body"]["n"] == 1
 
     def test_env_var_fallback(self, monkeypatch):
         monkeypatch.setenv("TOGETHER_API_KEY", "env-key")
+        monkeypatch.delenv("TOGETHER_MODEL", raising=False)
         gen = TogetherImageGenerator()
         captured = {}
 
@@ -91,7 +94,35 @@ class TestRequestBuilding:
 
         assert captured["headers"]["Authorization"] == "Bearer env-key"
 
-    def test_size_snapped_to_multiple_of_32(self):
+    def test_model_env_var(self, monkeypatch):
+        monkeypatch.setenv("TOGETHER_MODEL", "black-forest-labs/FLUX.1-dev")
+        gen = TogetherImageGenerator(api_key="k")
+        captured = {}
+
+        def fake_urlopen(req, timeout):
+            captured["body"] = json.loads(req.data)
+            return _ok_response(_png_bytes())
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            gen.generate("x")
+
+        assert captured["body"]["model"] == "black-forest-labs/FLUX.1-dev"
+
+    def test_ctor_model_overrides_env(self, monkeypatch):
+        monkeypatch.setenv("TOGETHER_MODEL", "env-model")
+        gen = TogetherImageGenerator(api_key="k", model="ctor-model")
+        captured = {}
+
+        def fake_urlopen(req, timeout):
+            captured["body"] = json.loads(req.data)
+            return _ok_response(_png_bytes())
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            gen.generate("x")
+
+        assert captured["body"]["model"] == "ctor-model"
+
+    def test_size_snapped_to_multiple_of_8(self):
         gen = TogetherImageGenerator(api_key="k")
         captured = {}
 
@@ -102,8 +133,8 @@ class TestRequestBuilding:
         with patch("urllib.request.urlopen", side_effect=fake_urlopen):
             gen.generate("x", width=1000, height=777)
 
-        assert captured["body"]["width"] == 992   # floor(1000/32)*32
-        assert captured["body"]["height"] == 768  # floor(777/32)*32
+        assert captured["body"]["width"] == 1000  # already a multiple of 8
+        assert captured["body"]["height"] == 776  # floor(777/8)*8
 
     def test_seed_zero_is_included(self):
         gen = TogetherImageGenerator(api_key="k")

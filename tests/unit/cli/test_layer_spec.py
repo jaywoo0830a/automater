@@ -75,7 +75,7 @@ class TestAILayer:
         assert ai.opacity == 1.0
         assert ai.blend == "normal"
         assert ai.fit == "cover"
-        assert ai.provider == "pollinations"
+        assert ai.provider == "together"
         assert ai.model == ""
         assert ai.seed is None
         assert ai.width is None
@@ -88,7 +88,7 @@ class TestAILayer:
             "opacity": 0.1,
             "blend": "multiply",
             "fit": "contain",
-            "provider": "pollinations",
+            "provider": "together",
             "model": "flux",
             "seed": 42,
             "width": 1024,

@@ -13,7 +13,7 @@ Example:
         - type: ai
           prompt: "{keyword:topic} aesthetic background"
           opacity: 0.1
-          provider: pollinations
+          provider: together
         - type: image
           path: "watermark.png"
           opacity: 0.3
@@ -125,7 +125,7 @@ def _parse_ai_layer(cfg: dict[str, Any], i: int) -> AILayer:
         opacity=_parse_opacity(cfg.get("opacity", 1.0), i),
         blend=_parse_blend(cfg.get("blend", "normal"), i),
         fit=_parse_fit(cfg.get("fit", "cover"), i),
-        provider=str(cfg.get("provider", "pollinations")),
+        provider=str(cfg.get("provider", "together")),
         model=str(cfg.get("model", "")),
         seed=_parse_optional_int(cfg.get("seed"), i, "seed"),
         width=_parse_optional_int(cfg.get("width"), i, "width"),

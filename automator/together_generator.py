@@ -1,15 +1,13 @@
 """
 automator/together_generator.py
 ---------------------------------
-TogetherImageGenerator — Together AI image generation.
+Together AI image generator.
 
+Docs:     https://docs.together.ai/docs/images-overview
 Endpoint: POST https://api.together.xyz/v1/images/generations
-Auth:     Bearer token (TOGETHER_API_KEY env var by default)
 
-Default model: black-forest-labs/FLUX.1-schnell-Free (free tier, rate-limited).
-Paid:          black-forest-labs/FLUX.1-schnell  (~$0.0027/img)
-
-Network / HTTP errors return None so the caller falls back to the base image.
+Returns bytes on success, None on any failure so the caller can fall back to
+the base image without aborting the whole post.
 """
 
 from __future__ import annotations
@@ -26,33 +24,35 @@ from automator.ports import ImageGenerator
 
 _log = logging.getLogger(__name__)
 
-_ENDPOINT = "https://api.together.xyz/v1/images/generations"
-_DEFAULT_MODEL = "black-forest-labs/FLUX.1-schnell-Free"
+_ENDPOINT          = "https://api.together.xyz/v1/images/generations"
+_DEFAULT_MODEL     = "black-forest-labs/FLUX.1-schnell"
 _DEFAULT_TIMEOUT_S = 60.0
-_DEFAULT_STEPS = 4  # FLUX.1-schnell only supports 1-4 steps
-# Cloudflare in front of Together blocks urllib's default UA (error 1010).
-_USER_AGENT = "Mozilla/5.0 (compatible; automator/1.0)"
+_DEFAULT_STEPS     = 4       # schnell supports 1-4, dev/pro up to 50
+_SIZE_STEP         = 8       # Together requires width/height multiples of 8
+# Cloudflare in front of api.together.xyz rejects urllib's default UA.
+_USER_AGENT        = "Mozilla/5.0 (compatible; automator/1.0)"
 
 
 class TogetherImageGenerator(ImageGenerator):
-    """
+    """Together AI image generator via /v1/images/generations.
+
     Args:
-        api_key:   Together AI API key. Falls back to TOGETHER_API_KEY env var.
-        model:     Default model ID. Can be overridden per-call.
-        timeout_s: HTTP request timeout in seconds.
-        steps:     Inference steps (FLUX schnell: 1-4).
+        api_key:   API key. Defaults to $TOGETHER_API_KEY.
+        model:     Default model. Defaults to $TOGETHER_MODEL, then FLUX.1-schnell.
+        timeout_s: HTTP timeout in seconds.
+        steps:     Default inference steps.
     """
 
     def __init__(
         self,
         api_key:   str   = "",
-        model:     str   = _DEFAULT_MODEL,
+        model:     str   = "",
         *,
         timeout_s: float = _DEFAULT_TIMEOUT_S,
         steps:     int   = _DEFAULT_STEPS,
     ) -> None:
         self._api_key   = api_key or os.getenv("TOGETHER_API_KEY", "")
-        self._model     = model
+        self._model     = model or os.getenv("TOGETHER_MODEL", "") or _DEFAULT_MODEL
         self._timeout_s = timeout_s
         self._steps     = steps
 
@@ -66,27 +66,29 @@ class TogetherImageGenerator(ImageGenerator):
         model:  str        = "",
     ) -> bytes | None:
         if not prompt or not prompt.strip():
-            _log.warning("Together: empty prompt, skipping")
+            _log.warning("Together: empty prompt")
             return None
         if not self._api_key:
-            _log.warning("Together: TOGETHER_API_KEY not set, skipping")
+            _log.warning("Together: TOGETHER_API_KEY not set")
             return None
 
-        payload: dict = {
+        body: dict = {
             "model":           model or self._model,
             "prompt":          prompt.strip(),
             "steps":           self._steps,
             "n":               1,
-            "response_format": "b64_json",
+            "response_format": "base64",
         }
-        if width:  payload["width"]  = _snap_to_multiple(width, 32)
-        if height: payload["height"] = _snap_to_multiple(height, 32)
-        if seed is not None: payload["seed"] = seed
+        if width  is not None: body["width"]  = _snap(width,  _SIZE_STEP)
+        if height is not None: body["height"] = _snap(height, _SIZE_STEP)
+        if seed   is not None: body["seed"]   = seed
 
-        body = json.dumps(payload).encode("utf-8")
+        return self._post(body)
+
+    def _post(self, body: dict) -> bytes | None:
         req = urllib.request.Request(
             _ENDPOINT,
-            data=body,
+            data=json.dumps(body).encode("utf-8"),
             method="POST",
             headers={
                 "Authorization": f"Bearer {self._api_key}",
@@ -98,24 +100,24 @@ class TogetherImageGenerator(ImageGenerator):
 
         try:
             with urllib.request.urlopen(req, timeout=self._timeout_s) as resp:
-                raw = resp.read()
+                payload = json.loads(resp.read())
         except urllib.error.HTTPError as e:
-            _log.warning("Together HTTP %d: %s", e.code, e.read()[:200])
+            _log.warning("Together HTTP %d: %s", e.code, e.read()[:300])
             return None
         except (urllib.error.URLError, TimeoutError, OSError) as e:
             _log.warning("Together request failed (%s): %s", type(e).__name__, e)
             return None
+        except json.JSONDecodeError as e:
+            _log.warning("Together: invalid JSON response: %s", e)
+            return None
 
         try:
-            data = json.loads(raw)
-            b64 = data["data"][0]["b64_json"]
-            return base64.b64decode(b64)
-        except (KeyError, IndexError, ValueError, TypeError) as e:
+            return base64.b64decode(payload["data"][0]["b64_json"])
+        except (KeyError, IndexError, TypeError, ValueError) as e:
             _log.warning("Together: unexpected response shape (%s)", e)
             return None
 
 
-def _snap_to_multiple(value: int, step: int) -> int:
-    """Round down to the nearest multiple of ``step`` (FLUX size constraint)."""
-    snapped = (value // step) * step
-    return max(step, snapped)
+def _snap(value: int, step: int) -> int:
+    """Round ``value`` down to a multiple of ``step``, clamped to [step, ∞)."""
+    return max(step, (value // step) * step)

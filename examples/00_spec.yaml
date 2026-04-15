@@ -279,8 +279,7 @@
 #
 #   type: ai
 #     prompt:   프롬프트 문자열 (DSL 토큰 가능) — 필수
-#     provider: pollinations | together  (기본 pollinations)
-#     model:    모델 ID (선택, provider별로 다름)
+#     model:    모델 ID (선택, 기본은 .env 의 TOGETHER_MODEL)
 #     width:    생성 너비 (선택, 기본 base 이미지 크기)
 #     height:   생성 높이 (선택)
 #     seed:     고정 seed (선택, 생략 시 매번 새 이미지)
@@ -311,8 +310,9 @@
 #     Image 레이어: 파일 없으면 skip
 #
 #   AI 이미지 서비스:
-#     TOGETHER_API_KEY 환경변수가 있으면 Together AI (FLUX.1-schnell-Free) 사용
-#     없으면 Pollinations.ai (무료, 키 불필요) 자동 사용
+#     Together AI (FLUX.1-schnell 기본, ~$0.003/장) 사용.
+#     TOGETHER_API_KEY 환경변수 필수 — 없으면 AI 레이어는 skip 되고 원본 유지.
+#     모델은 .env 의 TOGETHER_MODEL 로 변경 가능.
 #
 # ── wait (블록 실행 후 대기)
 #   - h2: "제목"

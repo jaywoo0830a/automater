@@ -182,7 +182,7 @@ class AILayer:
     opacity:  float      = 1.0
     blend:    str        = "normal"
     fit:      str        = "cover"
-    provider: str        = "pollinations"
+    provider: str        = "together"
     model:    str        = ""
     seed:     int | None = None
     width:    int | None = None
