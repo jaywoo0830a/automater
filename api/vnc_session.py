@@ -397,10 +397,11 @@ class VncLoginSession:
         self.teardown()
 
     def _save_session(self, state: dict) -> None:
-        """세션을 워크스페이스 sessions/ 에 저장한다.
+        """세션을 워크스페이스 sessions/ 에 ``{username}_session.json`` 으로 저장한다.
 
-        YAML에 session 경로가 명시되어 있으면 해당 파일명을 존중하고,
-        없으면 기본 {username}_session.json 으로 저장한다.
+        YAML의 ``accounts[*].session`` 값(윈도우 절대경로 등 외부 머신의 흔적)은
+        무시한다. 받는 머신에서는 관례명으로 저장해야 ``_patch_config``/
+        ``session_store.load`` 가 일관되게 찾을 수 있다.
         """
         import json as _json
 
@@ -409,14 +410,7 @@ class VncLoginSession:
         sessions_dir = Path(base_dir)
         sessions_dir.mkdir(parents=True, exist_ok=True)
 
-        # YAML에 명시된 세션 파일명이 있으면 그 이름으로 저장
-        yaml_session = self.account.get("session", "")
-        if yaml_session:
-            yaml_filename = Path(yaml_session).name
-        else:
-            yaml_filename = f"{username}_session.json"
-
-        out_path = sessions_dir / yaml_filename
+        out_path = sessions_dir / f"{username}_session.json"
         out_path.write_text(
             _json.dumps(state, ensure_ascii=False, indent=2),
             encoding="utf-8",
