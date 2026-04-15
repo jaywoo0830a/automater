@@ -438,6 +438,21 @@
   gap: var(--space-sm);
 }
 
+.setup__log {
+  max-height: 160px;
+  overflow-y: auto;
+  margin: var(--space-sm);
+  padding: var(--space-sm);
+  background: var(--bg-subtle, #111);
+  color: var(--text-secondary);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-all;
+  border-radius: 4px;
+}
+
 .setup__vnc {
   border-top: 1px solid var(--border-subtle);
 }

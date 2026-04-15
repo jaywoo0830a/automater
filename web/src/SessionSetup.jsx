@@ -5,6 +5,7 @@ import {
   startCampaignVnc,
   getVncSession,
   deleteVncSession,
+  streamVncLogs,
 } from "./api";
 
 export default function SessionSetup({ campaignId, onExecuted }) {
@@ -14,6 +15,7 @@ export default function SessionSetup({ campaignId, onExecuted }) {
   const [executing, setExecuting] = useState(false);
   const [error, setError] = useState("");
   const [loginMode, setLoginMode] = useState("auto"); // "auto" | "manual"
+  const [logLines, setLogLines] = useState([]);
 
   // poll campaign session status
   const refreshSessions = useCallback(async () => {
@@ -37,6 +39,21 @@ export default function SessionSetup({ campaignId, onExecuted }) {
     const next = accounts.find((a) => !a.has_session);
     if (next) startVnc(next.username, loginMode);
   }, [accounts, currentVnc, allReady, loginMode]);
+
+  // stream VNC logs for current session
+  useEffect(() => {
+    if (!currentVnc?.sessionId) {
+      setLogLines([]);
+      return;
+    }
+    setLogLines([]);
+    const close = streamVncLogs(
+      currentVnc.sessionId,
+      (line) => setLogLines((prev) => [...prev, line]),
+      () => {},
+    );
+    return close;
+  }, [currentVnc?.sessionId]);
 
   // poll VNC session
   useEffect(() => {
@@ -196,6 +213,10 @@ export default function SessionSetup({ campaignId, onExecuted }) {
             allow="fullscreen"
           />
         </div>
+      )}
+
+      {currentVnc && logLines.length > 0 && (
+        <pre className="setup__log">{logLines.join("")}</pre>
       )}
 
       {currentVnc && currentVnc.status === "failed" && (

@@ -39,7 +39,7 @@ import threading
 import time
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 log = logging.getLogger(__name__)
 
@@ -117,6 +117,34 @@ class VncLoginSession:
         self._page = None
         self._user_data_dir: str = ""
         self._lock = threading.Lock()
+
+        self.log_lines: list[str] = []
+        self._listeners: list[Callable[[str], None]] = []
+        self._log_lock = threading.Lock()
+
+    # ------------------------------------------------------------------
+    # 로그 스트리밍
+    # ------------------------------------------------------------------
+    def append_log(self, line: str) -> None:
+        if not line.endswith("\n"):
+            line = line + "\n"
+        with self._log_lock:
+            self.log_lines.append(line)
+            listeners = list(self._listeners)
+        for cb in listeners:
+            try:
+                cb(line)
+            except Exception:
+                pass
+
+    def add_listener(self, cb: Callable[[str], None]) -> None:
+        with self._log_lock:
+            self._listeners.append(cb)
+
+    def remove_listener(self, cb: Callable[[str], None]) -> None:
+        with self._log_lock:
+            if cb in self._listeners:
+                self._listeners.remove(cb)
 
     def start(self) -> None:
         """VNC 세션을 백그라운드에서 시작한다."""
@@ -452,6 +480,30 @@ class VncLoginSession:
 
 _sessions: dict[str, VncLoginSession] = {}
 _sessions_lock = threading.Lock()
+
+
+class _VncLogHandler(logging.Handler):
+    """모듈 로거에 붙어, 메시지의 `[vnc:<id>]` 태그에 해당하는 세션 버퍼로 라우팅."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            msg = self.format(record)
+        except Exception:
+            return
+        # 메시지에 담긴 "[vnc:<id>]" 중 등록된 세션 id와 매치되는 것을 찾는다.
+        with _sessions_lock:
+            sessions = dict(_sessions)
+        for sid, session in sessions.items():
+            if f"[vnc:{sid}]" in msg:
+                session.append_log(msg)
+                return
+
+
+_handler = _VncLogHandler()
+_handler.setLevel(logging.INFO)
+_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s", "%H:%M:%S"))
+log.addHandler(_handler)
+log.setLevel(logging.INFO)
 
 
 def create_vnc_session(

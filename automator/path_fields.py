@@ -7,7 +7,6 @@ GUI 패키징 다이얼로그에서 절대경로를 찾아내 상대화/복사�
     post[*].featured_image.path   (asset)
     post[*].text.file             (asset)
     maps.<slug>.file              (asset)
-    accounts[*].session           (workspace)
 """
 
 from __future__ import annotations
@@ -18,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterator, Literal
 
-Kind = Literal["asset", "workspace"]
+Kind = Literal["asset"]
 
 _TOKEN_RE = re.compile(r"\{[^}]+\}")
 
@@ -90,18 +89,6 @@ def iter_path_fields(job: dict) -> Iterator[PathField]:
                     kind="asset",
                     setter=_setter(entry, "file"),
                 )
-
-    # accounts[*].session
-    for i, acc in enumerate(job.get("accounts") or []):
-        if not isinstance(acc, dict):
-            continue
-        if "session" in acc:
-            yield PathField(
-                location=f"accounts[{i}].session",
-                value=str(acc.get("session") or ""),
-                kind="workspace",
-                setter=_setter(acc, "session"),
-            )
 
 
 def relocate_to(field: PathField, target_dir: Path) -> tuple[str, bool]:

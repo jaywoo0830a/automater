@@ -180,3 +180,12 @@ export function streamLogs(id, onLine, onClose) {
   ws.onerror = () => onClose?.();
   return () => ws.close();
 }
+
+export function streamVncLogs(sessionId, onLine, onClose) {
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  const ws = new WebSocket(`${proto}//${location.host}/sessions/vnc/${sessionId}/logs`);
+  ws.onmessage = (e) => onLine(e.data);
+  ws.onclose = () => onClose?.();
+  ws.onerror = () => onClose?.();
+  return () => ws.close();
+}

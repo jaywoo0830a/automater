@@ -18,6 +18,7 @@ Endpoints:
     DELETE /sessions/vnc/{id}            VNC session stop
 
     WS     /campaigns/{id}/logs          realtime log stream
+    WS     /sessions/vnc/{id}/logs       realtime VNC login log stream
 """
 
 from __future__ import annotations
@@ -351,3 +352,40 @@ def stream_logs(ws, campaign_id: str):
         pass
     finally:
         campaign.remove_listener(on_line)
+
+
+@sock.route("/sessions/vnc/<session_id>/logs")
+def stream_vnc_logs(ws, session_id: str):
+    session = get_vnc_session(session_id)
+    if not session:
+        ws.send("[error] not found")
+        return
+
+    for line in list(session.log_lines):
+        ws.send(line)
+
+    _ACTIVE = ("starting", "ready")
+    if session.status not in _ACTIVE:
+        ws.send(f"[end] status={session.status}")
+        return
+
+    import queue
+    q: queue.Queue[str] = queue.Queue()
+
+    def on_line(line: str) -> None:
+        q.put(line)
+
+    session.add_listener(on_line)
+    try:
+        while session.status in _ACTIVE:
+            try:
+                ws.send(q.get(timeout=1.0))
+            except queue.Empty:
+                continue
+        while not q.empty():
+            ws.send(q.get_nowait())
+        ws.send(f"[end] status={session.status}")
+    except Exception:
+        pass
+    finally:
+        session.remove_listener(on_line)

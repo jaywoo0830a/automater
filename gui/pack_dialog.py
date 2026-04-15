@@ -43,15 +43,12 @@ class PackDialog(QDialog):
         layout = QVBoxLayout(self)
 
         # --- 디렉토리 입력 ---
-        self._workspace_edit = QLineEdit(str(self._base_dir))
-        layout.addLayout(self._make_dir_row("Workspace 디렉토리:", self._workspace_edit))
-
         self._assets_edit = QLineEdit(str(self._resolve_assets_default()))
         layout.addLayout(self._make_dir_row("Assets 디렉토리:", self._assets_edit))
 
         # --- 안내 라벨 ---
         hint = QLabel(
-            "절대경로는 <b>복사</b> 버튼으로 위 디렉토리 안으로 옮기면 상대경로화됩니다.\n"
+            "절대경로는 <b>assets로 복사</b> 버튼으로 Assets 디렉토리 안으로 옮기면 상대경로화됩니다.\n"
             "절대경로가 남아있으면 패키징 버튼이 비활성화됩니다."
         )
         hint.setWordWrap(True)
@@ -112,9 +109,8 @@ class PackDialog(QDialog):
         if path:
             edit.setText(path)
 
-    def _target_dir(self, kind: str) -> Path:
-        text = self._workspace_edit.text() if kind == "workspace" else self._assets_edit.text()
-        return Path(text).expanduser()
+    def _target_dir(self) -> Path:
+        return Path(self._assets_edit.text()).expanduser()
 
     # ------------------------------------------------------------------
     # 테이블 갱신
@@ -132,8 +128,7 @@ class PackDialog(QDialog):
 
             if field.is_absolute:
                 absolute_count += 1
-                label = "assets로 복사" if field.kind == "asset" else "workspace로 복사"
-                btn = QPushButton(label)
+                btn = QPushButton("assets로 복사")
                 btn.clicked.connect(lambda _=False, f=field: self._copy_action(f))
                 self._table.setCellWidget(row, 3, btn)
             else:
@@ -147,7 +142,7 @@ class PackDialog(QDialog):
             self._pack_btn.setToolTip("")
 
     def _copy_action(self, field: PathField) -> None:
-        target_dir = self._target_dir(field.kind)
+        target_dir = self._target_dir()
         if not target_dir.parent.exists() and not target_dir.exists():
             QMessageBox.warning(
                 self,
