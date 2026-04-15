@@ -12,14 +12,26 @@ Usage:
 from __future__ import annotations
 
 import io
+import logging
 import random
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-from automator.options import ImageBlock, FeaturedImageBlock
+from automator.options import (
+    AILayer,
+    EffectLayer,
+    FeaturedImageBlock,
+    ImageBlock,
+    ImageLayer,
+    Layer,
+)
 from automator.exif_optimizer import optimize_exif
+from automator.ports import ImageGenerator
 from automator.region_effect import apply_regional_effect
+
+
+_log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -37,21 +49,34 @@ def _to_jpeg(img: Image.Image, quality: int = 92) -> bytes:
 # Public API
 # ---------------------------------------------------------------------------
 
-def process_image(src: bytes, block: ImageBlock | FeaturedImageBlock) -> bytes:
+def process_image(
+    src: bytes,
+    block: ImageBlock | FeaturedImageBlock,
+    *,
+    image_generator: ImageGenerator | None = None,
+) -> bytes:
     """
     이미지 변환 파이프라인.
 
-    공통:      size_jitter → pixel_jitter → effects → exif
-    Featured:  + overlay (effects 후)
+    공통:      size_jitter → pixel_jitter → effects → layers → exif
+    Featured:  + overlay (layers 후)
+
+    layers는 선언 순서대로 합성된다 (ai / image / effect 혼합 가능).
+    AI 레이어 생성 실패 시 원본을 그대로 사용하고 경고만 남긴다.
     """
     img = Image.open(io.BytesIO(src)).convert("RGB")
     img = _apply_size_jitter(img, block.size_jitter_px)
     img = _apply_pixel_jitter(img, block.pixel_jitter)
 
-    # 영역 지정 효과 (overlay 전에 적용)
+    # 기존 effects (레이어 도입 전 호환)
     for fx in block.effects:
         if fx.effect:
             img = apply_regional_effect(img, fx.region, fx.effect)
+
+    # 레이어 합성 — 선언 순서대로
+    layers = getattr(block, "layers", ())
+    if layers:
+        img = _compose_layers(img, layers, image_generator)
 
     if isinstance(block, FeaturedImageBlock):
         img = _apply_text_overlay(
@@ -75,6 +100,118 @@ def process_image(src: bytes, block: ImageBlock | FeaturedImageBlock) -> bytes:
 # ---------------------------------------------------------------------------
 # Pipeline steps (private)
 # ---------------------------------------------------------------------------
+
+def _compose_layers(
+    base: Image.Image,
+    layers: tuple[Layer, ...],
+    generator: ImageGenerator | None,
+) -> Image.Image:
+    """Apply a stack of AI/image/effect layers on top of ``base`` in order.
+
+    On any failure (network, missing file, bad bytes), skip that layer and
+    continue — matches the "just use the base image on failure" policy.
+    """
+    canvas = base.convert("RGBA")
+
+    for layer in layers:
+        if isinstance(layer, EffectLayer):
+            if not layer.effect:
+                continue
+            rgb = canvas.convert("RGB")
+            rgb = apply_regional_effect(rgb, layer.region, layer.effect)
+            canvas = rgb.convert("RGBA")
+            continue
+
+        if isinstance(layer, AILayer):
+            if generator is None:
+                _log.warning("AILayer declared but no ImageGenerator injected; skipping")
+                continue
+            w, h = canvas.size
+            try:
+                img_bytes = generator.generate(
+                    layer.prompt,
+                    width=layer.width or w,
+                    height=layer.height or h,
+                    seed=layer.seed,
+                    model=layer.model,
+                )
+            except Exception as e:
+                _log.warning("AILayer generator raised %s: %s", type(e).__name__, e)
+                img_bytes = None
+            if not img_bytes:
+                continue
+            try:
+                overlay = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
+            except Exception as e:
+                _log.warning("AILayer invalid image bytes: %s", e)
+                continue
+            canvas = _composite_layer(canvas, overlay, layer.opacity, layer.blend, layer.fit)
+            continue
+
+        if isinstance(layer, ImageLayer):
+            try:
+                overlay = Image.open(layer.path).convert("RGBA")
+            except (FileNotFoundError, OSError) as e:
+                _log.warning("ImageLayer load failed (%s): %s", layer.path, e)
+                continue
+            canvas = _composite_layer(canvas, overlay, layer.opacity, layer.blend, layer.fit)
+            continue
+
+    return canvas.convert("RGB")
+
+
+def _composite_layer(
+    base:    Image.Image,
+    overlay: Image.Image,
+    opacity: float,
+    blend:   str,
+    fit:     str,
+) -> Image.Image:
+    """Resize + alpha-adjust + composite a single layer over ``base`` (RGBA)."""
+    sized = _fit_overlay(overlay, base.size, fit)
+
+    if opacity < 1.0:
+        alpha = sized.split()[3] if sized.mode == "RGBA" else Image.new("L", sized.size, 255)
+        alpha = alpha.point(lambda v: int(v * opacity))
+        sized = sized.copy()
+        sized.putalpha(alpha)
+
+    if blend != "normal":
+        _log.warning("blend mode %r not yet implemented, using 'normal'", blend)
+
+    return Image.alpha_composite(base, sized)
+
+
+def _fit_overlay(overlay: Image.Image, size: tuple[int, int], fit: str) -> Image.Image:
+    w, h = size
+    ow, oh = overlay.size
+
+    if fit == "stretch":
+        return overlay.resize((w, h), Image.LANCZOS)
+
+    if fit == "contain":
+        scale = min(w / ow, h / oh)
+        nw, nh = max(1, int(ow * scale)), max(1, int(oh * scale))
+        resized = overlay.resize((nw, nh), Image.LANCZOS)
+        canvas = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        canvas.paste(resized, ((w - nw) // 2, (h - nh) // 2))
+        return canvas
+
+    if fit == "tile":
+        canvas = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        for y in range(0, h, oh):
+            for x in range(0, w, ow):
+                canvas.paste(overlay, (x, y))
+        return canvas
+
+    # default: cover
+    scale = max(w / ow, h / oh)
+    nw, nh = max(1, int(ow * scale)), max(1, int(oh * scale))
+    resized = overlay.resize((nw, nh), Image.LANCZOS)
+    left = (nw - w) // 2
+    top = (nh - h) // 2
+    return resized.crop((left, top, left + w, top + h))
+
 
 def _apply_pixel_jitter(img: Image.Image, enabled: bool) -> Image.Image:
     if not enabled:

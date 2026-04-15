@@ -10,12 +10,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from automator.ports import ImageProcessor
+from automator.ports import ImageGenerator, ImageProcessor
 from automator.image_processor import process_image
 
 
 class LocalImageProcessor(ImageProcessor):
-    """Pillow-based image processing with jitter, EXIF, overlay."""
+    """Pillow-based image processing with jitter, EXIF, overlay, layers."""
+
+    def __init__(self, image_generator: ImageGenerator | None = None) -> None:
+        self._image_generator = image_generator
 
     def process(self, raw: bytes, block: Any) -> bytes:
-        return process_image(raw, block)
+        return process_image(raw, block, image_generator=self._image_generator)

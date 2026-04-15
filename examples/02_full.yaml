@@ -69,10 +69,17 @@ post:
       overlay_color: "#FFFFFF"
       overlay_background: 0.5
       overlay_position: bottom
-      effects:
-        - effect: "hue:0.0 ~ 0.03"
-        - effect: "saturation:0.7 ~ 1.3"
-        - effect: "brightness:0.95 ~ 1.05"
+      # AI 이미지를 10%만 얹어 디테일 살짝 입히고, 그 위에 색감 효과 적용
+      layers:
+        - type: ai
+          prompt: "{keyword:region} {keyword:subject} study aesthetic, soft warm light"
+          opacity: 0.1
+        - type: effect
+          effect: "hue:0.0 ~ 0.03"
+        - type: effect
+          effect: "saturation:0.7 ~ 1.3"
+        - type: effect
+          effect: "brightness:0.95 ~ 1.05"
       wait: 3s
 
 style:

@@ -40,6 +40,7 @@ from automator.options import (
 from cli.combo_builder import Combo
 from cli.config_loader import ConfigError
 from cli.dsl import evaluate_condition, interpolate, interpolate_deep
+from cli.layer_spec import parse_layers
 from cli.map_loader import load_maps, resolve_maps
 
 _HEADING_RE = re.compile(r"^h([1-6])$")
@@ -564,6 +565,10 @@ def _parse_image(
             link=str(cfg.get("link", "")),
             exif_optimization=exif_opt,
             effects=_parse_effects(cfg.get("effects")),
+            layers=parse_layers(
+                value.get("layers") if isinstance(value, dict) else None,
+                values, pools, images_dir, index, maps=maps,
+            ),
             wait_ms=inner_wait or wait_ms,
         )
 
@@ -613,6 +618,9 @@ def _parse_featured_image(
             exif_gps_lng=gps_lng,
             filename_keyword=str(cfg.get("filename_keyword", "")),
             effects=_parse_effects(cfg.get("effects")),
+            layers=parse_layers(
+                value.get("layers"), values, pools, images_dir, index, maps=maps,
+            ),
             wait_ms=inner_wait or wait_ms,
         )
 

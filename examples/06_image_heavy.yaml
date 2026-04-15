@@ -35,12 +35,21 @@ post:
       overlay_color: "#FFFFFF"
       overlay_background: 0.6
       overlay_position: bottom
-      gps: [37.517, 127.047]
-      effects:
-        - effect: "hue:0.0 ~ 0.03"
-        - effect: "saturation:0.7 ~ 1.3"
-        - effect: "brightness:0.95 ~ 1.05"
-        - region: "border:5% ~ 10%"
+      gps: [37.517, 127.027]
+      layers:
+        # 원본 커버 위에 AI 생성 이미지를 10%만 얹어 디테일 살짝 입힘
+        - type: ai
+          prompt: "{keyword:region} {keyword:category} aesthetic background, soft lighting"
+          opacity: 0.1
+        # 그 위에 색감 효과 + 테두리 블러
+        - type: effect
+          effect: "hue:0.0 ~ 0.03"
+        - type: effect
+          effect: "saturation:0.7 ~ 1.3"
+        - type: effect
+          effect: "brightness:0.95 ~ 1.05"
+        - type: effect
+          region: "border:5% ~ 10%"
           effect: "blur:2 ~ 5"
       wait: 5s
   - h2: "{keyword:region} {keyword:category} 소개"

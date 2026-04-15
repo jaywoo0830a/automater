@@ -49,6 +49,22 @@ class TitleChecker(ABC):
         """Release resources (optional)."""
 
 
+class ImageGenerator(ABC):
+    """Generate an image from a prompt. Returns PNG/JPEG bytes."""
+
+    @abstractmethod
+    def generate(
+        self,
+        prompt: str,
+        *,
+        width:  int | None = None,
+        height: int | None = None,
+        seed:   int | None = None,
+        model:  str        = "",
+    ) -> bytes | None:
+        """Return image bytes, or None if generation failed."""
+
+
 class SelectorSource(ABC):
     """Load platform-specific selector data."""
 

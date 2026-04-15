@@ -327,7 +327,16 @@ def _build_live_executor(
         text_gen = StubTextGenerator()
 
     from automator.local_processor import LocalImageProcessor
-    runner = JobRunner(SpecValidator(), ContentBuilder(text_gen, LocalImageProcessor()))
+    if os.getenv("TOGETHER_API_KEY"):
+        from automator.together_generator import TogetherImageGenerator
+        image_gen = TogetherImageGenerator()
+    else:
+        from automator.pollinations_generator import PollinationsImageGenerator
+        image_gen = PollinationsImageGenerator()
+    runner = JobRunner(
+        SpecValidator(),
+        ContentBuilder(text_gen, LocalImageProcessor(image_gen)),
+    )
 
     store = create_session_store(config.get("session_store"))
     pw = sync_playwright().start()

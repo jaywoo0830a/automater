@@ -171,6 +171,43 @@ class RegionalEffect:
     effect: str = ""
 
 
+# ---------------------------------------------------------------------------
+# Compositing layers (for ImageBlock / FeaturedImageBlock)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class AILayer:
+    """AI-generated image layer. Regenerated on every render."""
+    prompt:   str        = ""
+    opacity:  float      = 1.0
+    blend:    str        = "normal"
+    fit:      str        = "cover"
+    provider: str        = "pollinations"
+    model:    str        = ""
+    seed:     int | None = None
+    width:    int | None = None
+    height:   int | None = None
+
+
+@dataclass(frozen=True)
+class ImageLayer:
+    """Static image layer loaded from a file path."""
+    path:    str   = ""
+    opacity: float = 1.0
+    blend:   str   = "normal"
+    fit:     str   = "cover"
+
+
+@dataclass(frozen=True)
+class EffectLayer:
+    """Regional effect applied to the composed image so far."""
+    region: str = "all"
+    effect: str = ""
+
+
+Layer = Union[AILayer, ImageLayer, EffectLayer]
+
+
 @dataclass(frozen=True)
 class ImageBlock:
     """
@@ -200,6 +237,7 @@ class ImageBlock:
     exif_gps_lng:       float | None = None
     filename_keyword:   str        = ""
     effects:            list[RegionalEffect] = field(default_factory=list)
+    layers:             tuple[Layer, ...]    = ()
     wait_ms:            int        = 0
 
 
@@ -241,6 +279,7 @@ class FeaturedImageBlock:
     exif_gps_lng:           float | None = None
     filename_keyword:       str        = ""
     effects:                list[RegionalEffect] = field(default_factory=list)
+    layers:                 tuple[Layer, ...]    = ()
     wait_ms:                int        = 0
 
 

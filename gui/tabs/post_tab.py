@@ -12,6 +12,8 @@ from PySide6.QtWidgets import (
 
 from typing import Callable
 
+import yaml
+
 from gui.collapsible import CollapsibleSection
 from gui.token_insert import TokenInsertButton
 
@@ -864,10 +866,36 @@ class _ImageDialog(QDialog):
                     lines.append(effect)
             self._effects.setPlainText("\n".join(lines))
 
-        advanced1 = CollapsibleSection("조건 / 대기 / 효과")
+        # 레이어 (YAML 원본 편집) — AI/image/effect 혼합 합성
+        self._layers = QTextEdit()
+        self._layers.setPlaceholderText(
+            "YAML 리스트 형식. 예:\n"
+            "- type: ai\n"
+            "  prompt: \"{keyword:region} aesthetic background\"\n"
+            "  opacity: 0.1\n"
+            "- type: effect\n"
+            "  effect: \"saturation:0.9 ~ 1.1\""
+        )
+        self._layers.setMaximumHeight(140)
+        _existing_layers = _val.get("layers")
+        if _existing_layers:
+            try:
+                self._layers.setPlainText(
+                    yaml.safe_dump(
+                        list(_existing_layers),
+                        allow_unicode=True,
+                        sort_keys=False,
+                        default_flow_style=False,
+                    ).rstrip()
+                )
+            except yaml.YAMLError:
+                self._layers.setPlainText("")
+
+        advanced1 = CollapsibleSection("조건 / 대기 / 효과 / 레이어")
         advanced1.add_row("조건 (when):", self._when)
         advanced1.add_row("대기 (wait):", self._wait)
         advanced1.add_row("효과 (effects):", self._effects)
+        advanced1.add_row("레이어 (layers):", self._layers)
 
         # 고급 2: GPS / EXIF / 파일명
         _gps = _val.get("gps", [])
@@ -913,6 +941,14 @@ class _ImageDialog(QDialog):
                 f"DSL 토큰({{map:X}}, {{keyword:X}} 등)도 사용 가능합니다.",
             )
             self._path.setFocus()
+            return
+
+        # 레이어 YAML 유효성 검사
+        try:
+            self._parse_layers_text()
+        except ValueError as e:
+            QMessageBox.warning(self, "레이어 형식 오류", str(e))
+            self._layers.setFocus()
             return
 
         self.accept()
@@ -962,6 +998,14 @@ class _ImageDialog(QDialog):
         if effects:
             cfg["effects"] = effects
 
+        # 고급: layers (YAML)
+        try:
+            layers = self._parse_layers_text()
+        except ValueError:
+            layers = []  # _on_accept에서 이미 검증, 여기선 방어적 처리
+        if layers:
+            cfg["layers"] = layers
+
         # 고급: GPS
         lat = self._gps_lat.text().strip()
         lng = self._gps_lng.text().strip()
@@ -1009,6 +1053,33 @@ class _ImageDialog(QDialog):
             elif len(parts) == 1:
                 effects.append({"effect": parts[0]})
         return effects
+
+    def _parse_layers_text(self) -> list[dict]:
+        """Parse the layers YAML textarea. Returns [] if empty.
+
+        Raises ValueError with a user-friendly message on invalid input.
+        """
+        raw = self._layers.toPlainText().strip()
+        if not raw:
+            return []
+        try:
+            parsed = yaml.safe_load(raw)
+        except yaml.YAMLError as e:
+            raise ValueError(f"YAML 파싱 오류:\n{e}") from e
+
+        if not isinstance(parsed, list):
+            raise ValueError(
+                "layers는 YAML 리스트여야 합니다 (각 항목 앞에 '-').\n"
+                f"받은 타입: {type(parsed).__name__}"
+            )
+        for i, entry in enumerate(parsed):
+            if not isinstance(entry, dict):
+                raise ValueError(f"layers[{i}]는 dict여야 합니다: {entry!r}")
+            if not entry.get("type"):
+                raise ValueError(
+                    f"layers[{i}]에 type 필드가 필요합니다 (ai / image / effect)."
+                )
+        return parsed
 
 
 class _DividerDialog(QDialog):
