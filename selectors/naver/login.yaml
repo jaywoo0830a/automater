@@ -1,22 +1,28 @@
 naver_login_id:
   description: 아이디 입력란
   locators:
+  - type: css
+    value: input.input_id
+  - type: role
+    value: textbox
+    name: 아이디 또는 전화번호
   - type: label
     value: 아이디 또는 전화번호
-  - type: css
-    value: '#id'
 naver_login_pw:
   description: 비밀번호 입력란
   locators:
+  - type: css
+    value: input.input_pw
+  - type: role
+    value: textbox
+    name: 비밀번호
   - type: label
     value: 비밀번호
-  - type: css
-    value: '#pw'
 naver_login_submit:
   description: 로그인 버튼
   locators:
+  - type: css
+    value: button.btn_login.next_step.nlog-click
   - type: role
     value: button
     name: 로그인
-  - type: css
-    value: '#log\.login'

@@ -12,9 +12,13 @@ scripts/capture_selectors.py
 
 사용법
 ------
+    # 에디터(글쓰기) 페이지 캡처 — 기본
     python scripts/capture_selectors.py
-    python scripts/capture_selectors.py --output selectors/naver/login.yaml
-    python scripts/capture_selectors.py --output selectors/naver/editor.yaml --merge
+    python scripts/capture_selectors.py --merge
+
+    # 로그인 창 캡처 (세션 무시하고 로그인 페이지 노출)
+    python scripts/capture_selectors.py --mode login
+    python scripts/capture_selectors.py --mode login --merge
 """
 
 from __future__ import annotations
@@ -44,6 +48,7 @@ NAVER_PW  = os.getenv("NAVER_PW",      "")
 BLOG_ID   = os.getenv("NAVER_BLOG_ID", "")
 SESSION   = os.getenv("SESSION_PATH",  f"{NAVER_ID}_session.json")
 WRITE_URL = f"https://blog.naver.com/{BLOG_ID}?Redirect=Write&"
+LOGIN_URL = "https://nid.naver.com/nidlogin.login"
 
 # ---------------------------------------------------------------------------
 # ANSI colors
@@ -399,7 +404,7 @@ def _login(page: Page) -> None:
 # ---------------------------------------------------------------------------
 # Main capture loop
 # ---------------------------------------------------------------------------
-def run_capture(page: Page, output: Path, merge: bool) -> None:
+def run_capture(page: Page, output: Path, merge: bool, css_first: bool = False) -> None:
     captured: dict = load_yaml(output) if merge else {}
 
     # Re-inject whenever a new frame loads
@@ -465,6 +470,9 @@ def run_capture(page: Page, output: Path, merge: bool) -> None:
         stable   = [c for c in candidates if c["stability"] <= STABILITY["testid"]]
         css_fb   = [c for c in candidates if c["type"] == "css"]
         to_save  = (stable + css_fb) if stable else candidates
+        if css_first:
+            to_save = [c for c in to_save if c["type"] == "css"] + \
+                      [c for c in to_save if c["type"] != "css"]
 
         captured[key] = {
             "description": description,
@@ -483,47 +491,68 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="브라우저에서 요소를 클릭해 안정적인 셀렉터를 캡처합니다."
     )
-    parser.add_argument("--url",    default=WRITE_URL)
-    parser.add_argument("--output", default="selectors/naver/editor.yaml")
+    parser.add_argument("--mode",   choices=["editor", "login"], default="editor",
+                        help="editor=글쓰기 페이지 캡처, login=로그인 창 캡처")
+    parser.add_argument("--url",    default=None,
+                        help="기본값은 모드에 따라 자동 결정")
+    parser.add_argument("--output", default=None,
+                        help="기본값은 모드에 따라 자동 결정")
     parser.add_argument("--merge",  action="store_true",
                         help="기존 YAML에 추가 (기존 키 유지)")
+    parser.add_argument("--css-first", action="store_true",
+                        help="저장 시 css 셀렉터를 최우선 순위로 배치")
     args = parser.parse_args()
 
-    if not NAVER_ID or not BLOG_ID:
-        print(f"{R}오류: .env에 NAVER_ID, NAVER_PW, NAVER_BLOG_ID가 필요합니다.{X}")
-        sys.exit(1)
+    is_login_mode = args.mode == "login"
 
-    output = Path(args.output)
+    if is_login_mode:
+        url    = args.url    or LOGIN_URL
+        output = Path(args.output or "selectors/naver/login.yaml")
+        if not NAVER_ID:
+            print(f"{R}오류: .env에 NAVER_ID가 필요합니다.{X}")
+            sys.exit(1)
+    else:
+        url    = args.url    or WRITE_URL
+        output = Path(args.output or "selectors/naver/editor.yaml")
+        if not NAVER_ID or not BLOG_ID:
+            print(f"{R}오류: .env에 NAVER_ID, NAVER_PW, NAVER_BLOG_ID가 필요합니다.{X}")
+            sys.exit(1)
+
     print(f"\n{B}Naver 셀렉터 캡처 도구{X}")
-    print(f"  URL  : {args.url}")
+    print(f"  모드 : {args.mode}")
+    print(f"  URL  : {url}")
     print(f"  출력 : {output}")
-    print(f"  모드 : {'merge' if args.merge else '새로 작성'}")
+    print(f"  쓰기 : {'merge' if args.merge else '새로 작성'}")
 
     with sync_playwright() as pw:
         browser  = pw.chromium.launch(headless=False)
         ctx_kw: dict = {"locale":"ko-KR","timezone_id":"Asia/Seoul"}
-        if Path(SESSION).exists():
+        # 로그인 모드: 세션을 일부러 무시해 로그인 창을 노출
+        if not is_login_mode and Path(SESSION).exists():
             ctx_kw["storage_state"] = SESSION
             print(f"  세션 : {SESSION}")
         else:
-            print(f"  세션 : 없음 (로그인 진행)")
+            print(f"  세션 : 사용 안 함")
         ctx  = browser.new_context(**ctx_kw)
         page = ctx.new_page()
 
-        if not Path(SESSION).exists():
-            _login(page)
-
-        print(f"\n  {Y}→ 페이지 로딩: {args.url}{X}")
-        page.goto(args.url)
+        print(f"\n  {Y}→ 페이지 로딩: {url}{X}")
+        page.goto(url)
         page.wait_for_load_state("domcontentloaded")
 
-        if "nid.naver.com" in page.url or "login" in page.url.lower():
-            _login(page)
-            page.goto(args.url)
-            page.wait_for_load_state("domcontentloaded")
+        # editor 모드에서만 자동 로그인 처리
+        if not is_login_mode:
+            if not Path(SESSION).exists():
+                _login(page)
+                page.goto(url)
+                page.wait_for_load_state("domcontentloaded")
+            elif "nid.naver.com" in page.url or "login" in page.url.lower():
+                _login(page)
+                page.goto(url)
+                page.wait_for_load_state("domcontentloaded")
 
         time.sleep(1.5)
-        run_capture(page, output, args.merge)
+        run_capture(page, output, args.merge, css_first=args.css_first)
         browser.close()
 
     print(f"\n{G}{B}완료{X}")
