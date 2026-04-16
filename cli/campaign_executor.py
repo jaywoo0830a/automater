@@ -641,6 +641,15 @@ class CampaignExecutor:
                     if progress:
                         progress.mark_done(combo_index)
 
+                    # Observer result file — one JSON line per successful post
+                    _append_observer_result(
+                        config,
+                        blog_id=account.get("blog_id", username),
+                        keyword=_extract_keyword(combo.values, config),
+                        title=title,
+                        published_at=spec.schedule_at,
+                    )
+
                 except Exception as exc:
                     record = ComboRecord(combo_values=combo.values, title=title, error=str(exc))
                     result.record_failure(str(exc), record)
@@ -727,7 +736,7 @@ class CampaignExecutor:
         return replace(spec, schedule_at=self._seq_next_at)
 
     @staticmethod
-    def _parse_interval(run_config: dict[str, Any]) -> int:
+    def _parse_interval(run_config: dict[str, Any]) -> int:  # noqa: E301
         raw = run_config.get("interval", "60s")
         if isinstance(raw, (int, float)):
             return int(raw)
@@ -742,3 +751,52 @@ class CampaignExecutor:
             return int(s)
         except ValueError:
             return 60
+
+
+# ---------------------------------------------------------------------------
+# Observer result file helpers
+# ---------------------------------------------------------------------------
+
+_OBSERVER_RESULTS_FILE = "observer_results.jsonl"
+
+
+def _extract_keyword(combo_values: dict[str, str], config: dict) -> str:
+    """Build the search keyword from combo values.
+
+    Joins all keyword-group values (e.g. region + subject).
+    """
+    keyword_keys = set(config.get("keywords", {}).keys())
+    parts = [v for k, v in combo_values.items() if k in keyword_keys]
+    return " ".join(parts) if parts else " ".join(combo_values.values())
+
+
+def _append_observer_result(
+    config: dict,
+    *,
+    blog_id: str,
+    keyword: str,
+    title: str,
+    published_at: datetime | None,
+) -> None:
+    """Append one JSON line to the observer results file in the workspace.
+
+    The file lives next to the campaign YAML. The API worker reads it
+    after the campaign finishes to INSERT rows into the observer DB.
+    """
+    import json
+
+    base_dir = config.get("_base_dir", ".")
+    out = Path(base_dir) / _OBSERVER_RESULTS_FILE
+
+    entry = {
+        "blog_id": blog_id,
+        "keyword": keyword,
+        "title": title,
+        "published_at": published_at.isoformat() if published_at else None,
+    }
+
+    try:
+        with open(out, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception:
+        logger.debug("Failed to write observer result to %s", out)

@@ -257,65 +257,62 @@ class Worker:
 
     @staticmethod
     def _register_for_observation(campaign: "Campaign") -> None:
-        """Insert campaign rows into MySQL so the observer daemon picks them up.
+        """Read observer_results.jsonl and INSERT one DB row per successful post.
 
-        Reads the YAML config to extract accounts (blog_id), keywords,
-        and publish schedule to determine published_at.
-        Creates one DB campaign row per (blog_id, keyword) combination.
+        The CLI writes one JSON line per successful combo to
+        ``observer_results.jsonl`` in the workspace directory.
+        Each line contains blog_id, keyword, title, and published_at.
         """
+        import json
         import os as _os
-        from datetime import datetime, timedelta
 
         mysql_url = _os.environ.get("MYSQL_URL", "")
         if not mysql_url:
             return
 
+        results_file = Path(campaign.config_path).parent / "observer_results.jsonl"
+        if not results_file.exists():
+            return
+
         try:
+            from datetime import datetime
             from automator.models.base import create_engine_from_url, create_session_factory
             from automator.models.campaign import Campaign as DBCampaign
 
-            raw = yaml.safe_load(
-                Path(campaign.config_path).read_text(encoding="utf-8"),
-            ) or {}
+            entries = []
+            for line in results_file.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line:
+                    entries.append(json.loads(line))
 
-            accounts = raw.get("accounts", [])
-            keywords_map = raw.get("keywords", {})
-
-            # Flatten all keyword values
-            all_keywords: list[str] = []
-            for values in keywords_map.values():
-                if isinstance(values, list):
-                    all_keywords.extend(str(v) for v in values)
-
-            if not accounts or not all_keywords:
+            if not entries:
                 return
-
-            # Determine published_at from publish.schedule or now
-            publish_cfg = raw.get("publish", {})
-            schedule_raw = publish_cfg.get("schedule", "")
-            published_at = _estimate_published_at(schedule_raw, len(all_keywords))
 
             engine = create_engine_from_url(mysql_url)
             Session = create_session_factory(engine)
 
             with Session() as session:
-                for acc in accounts:
-                    blog_id = acc.get("blog_id", acc.get("username", ""))
-                    if not blog_id:
-                        continue
-                    for kw in all_keywords:
-                        db_campaign = DBCampaign(
-                            blog_id=blog_id,
-                            keyword=kw,
-                            platform="naver",
-                            published_at=published_at,
-                        )
-                        session.add(db_campaign)
+                for entry in entries:
+                    published_at = None
+                    if entry.get("published_at"):
+                        published_at = datetime.fromisoformat(entry["published_at"])
+
+                    db_campaign = DBCampaign(
+                        blog_id=entry["blog_id"],
+                        keyword=entry["keyword"],
+                        platform="naver",
+                        published_at=published_at or datetime.utcnow(),
+                    )
+                    session.add(db_campaign)
                 session.commit()
 
             engine.dispose()
+
+            logging.getLogger(__name__).info(
+                "Registered %d posts for observation from %s",
+                len(entries), results_file,
+            )
         except Exception:
-            import logging
             logging.getLogger(__name__).warning(
                 "Failed to register campaign for observation", exc_info=True,
             )
@@ -512,32 +509,3 @@ class Worker:
             self._stop_vnc(campaign)
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _estimate_published_at(schedule_raw: str, num_posts: int) -> "datetime":
-    """Estimate when the last post will be published.
-
-    If ``schedule_raw`` is a sequential schedule like ``"++ 10m ~ 30m"``,
-    we estimate the last post's publish time as ``now + avg_interval * num_posts``.
-    Otherwise, the posts are published immediately, so we use ``now``.
-    """
-    from datetime import datetime, timedelta
-    import re
-
-    now = datetime.utcnow()
-
-    if not schedule_raw or "++" not in schedule_raw:
-        return now
-
-    # Parse "++ 10m ~ 30m" -> average interval
-    m = re.search(r"(\d+)m\s*~\s*(\d+)m", schedule_raw)
-    if m:
-        lo = int(m.group(1))
-        hi = int(m.group(2))
-        avg_minutes = (lo + hi) / 2
-        # Last post publishes after num_posts * avg_interval
-        return now + timedelta(minutes=avg_minutes * max(1, num_posts))
-
-    return now
