@@ -406,6 +406,8 @@ def _login(page: Page) -> None:
 # ---------------------------------------------------------------------------
 def run_capture(page: Page, output: Path, merge: bool, css_first: bool = False) -> None:
     captured: dict = load_yaml(output) if merge else {}
+    # Mutable container so inner functions can switch the active page
+    state = {"page": page}
 
     # Re-inject whenever a new frame loads
     def on_frame(frame):
@@ -415,10 +417,21 @@ def run_capture(page: Page, output: Path, merge: bool, css_first: bool = False) 
         except Exception:
             pass
 
-    page.on("frameattached",  on_frame)
-    page.on("framenavigated", lambda f: on_frame(f) if f != page.main_frame else None)
+    def _setup_page(p: Page) -> None:
+        p.on("frameattached",  on_frame)
+        p.on("framenavigated", lambda f: on_frame(f) if f != p.main_frame else None)
+        _inject_all(p)
 
-    _inject_all(page)
+    # Follow Ctrl+Click into new tabs: switch capture focus automatically
+    def on_new_page(new_page: Page) -> None:
+        new_page.wait_for_load_state("domcontentloaded")
+        time.sleep(0.3)
+        _setup_page(new_page)
+        state["page"] = new_page
+        print(f"\n  {C}→ 새 탭 감지 — 캡처 대상 전환: {new_page.url[:80]}{X}")
+
+    page.context.on("page", on_new_page)
+    _setup_page(page)
 
     print(f"\n  {B}캡처 모드 시작{X}")
     print(f"  {C}클릭{X}          → 캡처 (실제 동작 차단)")
@@ -426,16 +439,17 @@ def run_capture(page: Page, output: Path, merge: bool, css_first: bool = False) 
     print(f"  {D}이름 입력 후 엔터 = 저장  |  엔터만 = 건너뜀  |  q = 종료{X}\n")
 
     while True:
-        # Poll JS queue — page.evaluate() processes CDP events (no deadlock)
+        # Poll JS queue — use active page (may have switched via new tab)
         data = None
         while data is None:
-            items = _poll(page)
+            active = state["page"]
+            items = _poll(active)
             if items:
                 data = items[0]
                 break
             time.sleep(0.15)
             try:
-                page.title()  # keep connection alive
+                active.title()  # keep connection alive
             except Exception:
                 print(f"\n  {Y}브라우저가 닫혔습니다.{X}")
                 save_yaml(output, captured)

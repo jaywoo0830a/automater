@@ -256,6 +256,71 @@ class Worker:
         return True
 
     @staticmethod
+    def _register_for_observation(campaign: "Campaign") -> None:
+        """Insert campaign rows into MySQL so the observer daemon picks them up.
+
+        Reads the YAML config to extract accounts (blog_id), keywords,
+        and publish schedule to determine published_at.
+        Creates one DB campaign row per (blog_id, keyword) combination.
+        """
+        import os as _os
+        from datetime import datetime, timedelta
+
+        mysql_url = _os.environ.get("MYSQL_URL", "")
+        if not mysql_url:
+            return
+
+        try:
+            from automator.models.base import create_engine_from_url, create_session_factory
+            from automator.models.campaign import Campaign as DBCampaign
+
+            raw = yaml.safe_load(
+                Path(campaign.config_path).read_text(encoding="utf-8"),
+            ) or {}
+
+            accounts = raw.get("accounts", [])
+            keywords_map = raw.get("keywords", {})
+
+            # Flatten all keyword values
+            all_keywords: list[str] = []
+            for values in keywords_map.values():
+                if isinstance(values, list):
+                    all_keywords.extend(str(v) for v in values)
+
+            if not accounts or not all_keywords:
+                return
+
+            # Determine published_at from publish.schedule or now
+            publish_cfg = raw.get("publish", {})
+            schedule_raw = publish_cfg.get("schedule", "")
+            published_at = _estimate_published_at(schedule_raw, len(all_keywords))
+
+            engine = create_engine_from_url(mysql_url)
+            Session = create_session_factory(engine)
+
+            with Session() as session:
+                for acc in accounts:
+                    blog_id = acc.get("blog_id", acc.get("username", ""))
+                    if not blog_id:
+                        continue
+                    for kw in all_keywords:
+                        db_campaign = DBCampaign(
+                            blog_id=blog_id,
+                            keyword=kw,
+                            platform="naver",
+                            published_at=published_at,
+                        )
+                        session.add(db_campaign)
+                session.commit()
+
+            engine.dispose()
+        except Exception:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Failed to register campaign for observation", exc_info=True,
+            )
+
+    @staticmethod
     def _patch_config(config_path: str) -> None:
         """워크스페이스 환경에 맞게 YAML 설정을 패치한다.
 
@@ -435,9 +500,44 @@ class Worker:
             )
             campaign._emit(f"[완료] exit_code={proc.returncode}\n")
 
+            # Register completed campaign for observer tracking
+            if proc.returncode == 0:
+                self._register_for_observation(campaign)
+
         except Exception as exc:
             campaign.status = Status.FAILED
             campaign._emit(f"[오류] {exc}\n")
         finally:
             campaign._proc = None
             self._stop_vnc(campaign)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _estimate_published_at(schedule_raw: str, num_posts: int) -> "datetime":
+    """Estimate when the last post will be published.
+
+    If ``schedule_raw`` is a sequential schedule like ``"++ 10m ~ 30m"``,
+    we estimate the last post's publish time as ``now + avg_interval * num_posts``.
+    Otherwise, the posts are published immediately, so we use ``now``.
+    """
+    from datetime import datetime, timedelta
+    import re
+
+    now = datetime.utcnow()
+
+    if not schedule_raw or "++" not in schedule_raw:
+        return now
+
+    # Parse "++ 10m ~ 30m" -> average interval
+    m = re.search(r"(\d+)m\s*~\s*(\d+)m", schedule_raw)
+    if m:
+        lo = int(m.group(1))
+        hi = int(m.group(2))
+        avg_minutes = (lo + hi) / 2
+        # Last post publishes after num_posts * avg_interval
+        return now + timedelta(minutes=avg_minutes * max(1, num_posts))
+
+    return now
