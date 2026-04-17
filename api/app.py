@@ -24,6 +24,7 @@ Endpoints:
     GET    /observer/campaigns           observer campaign list
     GET    /observer/campaigns/{id}      campaign detail + observations
     GET    /observer/schedules           schedule list (filterable)
+    GET    /observer/workers             active VNC worker sessions
 """
 
 from __future__ import annotations
@@ -594,3 +595,22 @@ def observer_schedules():
         return jsonify(result)
     finally:
         session.close()
+
+
+@app.get("/observer/workers")
+@require_api_key
+def observer_workers():
+    """List active observer VNC worker sessions (proxied from observer container)."""
+    import os
+    import urllib.request
+    import json as _json
+
+    observer_host = os.environ.get("OBSERVER_HOST", "localhost")
+    url = f"http://{observer_host}:7070/workers"
+
+    try:
+        with urllib.request.urlopen(url, timeout=3) as resp:
+            data = _json.loads(resp.read())
+            return jsonify(data)
+    except Exception:
+        return jsonify([])  # observer not running or no workers active

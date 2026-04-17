@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import random
 from typing import Any
 
@@ -32,13 +33,29 @@ class ObserverSession:
         *,
         fingerprint_cfg: dict[str, Any] | None = None,
         headless: bool = True,
+        display: str | None = None,
     ) -> None:
         self._pw = pw
         self._fp = fingerprint_cfg or generate_random_fingerprint()
         self._headless = headless
+        self._display = display
 
     def execute(self, campaign: Campaign) -> Observation:
         """Run the full observation flow and return an unsaved Observation."""
+        # Set DISPLAY so Playwright opens in the correct Xvfb
+        old_display = os.environ.get("DISPLAY")
+        if self._display:
+            os.environ["DISPLAY"] = self._display
+
+        try:
+            return self._run(campaign)
+        finally:
+            if old_display is not None:
+                os.environ["DISPLAY"] = old_display
+            elif self._display and "DISPLAY" in os.environ:
+                del os.environ["DISPLAY"]
+
+    def _run(self, campaign: Campaign) -> Observation:
         browser_config = {
             "viewport": [self._fp["viewport_width"], self._fp["viewport_height"]],
             "user_agent": self._fp["user_agent"],
@@ -70,7 +87,6 @@ class ObserverSession:
             )
 
             if result.found and result.element:
-                # Click the search result — it opens in a new tab (target="_blank")
                 human_delay(0.5, 1.0)
 
                 with ctx.expect_page() as new_page_info:
@@ -87,11 +103,9 @@ class ObserverSession:
                 obs.entered_at = vd.entered_at
                 obs.exited_at = vd.exited_at
 
-                # Close blog tab and return to search results (natural pattern)
                 human_delay(0.5, 1.0)
                 blog_page.close()
 
-                # Linger on search results before leaving
                 human_delay(1.5, 3.0)
                 page.mouse.wheel(0, random.randint(100, 300))
                 human_delay(1.0, 2.0)

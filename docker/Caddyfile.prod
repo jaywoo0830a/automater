@@ -15,6 +15,32 @@
         reverse_proxy localhost:5000
     }
 
+    # Observer VNC websockify — /vnc/708x/* → localhost:708x/*
+    handle_path /vnc/7080/* {
+        reverse_proxy localhost:7080 {
+            header_up Upgrade {http.request.header.Upgrade}
+            header_up Connection {http.request.header.Connection}
+        }
+    }
+    handle_path /vnc/7081/* {
+        reverse_proxy localhost:7081 {
+            header_up Upgrade {http.request.header.Upgrade}
+            header_up Connection {http.request.header.Connection}
+        }
+    }
+    handle_path /vnc/7082/* {
+        reverse_proxy localhost:7082 {
+            header_up Upgrade {http.request.header.Upgrade}
+            header_up Connection {http.request.header.Connection}
+        }
+    }
+    handle_path /vnc/7083/* {
+        reverse_proxy localhost:7083 {
+            header_up Upgrade {http.request.header.Upgrade}
+            header_up Connection {http.request.header.Connection}
+        }
+    }
+
     # VNC websockify — /vnc/{port}/* → localhost:{port}/*
     handle_path /vnc/6080/* {
         reverse_proxy localhost:6080 {

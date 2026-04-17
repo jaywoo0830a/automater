@@ -3,6 +3,7 @@ import {
   getObserverStatus,
   getObserverCampaigns,
   getObserverCampaign,
+  getObserverWorkers,
 } from "./api";
 
 function StatusBar({ status }) {
@@ -25,6 +26,35 @@ function StatusBar({ status }) {
         <span className="obs__stat-value obs__stat-value--skipped">{status.skipped}</span>
         <span className="obs__stat-label">Skipped</span>
       </div>
+    </div>
+  );
+}
+
+function WorkerGrid({ workers }) {
+  if (!workers || workers.length === 0) {
+    return <p className="obs__empty">No active workers</p>;
+  }
+  return (
+    <div className="obs__workers">
+      {workers.map((w) => (
+        <div key={w.ws_port} className="obs__worker-card">
+          <div className="obs__worker-header">
+            <span className="obs__worker-id">Worker {w.worker_id}</span>
+            <span className={`badge badge--${w.status === "running" ? "running" : "completed"}`}>
+              {w.status}
+            </span>
+          </div>
+          <div className="obs__worker-meta">
+            <span>{w.keyword || "idle"}</span>
+            <span className="obs__worker-blog">{w.blog_id}</span>
+          </div>
+          <iframe
+            className="obs__worker-vnc"
+            src={`/vnc/${w.ws_port}/vnc.html?autoconnect=true&resize=scale&reconnect=true`}
+            title={`Worker ${w.worker_id}`}
+          />
+        </div>
+      ))}
     </div>
   );
 }
@@ -93,13 +123,14 @@ function fmtTime(iso) {
 export default function ObserverPage({ onBack, onLogout }) {
   const [status, setStatus] = useState(null);
   const [campaigns, setCampaigns] = useState([]);
+  const [workers, setWorkers] = useState([]);
   const [selected, setSelected] = useState(null);
   const [detail, setDetail] = useState(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
     loadData();
-    const timer = setInterval(loadData, 15_000);
+    const timer = setInterval(loadData, 5_000);
     return () => clearInterval(timer);
   }, []);
 
@@ -113,9 +144,14 @@ export default function ObserverPage({ onBack, onLogout }) {
 
   async function loadData() {
     try {
-      const [s, c] = await Promise.all([getObserverStatus(), getObserverCampaigns()]);
+      const [s, c, w] = await Promise.all([
+        getObserverStatus(),
+        getObserverCampaigns(),
+        getObserverWorkers(),
+      ]);
       setStatus(s);
       setCampaigns(c);
+      setWorkers(w);
       setError("");
     } catch (e) {
       setError(e.message);
@@ -161,6 +197,12 @@ export default function ObserverPage({ onBack, onLogout }) {
       <StatusBar status={status} />
 
       <section className="app__section">
+        <h2 className="obs__subtitle">Active Workers</h2>
+        <WorkerGrid workers={workers} />
+      </section>
+
+      <section className="app__section">
+        <h2 className="obs__subtitle">Campaigns</h2>
         {campaigns.length === 0 ? (
           <p className="obs__empty">No observer campaigns yet</p>
         ) : (

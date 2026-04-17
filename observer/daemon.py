@@ -12,6 +12,7 @@ from typing import Any
 from observer.collector import generate_random_fingerprint
 from observer.session import ObserverSession
 from observer.store import ObserverStore
+from observer.vnc import start_vnc, stop_vnc
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ class ObserverDaemon:
 
     Polls the database every *poll_interval* seconds for schedules
     whose ``scheduled_at`` has passed and processes them in parallel.
+    Each worker gets its own VNC display for remote viewing.
     """
 
     def __init__(self, config: dict[str, Any]) -> None:
@@ -43,6 +45,9 @@ class ObserverDaemon:
             self._max_workers,
         )
         self._store.create_tables()
+
+        from observer.vnc_server import start_vnc_server
+        start_vnc_server()
 
         while True:
             try:
@@ -76,8 +81,8 @@ class ObserverDaemon:
 
         with ThreadPoolExecutor(max_workers=self._max_workers) as pool:
             futures = {
-                pool.submit(self._process, schedule): schedule
-                for schedule in schedules
+                pool.submit(self._process, idx, schedule): schedule
+                for idx, schedule in enumerate(schedules)
             }
             for future in as_completed(futures):
                 schedule = futures[future]
@@ -86,24 +91,35 @@ class ObserverDaemon:
                 except Exception:
                     logger.exception("Schedule %d failed in thread", schedule.id)
 
-    def _process(self, schedule) -> None:
-        """Process a single schedule in its own browser session + Playwright instance."""
+    def _process(self, worker_id: int, schedule) -> None:
+        """Process a single schedule with its own VNC display + browser."""
         from playwright.sync_api import sync_playwright
 
         campaign = schedule.campaign
+
+        # Start VNC for this worker
+        wv = start_vnc(worker_id)
+        wv.schedule_id = schedule.id
+        wv.keyword = campaign.keyword
+        wv.blog_id = campaign.blog_id
+        wv.status = "running"
+
         logger.info(
-            "Processing schedule %d — keyword=%r, blog_id=%s (scheduled_at=%s)",
+            "Processing schedule %d — keyword=%r, blog_id=%s (vnc ws://:%d)",
             schedule.id,
             campaign.keyword,
             campaign.blog_id,
-            schedule.scheduled_at,
+            wv.ws_port,
         )
 
         pw = sync_playwright().start()
         try:
             fp = generate_random_fingerprint()
             session = ObserverSession(
-                pw, fingerprint_cfg=fp, headless=self._headless,
+                pw,
+                fingerprint_cfg=fp,
+                headless=False,
+                display=wv.display,
             )
             observation = session.execute(campaign)
             self._store.save_observation(observation, schedule.id)
@@ -119,3 +135,4 @@ class ObserverDaemon:
             self._store.update_schedule_status(schedule.id, "skipped")
         finally:
             pw.stop()
+            stop_vnc(wv)

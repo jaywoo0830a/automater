@@ -819,3 +819,52 @@
   color: var(--text-muted);
   font-size: var(--text-xs);
 }
+
+/* Workers VNC grid */
+.obs__workers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(28rem, 1fr));
+  gap: var(--space-md);
+}
+
+.obs__worker-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.obs__worker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.obs__worker-id {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+}
+
+.obs__worker-meta {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--space-3xs) var(--space-sm);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.obs__worker-blog {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+.obs__worker-vnc {
+  width: 100%;
+  height: 20rem;
+  border: none;
+  background: #000;
+}

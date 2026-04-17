@@ -212,6 +212,12 @@ export async function getObserverCampaign(id) {
   return res.json();
 }
 
+export async function getObserverWorkers() {
+  const res = await fetch("/observer/workers", { headers: headers() });
+  if (!res.ok) throw new Error(res.statusText);
+  return res.json();
+}
+
 export async function getObserverSchedules(status = "", limit = 50) {
   const params = new URLSearchParams();
   if (status) params.set("status", status);

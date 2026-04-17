@@ -47,7 +47,7 @@ services:
     environment:
       MYSQL_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-automator}@localhost:3306/automator
       POLL_INTERVAL: "30"
-      HEADLESS: "true"
+      HEADLESS: "false"
       MAX_WORKERS: "4"
     depends_on:
       mysql:
