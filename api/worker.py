@@ -266,13 +266,16 @@ class Worker:
         """
         import json
         import os as _os
+        import traceback
 
         mysql_url = _os.environ.get("MYSQL_URL", "")
         if not mysql_url:
+            campaign._emit("[observer] MYSQL_URL not set — skipping observation registration\n")
             return
 
         results_file = Path(campaign.config_path).parent / "observer_results.jsonl"
         if not results_file.exists():
+            campaign._emit("[observer] No observer_results.jsonl found — skipping\n")
             return
 
         try:
@@ -287,7 +290,10 @@ class Worker:
                     entries.append(json.loads(line))
 
             if not entries:
+                campaign._emit("[observer] observer_results.jsonl is empty — skipping\n")
                 return
+
+            campaign._emit(f"[observer] Registering {len(entries)} post(s) for observation...\n")
 
             engine = create_engine_from_url(mysql_url)
             Session = create_session_factory(engine)
@@ -309,14 +315,10 @@ class Worker:
 
             engine.dispose()
 
-            logging.getLogger(__name__).info(
-                "Registered %d posts for observation from %s",
-                len(entries), results_file,
-            )
+            campaign._emit(f"[observer] Registered {len(entries)} post(s) for observation\n")
         except Exception:
-            logging.getLogger(__name__).warning(
-                "Failed to register campaign for observation", exc_info=True,
-            )
+            tb = traceback.format_exc()
+            campaign._emit(f"[observer] Failed to register for observation:\n{tb}\n")
 
     @staticmethod
     def _patch_config(config_path: str) -> None:

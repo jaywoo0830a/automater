@@ -26,6 +26,9 @@ services:
       MYSQL_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-automator}@localhost:3306/automator
     volumes:
       - ../workspaces:/app/workspaces
+    depends_on:
+      mysql:
+        condition: service_healthy
 
   web:
     build:
