@@ -70,12 +70,26 @@ def pack_campaign(config_path: str, output_path: str | None = None) -> str:
                 rel = child.relative_to(base_dir)
                 files.append((child, str(rel)))
 
+    # 세션 파일 제거 — 서버에서 직접 로그인해야 함
+    files = _exclude_sessions(files, raw)
+
     # 중복 제거
     files = _deduplicate(files)
 
+    # YAML에서 session 경로 제거 후 패키징
+    cleaned_yaml = _strip_session_paths(raw)
+    config_bytes = yaml.dump(
+        cleaned_yaml, allow_unicode=True,
+        default_flow_style=False, sort_keys=False,
+    ).encode("utf-8")
+
     # ZIP 생성
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as zf:
+        # 캠페인 YAML은 세션 경로가 제거된 버전으로 저장
+        zf.writestr(config_file.name, config_bytes)
         for abs_path, arc_name in files:
+            if arc_name == config_file.name:
+                continue  # 이미 위에서 저장함
             zf.write(abs_path, arc_name)
 
     return str(output)
@@ -97,3 +111,41 @@ def _deduplicate(files: list[tuple[Path, str]]) -> list[tuple[Path, str]]:
             seen.add(arc_name)
             result.append((abs_path, arc_name))
     return result
+
+
+def _exclude_sessions(
+    files: list[tuple[Path, str]], raw: dict,
+) -> list[tuple[Path, str]]:
+    """Remove session files from the file list."""
+    session_names: set[str] = set()
+    for acc in raw.get("accounts", []):
+        s = acc.get("session", "")
+        if s:
+            session_names.add(Path(s).name)
+            session_names.add(Path(s).stem)
+
+    # Also exclude any *_session.json pattern
+    def is_session(arc_name: str) -> bool:
+        name = Path(arc_name).name
+        if name in session_names:
+            return True
+        if name.endswith("_session.json"):
+            return True
+        if name == "session_state.json":
+            return True
+        return False
+
+    return [(p, a) for p, a in files if not is_session(a)]
+
+
+def _strip_session_paths(raw: dict) -> dict:
+    """Return a copy of the config with session paths removed from accounts."""
+    import copy
+    cleaned = copy.deepcopy(raw)
+    for acc in cleaned.get("accounts", []):
+        acc.pop("session", None)
+    # Also remove session_store if it's file-based
+    ss = cleaned.get("session_store", "")
+    if ss and ss not in ("redis", "rediss") and "://" not in str(ss):
+        cleaned.pop("session_store", None)
+    return cleaned
