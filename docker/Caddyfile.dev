@@ -11,6 +11,10 @@
         reverse_proxy localhost:5000
     }
 
+    handle /observer* {
+        reverse_proxy localhost:5000
+    }
+
     handle_path /vnc/6080/* {
         reverse_proxy localhost:6080 {
             header_up Upgrade {http.request.header.Upgrade}

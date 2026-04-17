@@ -11,6 +11,10 @@
         reverse_proxy localhost:5000
     }
 
+    handle /observer* {
+        reverse_proxy localhost:5000
+    }
+
     # VNC websockify — /vnc/{port}/* → localhost:{port}/*
     handle_path /vnc/6080/* {
         reverse_proxy localhost:6080 {
