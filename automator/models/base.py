@@ -16,7 +16,13 @@ def create_engine_from_url(url: str, *, echo: bool = False):
     Defaults are tuned for a long-running daemon:
     - ``pool_pre_ping`` keeps connections healthy across MySQL timeouts.
     - ``pool_recycle`` rotates connections before MySQL's 8-hour default.
+    - ``charset=utf8mb4`` ensures Korean text is stored correctly.
     """
+    # Append charset to MySQL URLs if not already present
+    if "pymysql" in url and "charset" not in url:
+        sep = "&" if "?" in url else "?"
+        url = f"{url}{sep}charset=utf8mb4"
+
     return _create_engine(
         url,
         echo=echo,

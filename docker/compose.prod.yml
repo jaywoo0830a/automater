@@ -3,6 +3,7 @@ services:
     image: mysql:8.0
     restart: unless-stopped
     network_mode: host
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-automator}
       MYSQL_DATABASE: automator
