@@ -24,7 +24,7 @@ import json
 import os
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any
+from typing import Any, override
 
 try:
     import redis
@@ -54,10 +54,12 @@ class FileSessionStore(SessionStore):
     def __init__(self, base_dir: str = ".") -> None:
         self._base_dir = base_dir
 
+    @override
     def load(self, key: str) -> dict[str, Any] | None:
         path = self._key_to_path(key)
         return self.load_path(path)
 
+    @override
     def save(self, key: str, data: dict[str, Any]) -> None:
         path = self._key_to_path(key)
         self.save_path(path, data)
@@ -102,12 +104,14 @@ class RedisSessionStore(SessionStore):
         self._ttl = ttl_seconds
         self._prefix = prefix
 
+    @override
     def load(self, key: str) -> dict[str, Any] | None:
         raw = self._client.get(self._redis_key(key))
         if raw is None:
             return None
         return json.loads(raw)
 
+    @override
     def save(self, key: str, data: dict[str, Any]) -> None:
         self._client.setex(
             self._redis_key(key),

@@ -16,7 +16,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, TypeVar
+from collections.abc import Callable
+from typing import Any
 
 from automator.contracts import PostingSpec
 from automator.editor import BlogEditor
@@ -30,7 +31,6 @@ from cli.spec_builder import build_spec, merge_account_run
 
 logger = logging.getLogger(__name__)
 
-_T = TypeVar("_T")
 _KST = timezone(timedelta(hours=9))
 
 
@@ -103,10 +103,10 @@ class ExecutionResult:
 # Round-robin (pure function)
 # ---------------------------------------------------------------------------
 
-def assign_weighted(
-    items: list[_T],
+def assign_weighted[T](
+    items: list[T],
     buckets: list[Any],
-) -> list[tuple[Any, list[_T]]]:
+) -> list[tuple[Any, list[T]]]:
     """
     Distribute items across buckets by weight, respecting min/max caps.
 
@@ -146,7 +146,7 @@ def assign_weighted(
     counts = _apply_caps(counts, caps, weights)
 
     # Slice items by counts
-    result: list[tuple[Any, list[_T]]] = []
+    result: list[tuple[Any, list[T]]] = []
     offset = 0
     for i, bucket in enumerate(buckets):
         assigned = items[offset:offset + counts[i]]
