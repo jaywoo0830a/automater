@@ -2,38 +2,59 @@
 chcp 65001 >nul 2>&1
 cd /d "%~dp0\.."
 
+set PYTHON_VERSION=3.14.4
 set PYTHON=.venv\Scripts\python.exe
 
 echo ========================================
 echo   automator - initial setup
 echo ========================================
-echo   project root : %cd%
+echo   project root  : %cd%
+echo   Python        : %PYTHON_VERSION%
 echo.
 
-python --version >nul 2>&1
+REM ── 0. uv check / install ──────────────────────────────────────
+where uv >nul 2>&1
 if errorlevel 1 (
-    echo   [ERROR] Python not found.
-    echo           Install from https://www.python.org/downloads/
-    goto :fail
-)
-
-if exist .venv (
-    echo   [1/4] .venv exists - skip
-) else (
-    echo   [1/4] creating venv...
-    python -m venv .venv
+    echo   [0/5] Installing uv...
+    powershell -ExecutionPolicy Bypass -c "irm https://astral.sh/uv/install.ps1 | iex"
     if errorlevel 1 goto :fail
+    set "PATH=%USERPROFILE%\.local\bin;%PATH%"
     echo         done
+) else (
+    echo   [0/5] uv found
 )
 
-echo   [2/4] installing packages...
-%PYTHON% -m pip install --upgrade pip -q
-if errorlevel 1 goto :fail
-%PYTHON% -m pip install -r requirements.txt -q
+REM ── 1. Python 3.14 ─────────────────────────────────────────────
+echo   [1/5] Ensuring CPython %PYTHON_VERSION%...
+uv python install %PYTHON_VERSION%
 if errorlevel 1 goto :fail
 echo         done
 
-echo   [3/4] installing Playwright Chromium...
+REM ── 2. venv ────────────────────────────────────────────────────
+if exist .venv (
+    echo   [2/5] .venv exists - will reuse if version matches
+    %PYTHON% --version 2>nul | findstr "%PYTHON_VERSION%" >nul
+    if errorlevel 1 (
+        echo         version mismatch - recreating
+        rmdir /s /q .venv
+        uv venv --python %PYTHON_VERSION% .venv
+        if errorlevel 1 goto :fail
+    )
+) else (
+    echo   [2/5] Creating venv...
+    uv venv --python %PYTHON_VERSION% .venv
+    if errorlevel 1 goto :fail
+)
+echo         done
+
+REM ── 3. packages ────────────────────────────────────────────────
+echo   [3/5] Installing packages...
+uv pip install --python %PYTHON% -r requirements.txt
+if errorlevel 1 goto :fail
+echo         done
+
+REM ── 4. Playwright Chromium ─────────────────────────────────────
+echo   [4/5] Installing Playwright Chromium...
 %PYTHON% -m playwright install chromium
 if errorlevel 1 (
     echo         retrying with deps...
@@ -42,7 +63,8 @@ if errorlevel 1 (
 )
 echo         done
 
-echo   [4/4] creating directories...
+REM ── 5. directories ─────────────────────────────────────────────
+echo   [5/5] Creating directories...
 if not exist logs mkdir logs
 if not exist sessions mkdir sessions
 if not exist assets mkdir assets
