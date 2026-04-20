@@ -27,6 +27,7 @@ from automator.title_generator import generate_title, generate_unique_title
 
 from cli.combo_builder import Combo, build_combos
 from cli.notifier import build_notifier
+from cli.session_manager import is_session_error
 from cli.spec_builder import build_spec, merge_account_run
 
 logger = logging.getLogger(__name__)
@@ -233,6 +234,7 @@ def _apply_caps(
 
 EditorFactory = Callable[[dict[str, Any]], BlogEditor]
 CheckerFactory = Callable[[dict[str, Any]], TitleChecker]
+SessionRecovery = Callable[[dict[str, Any]], BlogEditor]
 
 
 class CampaignExecutor:
@@ -240,13 +242,17 @@ class CampaignExecutor:
     Orchestrate the full campaign pipeline.
 
     Dependencies (optional — defaults support dry-run):
-        runner:           JobRunner for live execution.
-        editor_factory:   account_dict → BlogEditor for live execution.
-        checker_factory:  account_dict → TitleChecker for title dedup.
+        runner:            JobRunner for live execution.
+        editor_factory:    account_dict → BlogEditor for live execution.
+        checker_factory:   account_dict → TitleChecker for title dedup.
+        session_recovery:  account_dict → new BlogEditor. 세션 만료로 실패한
+                           combo에 대해 재로그인 후 새 editor를 돌려준다. None이면
+                           세션 에러도 일반 실패로 처리된다.
 
     Philosophy:
         어떤 프로세스든 실패하면 즉시 에러를 던지고 다음 조합으로 넘어간다.
-        암묵적·명시적 재시도는 없다.
+        유일한 예외는 세션 만료 — session_recovery가 주어진 경우 combo당 1회
+        재로그인 후 재시도한다.
     """
 
     def __init__(
@@ -254,10 +260,12 @@ class CampaignExecutor:
         runner: JobRunner | None = None,
         editor_factory: EditorFactory | None = None,
         checker_factory: CheckerFactory | None = None,
+        session_recovery: SessionRecovery | None = None,
     ) -> None:
         self._runner = runner
         self._editor_factory = editor_factory
         self._checker_factory = checker_factory
+        self._session_recovery = session_recovery
         self._seq_next_at: datetime | None = None
 
     def preview(
@@ -651,34 +659,99 @@ class CampaignExecutor:
                     )
 
                 except Exception as exc:
-                    record = ComboRecord(combo_values=combo.values, title=title, error=str(exc))
-                    result.record_failure(str(exc), record)
-                    logger.error("[batch] %s FAIL %s | %s", progress_label, username, str(exc))
+                    err_text = str(exc)
+                    recovered = False
 
-                    # ── 즉시 알림 ──
-                    if notifier is not None:
-                        try:
-                            notifier.send_failure_alert(
-                                campaign=campaign_name,
-                                username=username,
-                                progress=f"{i + 1}/{total}",
-                                combo_values=combo.values,
-                                title=title,
-                                error=str(exc),
-                            )
-                        except Exception as alert_exc:
-                            logger.warning("[batch] 실시간 알림 전송 실패: %s", alert_exc)
-
-                    # ── on_failure=stop 처리 ──
-                    if on_failure_mode == "stop":
-                        logger.error(
-                            "[batch] %s — on_failure=stop: 캠페인 전체 중단 요청",
-                            username,
+                    # ── 세션 만료 자동 복구 (combo당 1회) ──
+                    if (
+                        self._session_recovery is not None
+                        and not dry_run
+                        and is_session_error(error_msg=err_text)
+                    ):
+                        logger.warning(
+                            "[batch] %s %s — 세션 만료 감지, 복구 시도",
+                            progress_label, username,
                         )
-                        result.request_stop()
-                        break
+                        _close_editor()
+                        try:
+                            editor = self._session_recovery(account)
+                        except Exception as recov_exc:
+                            logger.error(
+                                "[batch] %s — 세션 복구 실패: %s",
+                                username, recov_exc,
+                            )
+                            if notifier is not None:
+                                try:
+                                    notifier.send_manual_login_required_alert(
+                                        campaign=campaign_name,
+                                        username=username,
+                                        error=str(recov_exc),
+                                    )
+                                except Exception as alert_exc:
+                                    logger.warning(
+                                        "[batch] 수동 로그인 알림 전송 실패: %s",
+                                        alert_exc,
+                                    )
+                        else:
+                            try:
+                                self._run_spec(spec, editor)
+                            except Exception as retry_exc:
+                                logger.error(
+                                    "[batch] %s %s — 세션 복구 후 재시도 실패: %s",
+                                    progress_label, username, retry_exc,
+                                )
+                            else:
+                                result.record_success(
+                                    ComboRecord(combo_values=combo.values, title=title)
+                                )
+                                succeeded_in_batch += 1
+                                logger.info(
+                                    "[batch] %s DONE (세션 복구 후) %s | %s",
+                                    progress_label, username, title,
+                                )
+                                if progress:
+                                    progress.mark_done(combo_index)
+                                _append_observer_result(
+                                    config,
+                                    blog_id=account.get("blog_id", username),
+                                    keyword=_extract_keyword(combo.values, config),
+                                    title=title,
+                                    published_at=spec.schedule_at,
+                                )
+                                recovered = True
 
-                    continue
+                    if recovered:
+                        # 복구 + 재시도 성공 — 일반 성공 흐름으로 합류 (interval 대기 포함)
+                        pass
+                    else:
+                        record = ComboRecord(combo_values=combo.values, title=title, error=err_text)
+                        result.record_failure(err_text, record)
+                        logger.error("[batch] %s FAIL %s | %s", progress_label, username, err_text)
+
+                        # ── 즉시 알림 ──
+                        if notifier is not None:
+                            try:
+                                notifier.send_failure_alert(
+                                    campaign=campaign_name,
+                                    username=username,
+                                    progress=f"{i + 1}/{total}",
+                                    combo_values=combo.values,
+                                    title=title,
+                                    error=err_text,
+                                )
+                            except Exception as alert_exc:
+                                logger.warning("[batch] 실시간 알림 전송 실패: %s", alert_exc)
+
+                        # ── on_failure=stop 처리 ──
+                        if on_failure_mode == "stop":
+                            logger.error(
+                                "[batch] %s — on_failure=stop: 캠페인 전체 중단 요청",
+                                username,
+                            )
+                            result.request_stop()
+                            break
+
+                        continue
 
                 if not dry_run and i < len(combos) - 1 and interval > 0:
                     logger.info("[batch] %s — %d초 대기 중...", username, interval)

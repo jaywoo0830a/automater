@@ -88,6 +88,21 @@ def _build_failure_alert_message(
     return "\n".join(lines)
 
 
+def _build_manual_login_required_message(
+    campaign: str,
+    username: str,
+    error: str,
+) -> str:
+    """세션 자동 복구 실패 시 전송하는 수동 로그인 요청 메시지."""
+    lines = [
+        f"<b>🔐 [{campaign}] 수동 로그인 필요</b>",
+        f"계정: <code>{username}</code>",
+        "자동 로그인 복구에 실패했습니다. 수동으로 로그인한 뒤 캠페인을 다시 실행해주세요.",
+        f"\n<b>에러:</b>\n<pre>{error}</pre>",
+    ]
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------------------
 # Channel ABC
 # ---------------------------------------------------------------------------
@@ -218,6 +233,26 @@ class Notifier:
             progress=progress,
             combo_values=combo_values,
             title=title,
+            error=error,
+        )
+        self._broadcast(message)
+
+    def send_manual_login_required_alert(
+        self,
+        campaign: str,
+        username: str,
+        error: str,
+    ) -> None:
+        """세션 자동 복구 실패 시 수동 로그인 요청 알림.
+
+        on=complete인 경우에도 세션 문제는 사용자 개입이 반드시 필요하므로 전송한다.
+        """
+        if not self._channels:
+            return
+
+        message = _build_manual_login_required_message(
+            campaign=campaign,
+            username=username,
             error=error,
         )
         self._broadcast(message)

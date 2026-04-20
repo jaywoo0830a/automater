@@ -414,6 +414,16 @@ def _build_live_executor(
         editor._context = ctx      # type: ignore[attr-defined]
         return editor
 
+    def session_recovery(account: dict[str, Any]):
+        """캠페인 도중 세션 만료 시 재로그인 후 새 에디터를 돌려준다.
+
+        session_mgr.recover()가 auto → manual 순서로 로그인을 시도한다.
+        auto_login 실패 + manual 불가 환경이면 RuntimeError를 던지므로
+        호출자(executor)가 수동 로그인 알림을 띄운다.
+        """
+        _refresh_session(account)
+        return editor_factory(account)
+
     def checker_factory(account: dict[str, Any]):
         from automator.naver_checker import PlaywrightTitleChecker
 
@@ -456,6 +466,7 @@ def _build_live_executor(
         runner=runner,
         editor_factory=editor_factory,
         checker_factory=checker_factory,
+        session_recovery=session_recovery,
     )
 
 
