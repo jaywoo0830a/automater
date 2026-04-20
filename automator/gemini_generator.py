@@ -8,6 +8,8 @@ In non-production environments, returns stub paragraphs (no API call).
 
 from __future__ import annotations
 
+from typing import override
+
 from automator.ports import TextGenerator
 from automator.paragraph_generator import generate_paragraph
 
@@ -25,6 +27,7 @@ class GeminiGenerator(TextGenerator):
         self._api_key = api_key
         self._model = model
 
+    @override
     def generate(self, prompt: str) -> str:
         return generate_paragraph(
             prompt, api_key=self._api_key, model=self._model,

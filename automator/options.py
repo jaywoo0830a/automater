@@ -31,7 +31,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Literal, Union
+from typing import Literal
 
 KST = timezone(timedelta(hours=9))
 
@@ -205,7 +205,7 @@ class EffectLayer:
     effect: str = ""
 
 
-Layer = Union[AILayer, ImageLayer, EffectLayer]
+Layer = AILayer | ImageLayer | EffectLayer
 
 
 @dataclass(frozen=True)
@@ -374,18 +374,18 @@ class AiSectionBlock:
 
 
 # Sealed union — isinstance 분기에 사용
-Block = Union[
-    HeadingBlock,
-    ParagraphBlock,
-    TextBlock,
-    ImageBlock,
-    FeaturedImageBlock,
-    ListBlock,
-    QuoteBlock,
-    DividerBlock,
-    AiSectionBlock,
-    NewLineBlock,
-]
+Block = (
+    HeadingBlock
+    | ParagraphBlock
+    | TextBlock
+    | ImageBlock
+    | FeaturedImageBlock
+    | ListBlock
+    | QuoteBlock
+    | DividerBlock
+    | AiSectionBlock
+    | NewLineBlock
+)
 
 
 # ---------------------------------------------------------------------------

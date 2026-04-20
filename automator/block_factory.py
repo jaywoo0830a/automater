@@ -19,8 +19,9 @@ Adding a new block type:
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import fields as dc_fields
-from typing import Any, Callable
+from typing import Any
 
 from automator.options import (
     Block,

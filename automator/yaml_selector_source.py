@@ -7,7 +7,7 @@ YamlSelectorSource — SelectorSource implementation backed by YAML files.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, override
 
 from automator.ports import SelectorSource
 from automator.selector_loader import SelectorLoader
@@ -26,6 +26,7 @@ class YamlSelectorSource(SelectorSource):
         self._base_dir = Path(base_dir)
         self._cache: dict[str, SelectorLoader] = {}
 
+    @override
     def load(self, name: str) -> Any:
         if name not in self._cache:
             path = self._base_dir / f"{name}.yaml"

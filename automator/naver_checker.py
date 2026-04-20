@@ -29,6 +29,7 @@ import random
 import re
 import time
 import urllib.parse
+from typing import override
 
 from automator.ports import TitleChecker
 
@@ -103,6 +104,7 @@ class PlaywrightTitleChecker(TitleChecker):
         self._match = match
         self._delay = _parse_delay(delay)
 
+    @override
     def is_duplicate(self, title: str, query: str) -> bool:
         """Search Naver for *query*, return True if *title* is in results."""
         lo, hi = self._delay

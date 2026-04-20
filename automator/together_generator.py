@@ -18,6 +18,7 @@ import logging
 import os
 import urllib.error
 import urllib.request
+from typing import override
 
 from automator.ports import ImageGenerator
 
@@ -56,6 +57,7 @@ class TogetherImageGenerator(ImageGenerator):
         self._timeout_s = timeout_s
         self._steps     = steps
 
+    @override
     def generate(
         self,
         prompt: str,

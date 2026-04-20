@@ -13,9 +13,10 @@ from __future__ import annotations
 
 import re
 import shutil
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterator, Literal
+from typing import Literal
 
 Kind = Literal["asset"]
 

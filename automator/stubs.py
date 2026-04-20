@@ -10,7 +10,7 @@ Test doubles for ports.  No external dependencies.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, override
 
 from automator.ports import TextGenerator, ImageProcessor, SelectorSource
 from automator.paragraph_generator import _STUB_PARAGRAPHS
@@ -27,6 +27,7 @@ class StubTextGenerator(TextGenerator):
         self._paragraphs = paragraphs or list(_STUB_PARAGRAPHS)
         self._index = 0
 
+    @override
     def generate(self, prompt: str) -> str:
         text = self._paragraphs[self._index % len(self._paragraphs)]
         self._index += 1
@@ -40,6 +41,7 @@ class StubTextGenerator(TextGenerator):
 class NoopImageProcessor(ImageProcessor):
     """Return bytes unchanged.  For dry-run and unit tests."""
 
+    @override
     def process(self, raw: bytes, block: Any) -> bytes:
         return raw
 
@@ -54,6 +56,7 @@ class DictSelectorSource(SelectorSource):
     def __init__(self, loaders: dict[str, Any]) -> None:
         self._loaders = loaders
 
+    @override
     def load(self, name: str) -> Any:
         if name not in self._loaders:
             raise FileNotFoundError(

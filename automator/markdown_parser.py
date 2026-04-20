@@ -27,7 +27,7 @@ ai_section 블록의 AI 응답을 처리하기 위한 단순 파서.
 from __future__ import annotations
 
 import re
-from typing import Iterable
+from collections.abc import Iterable
 
 from automator.options import (
     Block,
