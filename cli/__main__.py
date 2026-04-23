@@ -100,6 +100,10 @@ def main(argv: list[str] | None = None) -> int:
 
     result = executor.execute(config, dry_run=not args.execute, limit=args.limit)
     _print_result(result)
+
+    if args.report is not None:
+        _save_report(result, config, args.report, args.report_include_failed)
+
     return 0 if result.total_failed == 0 else 1
 
 
@@ -127,6 +131,20 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--import-sessions", metavar="DIR", help="Import session files from directory.")
     p.add_argument("--headless", action="store_true", default=None)
     p.add_argument("--no-headless", action="store_true")
+    p.add_argument(
+        "--report",
+        nargs="?",
+        const="",
+        metavar="PATH",
+        help="캠페인 종료 후 발행 기록을 파일로 저장. "
+             "확장자로 포맷 선택(.xlsx / .yaml / .yml). "
+             "경로 생략 시 캠페인 YAML 옆에 <config>_report.yaml 로 저장.",
+    )
+    p.add_argument(
+        "--report-include-failed",
+        action="store_true",
+        help="리포트에 실패한 조합도 포함 (기본: 성공만).",
+    )
     p.add_argument("-v", "--verbose", action="store_true")
     return p.parse_args(argv)
 
@@ -492,6 +510,31 @@ def _print_plan(plan) -> None:
 def _format_combo(values: dict[str, str]) -> str:
     """키워드 조합을 'key=value, ...' 형식으로 포맷."""
     return ", ".join(f"{k}={v}" for k, v in values.items())
+
+
+def _save_report(
+    result,
+    config: dict[str, Any],
+    path_arg: str,
+    include_failed: bool,
+) -> None:
+    """--report 처리. path_arg 가 빈 문자열이면 캠페인 YAML 옆에 기본 경로로 저장."""
+    from pathlib import Path
+    from cli.report import write_report
+
+    log = logging.getLogger("cli")
+
+    if path_arg:
+        out_path = path_arg
+    else:
+        config_path = Path(config.get("_config_path", "campaign.yaml"))
+        out_path = str(config_path.with_name(f"{config_path.stem}_report.yaml"))
+
+    try:
+        saved = write_report(result, out_path, include_failed=include_failed)
+        print(f"\n  리포트 저장 → {saved}\n")
+    except Exception as exc:
+        log.error("리포트 저장 실패: %s", exc)
 
 
 def _print_result(result) -> None:

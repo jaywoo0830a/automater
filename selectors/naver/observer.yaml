@@ -1,8 +1,0 @@
-# ── Naver search result selectors for observer ──
-
-# 통합검색 결과 블록 (1위~10위, 순서대로)
-unified_result_block:
-  description: 통합검색 결과 블록 (head + body 공통)
-  locators:
-  - type: css
-    value: div.spw_rerank._slog_visible

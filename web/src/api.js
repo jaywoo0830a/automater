@@ -190,39 +190,3 @@ export function streamVncLogs(sessionId, onLine, onClose) {
   return () => ws.close();
 }
 
-// ---------------------------------------------------------------------------
-// Observer
-// ---------------------------------------------------------------------------
-
-export async function getObserverStatus() {
-  const res = await fetch("/observer/status", { headers: headers() });
-  if (!res.ok) throw new Error(res.statusText);
-  return res.json();
-}
-
-export async function getObserverCampaigns() {
-  const res = await fetch("/observer/campaigns", { headers: headers() });
-  if (!res.ok) throw new Error(res.statusText);
-  return res.json();
-}
-
-export async function getObserverCampaign(id) {
-  const res = await fetch(`/observer/campaigns/${id}`, { headers: headers() });
-  if (!res.ok) throw new Error(res.statusText);
-  return res.json();
-}
-
-export async function getObserverWorkers() {
-  const res = await fetch("/observer/workers", { headers: headers() });
-  if (!res.ok) throw new Error(res.statusText);
-  return res.json();
-}
-
-export async function getObserverSchedules(status = "", limit = 50) {
-  const params = new URLSearchParams();
-  if (status) params.set("status", status);
-  params.set("limit", String(limit));
-  const res = await fetch(`/observer/schedules?${params}`, { headers: headers() });
-  if (!res.ok) throw new Error(res.statusText);
-  return res.json();
-}

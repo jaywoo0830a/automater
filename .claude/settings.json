@@ -2,10 +2,14 @@
   "permissions": {
     "allow": [
       "Bash(.venv/bin/python -m pytest tests/unit/automator/test_pollinations_generator.py tests/unit/automator/test_image_processor_layers.py tests/unit/cli/test_layer_spec.py tests/unit/cli/test_spec_builder.py -v)",
-      "Bash(.venv/bin/python -m pytest tests/unit/automator/test_together_generator.py -v)"
+      "Bash(.venv/bin/python -m pytest tests/unit/automator/test_together_generator.py -v)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('cli/campaign_executor.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(head -n 392 /home/rlawjddn/projects/automator/api/app.py)",
+      "Bash(mv /tmp/app.py.new /home/rlawjddn/projects/automator/api/app.py)"
     ],
     "additionalDirectories": [
-      "/home/rlawjddn/projects/automator/run"
+      "/home/rlawjddn/projects/automator/run",
+      "/home/rlawjddn/projects/automator/observer"
     ]
   }
 }

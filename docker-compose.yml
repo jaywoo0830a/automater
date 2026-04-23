@@ -8,22 +8,6 @@ services:
     command: redis-server --appendonly yes
     restart: unless-stopped
 
-  mysql:
-    image: mysql:8.0
-    ports:
-      - "3306:3306"
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-automator}
-      MYSQL_DATABASE: automator
-    volumes:
-      - mysql_data:/var/lib/mysql
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   api:
     build:
       context: .
@@ -31,29 +15,10 @@ services:
     ports:
       - "5000:5000"
       - "6080-6089:6080-6089"
-    environment:
-      MYSQL_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-automator}@mysql:3306/automator
     depends_on:
       redis:
         condition: service_started
-      mysql:
-        condition: service_healthy
-    restart: unless-stopped
-
-  observer:
-    build:
-      context: .
-      dockerfile: docker/observer.Dockerfile
-    environment:
-      MYSQL_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-automator}@mysql:3306/automator
-      POLL_INTERVAL: "30"
-      HEADLESS: "true"
-      MAX_WORKERS: "4"
-    depends_on:
-      mysql:
-        condition: service_healthy
     restart: unless-stopped
 
 volumes:
   redis_data:
-  mysql_data:

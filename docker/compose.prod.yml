@@ -1,20 +1,4 @@
 services:
-  mysql:
-    image: mysql:8.0
-    restart: unless-stopped
-    network_mode: host
-    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-automator}
-      MYSQL_DATABASE: automator
-    volumes:
-      - mysql_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   api:
     build:
       context: ..
@@ -23,13 +7,8 @@ services:
     network_mode: host
     env_file:
       - ../.env
-    environment:
-      MYSQL_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-automator}@localhost:3306/automator
     volumes:
       - ../workspaces:/app/workspaces
-    depends_on:
-      mysql:
-        condition: service_healthy
 
   web:
     build:
@@ -46,24 +25,6 @@ services:
     depends_on:
       - api
 
-  observer:
-    build:
-      context: ..
-      dockerfile: docker/observer.Dockerfile
-    restart: unless-stopped
-    network_mode: host
-    env_file:
-      - ../.env
-    environment:
-      MYSQL_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-automator}@localhost:3306/automator
-      POLL_INTERVAL: "30"
-      HEADLESS: "false"
-      MAX_WORKERS: "4"
-    depends_on:
-      mysql:
-        condition: service_healthy
-
 volumes:
-  mysql_data:
   caddy_data:
   caddy_config:

@@ -58,9 +58,13 @@ class ExecutionPlan:
 @dataclass(frozen=True)
 class ComboRecord:
     """하나의 조합 실행 기록."""
-    combo_values: dict[str, str]
-    title:        str
-    error:        str = ""
+    combo_values:      dict[str, str]
+    title:             str
+    error:             str = ""
+    account_username:  str = ""
+    blog_id:           str = ""
+    keyword:           str = ""
+    published_at:      datetime | None = None
 
 
 @dataclass
@@ -621,6 +625,7 @@ class CampaignExecutor:
                     continue
 
                 title = ""
+                spec = None
                 try:
                     spec = build_spec(combo, config, account_idx)
 
@@ -633,7 +638,14 @@ class CampaignExecutor:
 
                     logger.info("[batch] %s START %s | %s (예약: %s)", progress_label, username, title, at_label)
 
-                    record = ComboRecord(combo_values=combo.values, title=title)
+                    record = ComboRecord(
+                        combo_values=combo.values,
+                        title=title,
+                        account_username=username,
+                        blog_id=account.get("blog_id", username),
+                        keyword=_extract_keyword(combo.values, config),
+                        published_at=spec.schedule_at,
+                    )
 
                     if dry_run:
                         result.record_success(record)
@@ -648,15 +660,6 @@ class CampaignExecutor:
                     logger.info("[batch] %s DONE %s | %s", progress_label, username, title)
                     if progress:
                         progress.mark_done(combo_index)
-
-                    # Observer result file — one JSON line per successful post
-                    _append_observer_result(
-                        config,
-                        blog_id=account.get("blog_id", username),
-                        keyword=_extract_keyword(combo.values, config),
-                        title=title,
-                        published_at=spec.schedule_at,
-                    )
 
                 except Exception as exc:
                     err_text = str(exc)
@@ -702,7 +705,14 @@ class CampaignExecutor:
                                 )
                             else:
                                 result.record_success(
-                                    ComboRecord(combo_values=combo.values, title=title)
+                                    ComboRecord(
+                                        combo_values=combo.values,
+                                        title=title,
+                                        account_username=username,
+                                        blog_id=account.get("blog_id", username),
+                                        keyword=_extract_keyword(combo.values, config),
+                                        published_at=spec.schedule_at,
+                                    )
                                 )
                                 succeeded_in_batch += 1
                                 logger.info(
@@ -711,20 +721,21 @@ class CampaignExecutor:
                                 )
                                 if progress:
                                     progress.mark_done(combo_index)
-                                _append_observer_result(
-                                    config,
-                                    blog_id=account.get("blog_id", username),
-                                    keyword=_extract_keyword(combo.values, config),
-                                    title=title,
-                                    published_at=spec.schedule_at,
-                                )
                                 recovered = True
 
                     if recovered:
                         # 복구 + 재시도 성공 — 일반 성공 흐름으로 합류 (interval 대기 포함)
                         pass
                     else:
-                        record = ComboRecord(combo_values=combo.values, title=title, error=err_text)
+                        record = ComboRecord(
+                            combo_values=combo.values,
+                            title=title,
+                            error=err_text,
+                            account_username=username,
+                            blog_id=account.get("blog_id", username),
+                            keyword=_extract_keyword(combo.values, config),
+                            published_at=spec.schedule_at if spec is not None else None,
+                        )
                         result.record_failure(err_text, record)
                         logger.error("[batch] %s FAIL %s | %s", progress_label, username, err_text)
 
@@ -826,13 +837,6 @@ class CampaignExecutor:
             return 60
 
 
-# ---------------------------------------------------------------------------
-# Observer result file helpers
-# ---------------------------------------------------------------------------
-
-_OBSERVER_RESULTS_FILE = "observer_results.jsonl"
-
-
 def _extract_keyword(combo_values: dict[str, str], config: dict) -> str:
     """Build the search keyword from combo values.
 
@@ -841,35 +845,3 @@ def _extract_keyword(combo_values: dict[str, str], config: dict) -> str:
     keyword_keys = set(config.get("keywords", {}).keys())
     parts = [v for k, v in combo_values.items() if k in keyword_keys]
     return " ".join(parts) if parts else " ".join(combo_values.values())
-
-
-def _append_observer_result(
-    config: dict,
-    *,
-    blog_id: str,
-    keyword: str,
-    title: str,
-    published_at: datetime | None,
-) -> None:
-    """Append one JSON line to the observer results file in the workspace.
-
-    The file lives next to the campaign YAML. The API worker reads it
-    after the campaign finishes to INSERT rows into the observer DB.
-    """
-    import json
-
-    base_dir = config.get("_base_dir", ".")
-    out = Path(base_dir) / _OBSERVER_RESULTS_FILE
-
-    entry = {
-        "blog_id": blog_id,
-        "keyword": keyword,
-        "title": title,
-        "published_at": published_at.isoformat() if published_at else None,
-    }
-
-    try:
-        with open(out, "a", encoding="utf-8") as f:
-            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-    except Exception:
-        logger.debug("Failed to write observer result to %s", out)

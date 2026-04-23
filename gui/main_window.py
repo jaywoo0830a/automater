@@ -183,6 +183,9 @@ class MainWindow(QMainWindow):
         self._btn_stop.setStyleSheet("QPushButton { color: red; font-weight: bold; }")
         self._btn_stop.clicked.connect(self._stop_current)
         self._btn_stop.setVisible(False)
+        self._btn_report = QPushButton("리포트 저장")
+        self._btn_report.setToolTip("최근 실행/Dry-run 결과를 xlsx 또는 YAML 로 저장")
+        self._btn_report.clicked.connect(self._export_report)
 
         from gui.theme import SP_SM, SP_LG
 
@@ -200,6 +203,7 @@ class MainWindow(QMainWindow):
         btn_row.addWidget(self._btn_pack)
         btn_row.addWidget(self._btn_execute)
         btn_row.addWidget(self._btn_stop)
+        btn_row.addWidget(self._btn_report)
 
         # ── Layout ──
         right_splitter = QSplitter(Qt.Orientation.Vertical)
@@ -789,7 +793,11 @@ class MainWindow(QMainWindow):
         self._run_cli("--preview", label="미리보기")
 
     def _run_dryrun(self) -> None:
-        self._run_cli(label="Dry-run")
+        state = self._current_state()
+        if not state or not self._ensure_saved():
+            return
+        report_path = str(self._default_report_path(state))
+        self._run_cli("--report", report_path, label="Dry-run")
 
     def _run_execute(self) -> None:
         if not self._ensure_saved():
@@ -798,6 +806,7 @@ class MainWindow(QMainWindow):
         if not state:
             return
 
+        report_path = str(self._default_report_path(state))
         has_progress = self._check_progress(state)
 
         if has_progress:
@@ -814,10 +823,10 @@ class MainWindow(QMainWindow):
             if clicked == btn_cancel:
                 return
             elif clicked == btn_skip:
-                self._run_cli("--execute", "--resume", label="실행(이어서)")
+                self._run_cli("--execute", "--resume", "--report", report_path, label="실행(이어서)")
             else:
                 # --restart로 YAML의 on_resume 설정을 덮어써 확실히 reset
-                self._run_cli("--execute", "--restart", label="실행(처음부터)")
+                self._run_cli("--execute", "--restart", "--report", report_path, label="실행(처음부터)")
         else:
             reply = QMessageBox.question(
                 self, "캠페인 실행",
@@ -826,7 +835,46 @@ class MainWindow(QMainWindow):
             )
             if reply != QMessageBox.StandardButton.Yes:
                 return
-            self._run_cli("--execute", label="실행")
+            self._run_cli("--execute", "--report", report_path, label="실행")
+
+    @staticmethod
+    def _default_report_path(state: _CampaignState) -> Path:
+        """캠페인 YAML 옆에 기본 리포트 파일 경로. (CLI --report 의 기본값과 동일한 관습)"""
+        cfg = Path(state.file_path)
+        return cfg.with_name(f"{cfg.stem}_report.yaml")
+
+    def _export_report(self) -> None:
+        state = self._current_state()
+        if not state or not state.file_path:
+            QMessageBox.information(self, "리포트", "먼저 캠페인 YAML을 저장하세요.")
+            return
+
+        src = self._default_report_path(state)
+        if not src.exists():
+            QMessageBox.information(
+                self, "리포트 없음",
+                "실행/Dry-run 기록이 없습니다. 실행 또는 Dry-run 을 먼저 수행해주세요.",
+            )
+            return
+
+        cfg_path = Path(state.file_path)
+        default_save = str(cfg_path.with_name(f"{cfg_path.stem}_report.xlsx"))
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "리포트 저장",
+            default_save,
+            "Excel (*.xlsx);;YAML (*.yaml *.yml)",
+        )
+        if not save_path:
+            return
+
+        try:
+            rows = yaml.safe_load(src.read_text(encoding="utf-8")) or []
+            from cli.report import write_rows
+            out = write_rows(rows, save_path)
+            QMessageBox.information(self, "리포트 저장", f"저장 완료:\n{out}")
+        except Exception as exc:
+            QMessageBox.critical(self, "저장 실패", str(exc))
 
     @staticmethod
     def _check_progress(state: _CampaignState) -> bool:

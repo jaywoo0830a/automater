@@ -15,6 +15,3 @@ flask>=3.0.0
 flask-sock>=0.7.0
 # GUI
 PySide6>=6.11.0
-# Observer - DB
-SQLAlchemy>=2.0.49
-PyMySQL>=1.1.0

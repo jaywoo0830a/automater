@@ -257,70 +257,6 @@ class Worker:
         return True
 
     @staticmethod
-    def _register_for_observation(campaign: "Campaign") -> None:
-        """Read observer_results.jsonl and INSERT one DB row per successful post.
-
-        The CLI writes one JSON line per successful combo to
-        ``observer_results.jsonl`` in the workspace directory.
-        Each line contains blog_id, keyword, title, and published_at.
-        """
-        import json
-        import os as _os
-        import traceback
-
-        mysql_url = _os.environ.get("MYSQL_URL", "")
-        if not mysql_url:
-            campaign._emit("[observer] MYSQL_URL not set — skipping observation registration\n")
-            return
-
-        results_file = Path(campaign.config_path).parent / "observer_results.jsonl"
-        if not results_file.exists():
-            campaign._emit("[observer] No observer_results.jsonl found — skipping\n")
-            return
-
-        try:
-            from datetime import datetime
-            from automator.models.base import create_engine_from_url, create_session_factory
-            from automator.models.campaign import Campaign as DBCampaign
-
-            entries = []
-            for line in results_file.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if line:
-                    entries.append(json.loads(line))
-
-            if not entries:
-                campaign._emit("[observer] observer_results.jsonl is empty — skipping\n")
-                return
-
-            campaign._emit(f"[observer] Registering {len(entries)} post(s) for observation...\n")
-
-            engine = create_engine_from_url(mysql_url)
-            Session = create_session_factory(engine)
-
-            with Session() as session:
-                for entry in entries:
-                    published_at = None
-                    if entry.get("published_at"):
-                        published_at = datetime.fromisoformat(entry["published_at"])
-
-                    db_campaign = DBCampaign(
-                        blog_id=entry["blog_id"],
-                        keyword=entry["keyword"],
-                        platform="naver",
-                        published_at=published_at or datetime.utcnow(),
-                    )
-                    session.add(db_campaign)
-                session.commit()
-
-            engine.dispose()
-
-            campaign._emit(f"[observer] Registered {len(entries)} post(s) for observation\n")
-        except Exception:
-            tb = traceback.format_exc()
-            campaign._emit(f"[observer] Failed to register for observation:\n{tb}\n")
-
-    @staticmethod
     def _patch_config(config_path: str) -> None:
         """워크스페이스 환경에 맞게 YAML 설정을 패치한다.
 
@@ -499,10 +435,6 @@ class Worker:
                 Status.COMPLETED if proc.returncode == 0 else Status.FAILED
             )
             campaign._emit(f"[완료] exit_code={proc.returncode}\n")
-
-            # Register completed campaign for observer tracking
-            if proc.returncode == 0:
-                self._register_for_observation(campaign)
 
         except Exception as exc:
             campaign.status = Status.FAILED
