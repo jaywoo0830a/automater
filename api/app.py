@@ -98,7 +98,7 @@ def upload_campaign():
     except ConfigError as exc:
         # 검증 실패 시 워크스페이스 롤백
         try:
-            remove_workspace(workspace)
+            remove_workspace(campaign_id)
         except Exception:
             pass
         return jsonify({
@@ -109,7 +109,7 @@ def upload_campaign():
     except Exception as exc:
         # YAML 파싱 에러 등
         try:
-            remove_workspace(workspace)
+            remove_workspace(campaign_id)
         except Exception:
             pass
         return jsonify({

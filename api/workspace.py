@@ -44,6 +44,12 @@ def create_workspace(zip_path: str | Path) -> tuple[str, Path]:
         shutil.rmtree(workspace, ignore_errors=True)
         raise ValueError("ZIP 내에 YAML 캠페인 파일이 없습니다")
 
+    # 사용자가 workspace 폴더 자체를 ZIP 한 경우, YAML 이 서브디렉토리 안에 있다.
+    # 이때 workspace 루트를 YAML 의 부모 디렉토리로 재지정해야 이후 세션/에셋 경로가
+    # 일관되게 동작한다. (check_sessions, VNC 세션 저장, _patch_config 모두 동일 루트)
+    if config_file.parent.resolve() != workspace.resolve():
+        workspace = config_file.parent
+
     return campaign_id, workspace
 
 
