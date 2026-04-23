@@ -1,13 +1,4 @@
 services:
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes
-    restart: unless-stopped
-
   api:
     build:
       context: .
@@ -15,10 +6,4 @@ services:
     ports:
       - "5000:5000"
       - "6080-6089:6080-6089"
-    depends_on:
-      redis:
-        condition: service_started
     restart: unless-stopped
-
-volumes:
-  redis_data:

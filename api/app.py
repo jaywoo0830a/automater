@@ -270,10 +270,7 @@ def start_campaign_vnc(campaign_id: str):
 
     # 세션 저장 경로 = 워크스페이스 sessions/
     sessions_dir = str(Path(campaign.workspace) / "sessions")
-    config = {
-        "session_store": "file",
-        "_base_dir": sessions_dir,
-    }
+    config = {"_base_dir": sessions_dir}
 
     session = create_vnc_session(account, config, mode=mode)
     return jsonify(session.to_dict()), 201

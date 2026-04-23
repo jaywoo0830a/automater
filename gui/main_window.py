@@ -394,8 +394,6 @@ class MainWindow(QMainWindow):
         config.update(self._post_tab.to_dict())
         config["assets"] = platform_data.get("assets", "./assets")
         config["exif_optimization"] = platform_data.get("exif_optimization", True)
-        if "session_store" in platform_data:
-            config["session_store"] = platform_data["session_store"]
         config.update(self._publish_tab.to_dict())
         config.update(self._style_tab.to_dict())
         config.update(self._run_tab.to_dict())

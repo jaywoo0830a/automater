@@ -144,8 +144,6 @@ def _strip_session_paths(raw: dict) -> dict:
     cleaned = copy.deepcopy(raw)
     for acc in cleaned.get("accounts", []):
         acc.pop("session", None)
-    # Also remove session_store if it's file-based
-    ss = cleaned.get("session_store", "")
-    if ss and ss not in ("redis", "rediss") and "://" not in str(ss):
-        cleaned.pop("session_store", None)
+    # session_store 는 file 백엔드 단일 — 언제나 제거해도 안전하다.
+    cleaned.pop("session_store", None)
     return cleaned

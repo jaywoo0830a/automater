@@ -273,9 +273,12 @@ class Worker:
         changed = False
 
         # 1. 세션 패치
+        # 구 YAML 에 남아있을 수 있는 session_store 필드는 제거한다 (file 백엔드 단일).
+        if raw.pop("session_store", None) is not None:
+            changed = True
+
         sessions_dir = workspace / "sessions"
         if sessions_dir.is_dir():
-            raw["session_store"] = "file"
             for acc in raw.get("accounts", []):
                 username = acc.get("username", "")
                 if not username:

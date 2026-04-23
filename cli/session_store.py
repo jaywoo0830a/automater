@@ -3,19 +3,15 @@ cli/session_store.py
 -----------------------
 Browser session persistence — load/save Playwright storage_state.
 
-Two backends:
-    FileSessionStore   — JSON files (default, backward compatible).
-    RedisSessionStore  — Redis keys with TTL (multi-machine, auto-expire).
+Single backend:
+    FileSessionStore — JSON files, one per account.
 
 Factory:
-    create_session_store(url) → SessionStore
+    create_session_store(url) → FileSessionStore
 
 Usage in YAML:
-    # File (default)
+    # (생략하면 기본 — 파일 백엔드)
     session_store: file
-
-    # Redis
-    session_store: redis://localhost:6379
 """
 
 from __future__ import annotations
@@ -25,11 +21,6 @@ import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, override
-
-try:
-    import redis
-except ImportError:
-    redis = None  # type: ignore[assignment]
 
 
 class SessionStore(ABC):
@@ -81,73 +72,21 @@ class FileSessionStore(SessionStore):
         return str(Path(self._base_dir) / f"{key}_session.json")
 
 
-class RedisSessionStore(SessionStore):
-    """
-    Redis-based session store with TTL.
-
-    Key "user1" → Redis key "session:user1" (or custom prefix).
-    TTL defaults to 24 hours (86400 seconds).
-    """
-
-    def __init__(
-        self,
-        url: str = "redis://localhost:6379",
-        ttl_seconds: int = 86400,
-        prefix: str = "session:",
-    ) -> None:
-        if redis is None:
-            raise ImportError(
-                "redis package is required for RedisSessionStore. "
-                "Install with: pip install redis"
-            )
-        self._client = redis.from_url(url)
-        self._ttl = ttl_seconds
-        self._prefix = prefix
-
-    @override
-    def load(self, key: str) -> dict[str, Any] | None:
-        raw = self._client.get(self._redis_key(key))
-        if raw is None:
-            return None
-        return json.loads(raw)
-
-    @override
-    def save(self, key: str, data: dict[str, Any]) -> None:
-        self._client.setex(
-            self._redis_key(key),
-            self._ttl,
-            json.dumps(data, ensure_ascii=False),
-        )
-
-    def _redis_key(self, key: str) -> str:
-        return f"{self._prefix}{key}"
-
-
 def create_session_store(
     url: str | None = None,
     *,
     base_dir: str = ".",
-    ttl_seconds: int = 86400,
-    prefix: str = "session:",
 ) -> SessionStore:
     """
-    Factory — create a SessionStore from a URL string.
+    Factory — always returns a FileSessionStore.
 
     Args:
-        url: None/""/file → FileSessionStore,
-             redis://... → RedisSessionStore.
-        base_dir:     File store base directory.
-        ttl_seconds:  Redis TTL (default 24h).
-        prefix:       Redis key prefix.
+        url:      None / "" / "file" 만 허용. 그 외 값은 에러.
+        base_dir: File store base directory.
     """
     if not url or url == "file":
         return FileSessionStore(base_dir=base_dir)
 
-    if url.startswith("redis://") or url.startswith("rediss://"):
-        return RedisSessionStore(
-            url=url,
-            ttl_seconds=ttl_seconds,
-            prefix=prefix,
-        )
-
-    raise ValueError(f"Unsupported session_store URL: {url!r}")
+    raise ValueError(
+        f"Unsupported session_store: {url!r} — 'file' 만 지원됩니다."
+    )

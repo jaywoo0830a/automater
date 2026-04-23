@@ -1,4 +1,4 @@
-"""플랫폼 + 세션 저장소 + 작업 디렉토리 + 이미지 설정 탭."""
+"""플랫폼 + 작업 디렉토리 + 이미지 설정 탭."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ import os
 from pathlib import Path
 
 from PySide6.QtWidgets import (
-    QWidget, QFormLayout, QComboBox, QLineEdit, QRadioButton,
-    QButtonGroup, QHBoxLayout, QGroupBox, QVBoxLayout,
+    QWidget, QFormLayout, QComboBox, QLineEdit,
+    QHBoxLayout, QVBoxLayout,
     QPushButton, QFileDialog, QCheckBox,
 )
 
@@ -60,28 +60,6 @@ class PlatformTab(QWidget):
         form.addRow("작업 디렉토리:", ws_widget)
         form.addRow("Assets 디렉토리:", assets_widget)
 
-        # Session store
-        self._store_file = QRadioButton("파일 (기본)")
-        self._store_redis = QRadioButton("Redis")
-        self._store_file.setChecked(True)
-
-        self._store_group = QButtonGroup()
-        self._store_group.addButton(self._store_file, 0)
-        self._store_group.addButton(self._store_redis, 1)
-
-        self._redis_url = QLineEdit()
-        self._redis_url.setPlaceholderText("redis://localhost:6379")
-        self._redis_url.setEnabled(False)
-        self._store_redis.toggled.connect(self._redis_url.setEnabled)
-
-        store_row = QHBoxLayout()
-        store_row.addWidget(self._store_file)
-        store_row.addWidget(self._store_redis)
-        store_row.addWidget(self._redis_url)
-
-        store_group = QGroupBox("세션 저장소")
-        store_group.setLayout(store_row)
-
         # 고급: EXIF
         self._exif = QCheckBox("EXIF 자동 삽입 (카메라 메타데이터)")
         self._exif.setChecked(True)
@@ -91,7 +69,6 @@ class PlatformTab(QWidget):
 
         layout = QVBoxLayout()
         layout.addLayout(form)
-        layout.addWidget(store_group)
         layout.addWidget(advanced)
         layout.addStretch()
         self.setLayout(layout)
@@ -115,26 +92,17 @@ class PlatformTab(QWidget):
         return self._workspace.text().strip() or _default_workspace()
 
     def to_dict(self) -> dict:
-        d: dict = {"platform": self._platform.currentText()}
-        if self._store_redis.isChecked():
-            d["session_store"] = self._redis_url.text().strip() or "redis://localhost:6379"
-        d["assets"] = self._assets_dir.text().strip() or "./assets"
-        d["exif_optimization"] = self._exif.isChecked()
-        return d
+        return {
+            "platform":          self._platform.currentText(),
+            "assets":            self._assets_dir.text().strip() or "./assets",
+            "exif_optimization": self._exif.isChecked(),
+        }
 
     def from_dict(self, data: dict) -> None:
         platform = data.get("platform", "naver")
         idx = self._platform.findText(platform)
         if idx >= 0:
             self._platform.setCurrentIndex(idx)
-
-        store = data.get("session_store", "")
-        if store and store.startswith("redis"):
-            self._store_redis.setChecked(True)
-            self._redis_url.setText(store)
-        else:
-            self._store_file.setChecked(True)
-            self._redis_url.clear()
 
         self._assets_dir.setText(data.get("assets", ""))
         self._exif.setChecked(data.get("exif_optimization", True))
