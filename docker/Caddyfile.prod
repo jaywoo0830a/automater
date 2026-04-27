@@ -1,4 +1,4 @@
-{$DOMAIN} {
+{$AUTOMATOR_DOMAIN} {
     encode gzip
 
     handle /campaigns* {
@@ -78,4 +78,12 @@
         try_files {path} /index.html
         file_server
     }
+}
+
+{$RANKER_DOMAIN} {
+    encode gzip
+
+    # ranker-webapp 컨테이너(자체 nginx + dist + /api/* → ranker-api 내부 프록시)는
+    # docker-compose.prod.yml에서 127.0.0.1:8080:80 으로 루프백 바인딩됨.
+    reverse_proxy 127.0.0.1:8080
 }
