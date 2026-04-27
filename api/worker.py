@@ -90,6 +90,11 @@ class Campaign:
                 except Exception:
                     pass
 
+    def report_path(self) -> Path:
+        """캠페인 리포트 파일의 예상 경로 (CLI `--report` 기본값과 동일)."""
+        cfg = Path(self.config_path)
+        return cfg.with_name(f"{cfg.stem}_report.yaml")
+
     def to_dict(self) -> dict:
         return {
             "id": self.id,
@@ -100,6 +105,7 @@ class Campaign:
             "log_length": len(self.log_lines),
             "created_at": self.created_at,
             "vnc_port": self.vnc_port,
+            "has_report": self.report_path().exists(),
         }
 
 
@@ -408,6 +414,7 @@ class Worker:
             campaign.config_path,
             "--execute",
             "--no-headless",
+            "--report",
         ]
         env = {
             **os.environ,

@@ -105,6 +105,23 @@ export async function cancelCampaign(id) {
   return res.json();
 }
 
+export async function downloadReport(id, filename) {
+  const res = await fetch(`/campaigns/${id}/report`, { headers: headers() });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || res.statusText);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename || `${id}_report.yaml`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 // ---------------------------------------------------------------------------
 // Campaign sessions + execution
 // ---------------------------------------------------------------------------

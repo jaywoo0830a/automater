@@ -136,8 +136,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         nargs="?",
         const="",
         metavar="PATH",
-        help="캠페인 종료 후 발행 기록을 파일로 저장. "
-             "확장자로 포맷 선택(.xlsx / .yaml / .yml). "
+        help="캠페인 종료 후 발행 기록을 YAML 파일로 저장. "
+             "다른 확장자를 넘겨도 .yaml 로 강제. "
              "경로 생략 시 캠페인 YAML 옆에 <config>_report.yaml 로 저장.",
     )
     p.add_argument(

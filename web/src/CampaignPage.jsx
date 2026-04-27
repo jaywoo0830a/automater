@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getCampaign, cancelCampaign, validateCampaign } from "./api";
+import { getCampaign, cancelCampaign, validateCampaign, downloadReport } from "./api";
 import LogViewer from "./LogViewer";
 import SessionSetup from "./SessionSetup";
 
@@ -44,6 +44,14 @@ export default function CampaignPage({ campaignId, onBack, onLogout }) {
     getCampaign(campaignId).then(setCampaign).catch(() => {});
   }
 
+  async function handleDownloadReport() {
+    try {
+      await downloadReport(campaignId, `${campaign.name || campaignId}_report.yaml`);
+    } catch (e) {
+      alert(`리포트 다운로드 실패: ${e.message}`);
+    }
+  }
+
   if (!campaign) {
     return <div className="app"><p>Loading...</p></div>;
   }
@@ -67,6 +75,9 @@ export default function CampaignPage({ campaignId, onBack, onLogout }) {
           )}
           {["queued", "running"].includes(campaign.status) && (
             <button className="btn btn--danger" onClick={handleCancel}>Cancel</button>
+          )}
+          {["completed", "failed", "cancelled"].includes(campaign.status) && campaign.has_report && (
+            <button className="btn btn--ghost" onClick={handleDownloadReport}>리포트 다운로드</button>
           )}
           <button className="btn btn--ghost" onClick={onLogout}>Logout</button>
         </div>

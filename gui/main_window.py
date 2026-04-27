@@ -856,12 +856,12 @@ class MainWindow(QMainWindow):
             return
 
         cfg_path = Path(state.file_path)
-        default_save = str(cfg_path.with_name(f"{cfg_path.stem}_report.xlsx"))
+        default_save = str(cfg_path.with_name(f"{cfg_path.stem}_report.yaml"))
         save_path, _ = QFileDialog.getSaveFileName(
             self,
             "리포트 저장",
             default_save,
-            "Excel (*.xlsx);;YAML (*.yaml *.yml)",
+            "YAML (*.yaml *.yml)",
         )
         if not save_path:
             return

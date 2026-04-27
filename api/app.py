@@ -11,6 +11,7 @@ Endpoints:
     POST   /campaigns/{id}/execute       start execution
     GET    /campaigns/{id}/sessions      session status per account
     POST   /campaigns/{id}/sessions/vnc  VNC login for a campaign account
+    GET    /campaigns/{id}/report        download YAML report (after completion)
     DELETE /campaigns/{id}               cancel
 
     POST   /sessions/vnc                 standalone VNC login
@@ -27,7 +28,7 @@ import logging
 import tempfile
 from pathlib import Path
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 
 logger = logging.getLogger(__name__)
 
@@ -274,6 +275,37 @@ def start_campaign_vnc(campaign_id: str):
 
     session = create_vnc_session(account, config, mode=mode)
     return jsonify(session.to_dict()), 201
+
+
+@app.get("/campaigns/<campaign_id>/report")
+@require_api_key
+def download_report(campaign_id: str):
+    """캠페인 종료 후 생성된 YAML 리포트 다운로드.
+
+    리포트는 CLI 의 --report 플래그로 자동 생성되며 워크스페이스 내
+    <config_stem>_report.yaml 에 저장된다.
+    """
+    campaign = worker.get(campaign_id)
+    if not campaign:
+        return jsonify({"error": "not found"}), 404
+
+    if campaign.status in (Status.PENDING_SESSIONS, Status.QUEUED, Status.RUNNING):
+        return jsonify({
+            "error": "report not ready",
+            "detail": f"campaign status: {campaign.status.value}",
+        }), 409
+
+    report_path = campaign.report_path()
+    if not report_path.exists():
+        return jsonify({"error": "report not found"}), 404
+
+    download_name = f"{campaign.name or campaign.id}_report.yaml"
+    return send_file(
+        report_path,
+        mimetype="application/x-yaml",
+        as_attachment=True,
+        download_name=download_name,
+    )
 
 
 @app.delete("/campaigns/<campaign_id>")

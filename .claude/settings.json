@@ -5,7 +5,12 @@
       "Bash(.venv/bin/python -m pytest tests/unit/automator/test_together_generator.py -v)",
       "Bash(python -c \"import ast; ast.parse\\(open\\('cli/campaign_executor.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
       "Bash(head -n 392 /home/rlawjddn/projects/automator/api/app.py)",
-      "Bash(mv /tmp/app.py.new /home/rlawjddn/projects/automator/api/app.py)"
+      "Bash(mv /tmp/app.py.new /home/rlawjddn/projects/automator/api/app.py)",
+      "Bash(.venv/bin/python -m pytest tests/unit/cli/test_campaign_executor.py tests/unit/cli/test_dsl.py)",
+      "Read(//home/rlawjddn=\"/home/rlawjddn/projects/automator/cli/**)",
+      "Bash(.venv/bin/python -m pytest tests/unit/cli/test_report.py tests/unit/cli/test_campaign_executor.py -v)",
+      "Bash(.venv/bin/python -m pytest tests/unit/api/test_report_download.py -v)",
+      "Bash(.venv/bin/python -m pytest tests/unit/)"
     ],
     "additionalDirectories": [
       "/home/rlawjddn/projects/automator/run",

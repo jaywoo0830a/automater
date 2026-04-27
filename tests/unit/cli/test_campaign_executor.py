@@ -14,6 +14,7 @@ import pytest
 from cli.campaign_executor import (
     CampaignExecutor,
     ExecutionPlan,
+    _extract_keyword,
     assign_weighted,
 )
 
@@ -580,3 +581,109 @@ class TestSequentialSchedule:
         times = [s.schedule_at for s in captured_specs]
         for i in range(1, len(times)):
             assert times[i] > times[i - 1]
+
+
+# ---------------------------------------------------------------------------
+# Keyword extraction (for report)
+# ---------------------------------------------------------------------------
+
+class TestExtractKeyword:
+    """리포트 keyword 필드 추출 — 첫 title 템플릿 기준, pool 토큰 제거."""
+
+    def test_keyword_plus_static_text_with_pool(self):
+        """`{keyword:dong} 수학학원 {pool:hook}` → '가경동 수학학원' (pool 제거)."""
+        config = {
+            "titles": ["{keyword:dong} 수학학원 {pool:hook}"],
+            "keywords": {"dong": ["가경동"]},
+            "pools": {"hook": ["한눈 추천"]},
+        }
+        combo_values = {"dong": "가경동", "hook": "한눈 추천"}
+        assert _extract_keyword(combo_values, config) == "가경동 수학학원"
+
+    def test_multiple_keyword_tokens(self):
+        config = {
+            "titles": ["{keyword:region} {keyword:subject} 학원"],
+            "keywords": {"region": ["강남"], "subject": ["수학"]},
+            "pools": {},
+        }
+        combo_values = {"region": "강남", "subject": "수학"}
+        assert _extract_keyword(combo_values, config) == "강남 수학 학원"
+
+    def test_no_pool_token(self):
+        config = {
+            "titles": ["{keyword:dong} 수학학원 추천"],
+            "keywords": {"dong": ["가경동"]},
+            "pools": {},
+        }
+        assert _extract_keyword({"dong": "가경동"}, config) == "가경동 수학학원 추천"
+
+    def test_strips_index_token(self):
+        config = {
+            "titles": ["{i}. {keyword:dong} 수학학원"],
+            "keywords": {"dong": ["가경동"]},
+            "pools": {},
+        }
+        assert _extract_keyword({"dong": "가경동"}, config) == ". 가경동 수학학원"
+
+    def test_strips_map_token(self):
+        config = {
+            "titles": ["{keyword:dong} 수학학원 {map:dong_hg}"],
+            "keywords": {"dong": ["가경동"]},
+            "pools": {},
+            "maps": {"dong_hg": {}},
+        }
+        combo_values = {"dong": "가경동"}
+        assert _extract_keyword(combo_values, config) == "가경동 수학학원"
+
+    def test_uses_first_title_when_multiple(self):
+        config = {
+            "titles": [
+                "{keyword:dong} 수학학원 {pool:hook}",
+                "{pool:hook} {keyword:dong} 베스트",
+            ],
+            "keywords": {"dong": ["가경동"]},
+            "pools": {"hook": ["추천"]},
+        }
+        combo_values = {"dong": "가경동", "hook": "추천"}
+        assert _extract_keyword(combo_values, config) == "가경동 수학학원"
+
+    def test_collapses_whitespace(self):
+        """pool 제거 후 남는 연속 공백을 하나로 축약하고 양끝 trim."""
+        config = {
+            "titles": ["  {keyword:dong}   수학학원   {pool:hook}  "],
+            "keywords": {"dong": ["가경동"]},
+            "pools": {"hook": ["추천"]},
+        }
+        combo_values = {"dong": "가경동", "hook": "추천"}
+        assert _extract_keyword(combo_values, config) == "가경동 수학학원"
+
+    def test_fallback_when_no_titles(self):
+        """titles 가 없으면 keyword 그룹 값들을 join."""
+        config = {
+            "keywords": {"region": ["강남"], "subject": ["수학"]},
+            "pools": {"hook": ["추천"]},
+        }
+        combo_values = {"region": "강남", "subject": "수학", "hook": "추천"}
+        result = _extract_keyword(combo_values, config)
+        # set 기반이라 순서 비결정적 → 토큰 단위로 검증
+        assert set(result.split()) == {"강남", "수학"}
+
+    def test_fallback_when_template_renders_empty(self):
+        """template 이 pool 만으로 구성돼 있어 렌더 결과가 비면 fallback."""
+        config = {
+            "titles": ["{pool:hook}"],
+            "keywords": {"dong": ["가경동"]},
+            "pools": {"hook": ["추천"]},
+        }
+        combo_values = {"dong": "가경동", "hook": "추천"}
+        assert _extract_keyword(combo_values, config) == "가경동"
+
+    def test_missing_keyword_slug_renders_empty(self):
+        """combo_values 에 없는 keyword slug 는 빈 문자열로 치환."""
+        config = {
+            "titles": ["{keyword:dong} {keyword:missing} 수학학원"],
+            "keywords": {"dong": ["가경동"], "missing": []},
+            "pools": {},
+        }
+        combo_values = {"dong": "가경동"}
+        assert _extract_keyword(combo_values, config) == "가경동 수학학원"

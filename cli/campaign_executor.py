@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import random
+import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -837,11 +838,31 @@ class CampaignExecutor:
             return 60
 
 
-def _extract_keyword(combo_values: dict[str, str], config: dict) -> str:
-    """Build the search keyword from combo values.
+_KEYWORD_TOKEN_RE = re.compile(r"\{keyword:(\w+)\}")
+_NON_KEYWORD_TOKEN_RE = re.compile(r"\{(?!keyword:)[^}]+\}")
+_WHITESPACE_RE = re.compile(r"\s+")
 
-    Joins all keyword-group values (e.g. region + subject).
+
+def _extract_keyword(combo_values: dict[str, str], config: dict) -> str:
+    """랭크 추적용 검색어를 만든다.
+
+    첫 번째 title 템플릿을 기준으로 {keyword:*} 토큰만 치환하고,
+    {pool:*}, {map:*}, {i} 등 나머지 토큰은 제거한 뒤 공백을 정리한다.
+    title 템플릿이 없거나 결과가 비면 keyword 그룹 값들의 join 으로 fallback.
     """
+    titles = config.get("titles") or []
+    if titles:
+        template = str(titles[0])
+
+        def _sub_kw(m: re.Match) -> str:
+            return combo_values.get(m.group(1), "")
+
+        rendered = _KEYWORD_TOKEN_RE.sub(_sub_kw, template)
+        rendered = _NON_KEYWORD_TOKEN_RE.sub("", rendered)
+        rendered = _WHITESPACE_RE.sub(" ", rendered).strip()
+        if rendered:
+            return rendered
+
     keyword_keys = set(config.get("keywords", {}).keys())
     parts = [v for k, v in combo_values.items() if k in keyword_keys]
     return " ".join(parts) if parts else " ".join(combo_values.values())
