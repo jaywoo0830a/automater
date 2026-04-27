@@ -2,17 +2,17 @@
     encode gzip
 
     handle /campaigns* {
-        reverse_proxy localhost:5000 {
+        reverse_proxy localhost:{$AUTOMATOR_API_PORT} {
             flush_interval -1
         }
     }
 
     handle /sessions* {
-        reverse_proxy localhost:5000
+        reverse_proxy localhost:{$AUTOMATOR_API_PORT}
     }
 
     handle /observer* {
-        reverse_proxy localhost:5000
+        reverse_proxy localhost:{$AUTOMATOR_API_PORT}
     }
 
     # Observer VNC websockify

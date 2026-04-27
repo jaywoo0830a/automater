@@ -23,4 +23,5 @@ COPY selectors/ selectors/
 EXPOSE 5000
 EXPOSE 6080-6089
 
-CMD ["python", "-m", "api", "--host", "0.0.0.0", "--port", "5000"]
+# --port 미지정 시 api/__main__.py가 AUTOMATOR_API_PORT 환경변수를 읽음 (없으면 5000)
+CMD ["python", "-m", "api", "--host", "0.0.0.0"]

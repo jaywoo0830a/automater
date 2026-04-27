@@ -2,17 +2,17 @@
     encode gzip
 
     handle /campaigns* {
-        reverse_proxy localhost:5000 {
+        reverse_proxy localhost:{$AUTOMATOR_API_PORT} {
             flush_interval -1
         }
     }
 
     handle /sessions* {
-        reverse_proxy localhost:5000
+        reverse_proxy localhost:{$AUTOMATOR_API_PORT}
     }
 
     handle /observer* {
-        reverse_proxy localhost:5000
+        reverse_proxy localhost:{$AUTOMATOR_API_PORT}
     }
 
     # Observer VNC websockify — /vnc/708x/* → localhost:708x/*
@@ -84,6 +84,6 @@
     encode gzip
 
     # ranker-webapp 컨테이너(자체 nginx + dist + /api/* → ranker-api 내부 프록시)는
-    # docker-compose.prod.yml에서 127.0.0.1:8080:80 으로 루프백 바인딩됨.
-    reverse_proxy 127.0.0.1:8080
+    # docker-compose.prod.yml에서 127.0.0.1:${RANKER_WEBAPP_PORT}:80 으로 루프백 바인딩됨.
+    reverse_proxy 127.0.0.1:{$RANKER_WEBAPP_PORT}
 }
