@@ -12,7 +12,8 @@
       "Bash(.venv/bin/python -m pytest tests/unit/api/test_report_download.py -v)",
       "Bash(.venv/bin/python -m pytest tests/unit/)",
       "Bash(python -m pytest tests/unit/cli/test_dsl.py -x -q)",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "WebFetch(domain:docs.together.ai)"
     ],
     "additionalDirectories": [
       "/home/rlawjddn/projects/automator/run",
