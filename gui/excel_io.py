@@ -220,3 +220,121 @@ def template_map(path: str | Path) -> None:
     ws.append(["", "다산점3.jpg"])
     ws.append(["_default", "default.jpg"])
     wb.save(str(path))
+
+
+# ── tree keywords (parent → children, long format) ───────────────
+
+TREE_COLUMNS = [
+    ("parent", "부모 값"),
+    ("child", "자식 값"),
+]
+
+
+def export_tree(path: str | Path, by: dict[str, list[str]]) -> None:
+    """Tree keyword by-mapping → long-format excel.
+
+    Each (parent, child) pair becomes one row. The parent cell is left
+    blank on continuation rows so a single parent with N children spans
+    N rows visually.
+    """
+    wb, ws = _single_sheet_wb("tree", TREE_COLUMNS)
+    for parent, children in by.items():
+        if not isinstance(children, list) or not children:
+            continue
+        for i, c in enumerate(children):
+            ws.append([parent if i == 0 else "", c])
+    wb.save(str(path))
+
+
+def import_tree(path: str | Path) -> dict[str, list[str]]:
+    """Long-format excel → tree by-mapping.
+
+    Empty parent cell continues the previous parent (same convention as maps).
+    Result preserves first-seen child order; duplicates are dropped.
+    """
+    wb = load_workbook(str(path), read_only=True, data_only=True)
+    ws = wb[wb.sheetnames[0]]
+    result: dict[str, list[str]] = {}
+    last_key = ""
+    for row in _read_rows(ws):
+        key = row[0] if len(row) > 0 else ""
+        val = row[1] if len(row) > 1 else ""
+        if not val:
+            continue
+        if key:
+            last_key = key
+        if not last_key:
+            continue
+        if last_key not in result:
+            result[last_key] = []
+        if val not in result[last_key]:
+            result[last_key].append(val)
+    wb.close()
+    return result
+
+
+def template_tree(path: str | Path) -> None:
+    wb, ws = _single_sheet_wb("tree", TREE_COLUMNS)
+    ws.append(["강남", "대치동"])
+    ws.append(["", "목동"])
+    ws.append(["서초", "반포동"])
+    ws.append(["", "잠원동"])
+    ws.append(["송파", "잠실동"])
+    ws.append(["", "가락동"])
+    ws.append(["_default", "전지역"])
+    wb.save(str(path))
+
+
+# ── variation axes (axis → values, long format) ──────────────────
+
+VARIATION_COLUMNS = [
+    ("axis", "축"),
+    ("value", "값"),
+]
+
+
+def export_variation_axes(path: str | Path, axes: dict[str, list[str]]) -> None:
+    """Variation axes → long-format excel (one row per axis-value pair)."""
+    wb, ws = _single_sheet_wb("axes", VARIATION_COLUMNS)
+    for axis, values in axes.items():
+        if not isinstance(values, list) or not values:
+            continue
+        for i, v in enumerate(values):
+            ws.append([axis if i == 0 else "", v])
+    wb.save(str(path))
+
+
+def import_variation_axes(path: str | Path) -> dict[str, list[str]]:
+    """Long-format excel → variation axes."""
+    wb = load_workbook(str(path), read_only=True, data_only=True)
+    ws = wb[wb.sheetnames[0]]
+    result: dict[str, list[str]] = {}
+    last_axis = ""
+    for row in _read_rows(ws):
+        axis = row[0] if len(row) > 0 else ""
+        val = row[1] if len(row) > 1 else ""
+        if not val:
+            continue
+        if axis:
+            last_axis = axis
+        if not last_axis:
+            continue
+        if last_axis not in result:
+            result[last_axis] = []
+        if val not in result[last_axis]:
+            result[last_axis].append(val)
+    wb.close()
+    return result
+
+
+def template_variation_axes(path: str | Path) -> None:
+    wb, ws = _single_sheet_wb("axes", VARIATION_COLUMNS)
+    ws.append(["intro", "장면 묘사로 시작"])
+    ws.append(["", "독자 질문으로 시작"])
+    ws.append(["", "통계로 시작"])
+    ws.append(["body", "3가지 비교"])
+    ws.append(["", "단계별 절차"])
+    ws.append(["", "장단점 분석"])
+    ws.append(["closing", "체크리스트로 마무리"])
+    ws.append(["", "한 줄 요약"])
+    wb.save(str(path))

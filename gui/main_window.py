@@ -45,6 +45,7 @@ from gui.tabs.publish_tab import PublishTab
 from gui.tabs.style_tab import StyleTab
 from gui.tabs.title_check_tab import TitleCheckTab
 from gui.tabs.run_tab import RunTab
+from gui.tabs.variations_tab import VariationsTab
 
 _NAME_ROLE = Qt.ItemDataRole.UserRole  # 캠페인 고유 이름 저장용
 
@@ -122,6 +123,7 @@ class MainWindow(QMainWindow):
         self._style_tab = StyleTab()
         self._title_check_tab = TitleCheckTab()
         self._run_tab = RunTab()
+        self._variations_tab = VariationsTab()
 
         self._accounts_tab.set_platform_tab(self._platform_tab)
         self._titles_tab.set_token_source(self._get_tokens)
@@ -136,6 +138,7 @@ class MainWindow(QMainWindow):
         self._tabs.addTab(self._title_check_tab, "제목 검사")
         self._tabs.addTab(self._maps_tab, "맵")
         self._tabs.addTab(self._post_tab, "포스트 블록")
+        self._tabs.addTab(self._variations_tab, "변형")
         self._tabs.addTab(self._publish_tab, "발행")
         self._tabs.addTab(self._style_tab, "스타일")
         self._tabs.addTab(self._run_tab, "실행 설정")
@@ -391,6 +394,7 @@ class MainWindow(QMainWindow):
         config.update(self._title_check_tab.to_dict())
         config.update(self._keywords_tab.to_dict())
         config.update(self._maps_tab.to_dict())
+        config.update(self._variations_tab.to_dict())
         config.update(self._post_tab.to_dict())
         config["assets"] = platform_data.get("assets", "./assets")
         config["exif_optimization"] = platform_data.get("exif_optimization", True)
@@ -407,6 +411,7 @@ class MainWindow(QMainWindow):
         self._title_check_tab.from_dict(config)
         self._keywords_tab.from_dict(config)
         self._maps_tab.from_dict(config)
+        self._variations_tab.from_dict(config)
         self._post_tab.from_dict(config)
         self._publish_tab.from_dict(config)
         self._style_tab.from_dict(config)
@@ -431,6 +436,7 @@ class MainWindow(QMainWindow):
         maps_data = self._maps_tab.to_dict()
         for slug in (maps_data.get("maps") or {}):
             tokens.append(f"{{map:{slug}}}")
+        tokens.extend(self._variations_tab.variation_tokens())
         tokens.append("{i}")
         return tokens
 
