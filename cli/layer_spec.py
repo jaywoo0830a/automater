@@ -57,6 +57,7 @@ def parse_layers(
     index:      int = 0,
     rng:        random.Random | None = None,
     maps:       dict[str, str] | None = None,
+    variations: dict[str, dict] | None = None,
 ) -> tuple[Layer, ...]:
     """Parse a `layers:` list from DSL config into structured Layer objects.
 
@@ -68,6 +69,7 @@ def parse_layers(
         index:      1-based combo index for `{i}` token.
         rng:        Optional RNG for deterministic pool selection.
         maps:       Optional resolved map values.
+        variations: Optional variation profiles for {variation:*} tokens.
 
     Returns:
         Tuple of Layer dataclass instances in declared order.
@@ -89,7 +91,9 @@ def parse_layers(
                 f"`layers[{i}]`는 dict여야 합니다. 받은 값: {entry!r}"
             )
 
-        cfg = interpolate_deep(dict(entry), values, pools, index, rng, maps)
+        cfg = interpolate_deep(
+            dict(entry), values, pools, index, rng, maps, variations,
+        )
 
         layer_type = cfg.get("type")
         if not layer_type:

@@ -201,3 +201,52 @@ class TestEffectLayer:
         fx = parse_layers(raw, **_ctx())[0]
         assert fx.region == "border:10"
         assert fx.effect == "grayscale"
+
+
+# ---------------------------------------------------------------------------
+# Variation tokens — must propagate into layer fields
+# ---------------------------------------------------------------------------
+
+class TestVariationTokens:
+
+    VARIATIONS = {
+        "bg": {
+            "axes": {
+                "mood":  ["warm light", "cool tone"],
+                "style": ["aesthetic", "minimalist"],
+            },
+            "template": "{mood} {style}",
+        },
+    }
+
+    def test_variation_in_ai_prompt(self):
+        raw = [{"type": "ai", "prompt": "{keyword:region} {variation:bg.mood}"}]
+        ai = parse_layers(raw, **_ctx(variations=self.VARIATIONS))[0]
+        # The mood axis is picked by the (index, name)-seeded RNG.
+        assert "강남" in ai.prompt
+        assert any(m in ai.prompt for m in ("warm light", "cool tone"))
+
+    def test_full_variation_template_in_ai_prompt(self):
+        raw = [{"type": "ai", "prompt": "BG: {variation:bg}"}]
+        ai = parse_layers(raw, **_ctx(variations=self.VARIATIONS))[0]
+        assert "BG: " in ai.prompt
+        assert any(m in ai.prompt for m in ("warm light", "cool tone"))
+        assert any(s in ai.prompt for s in ("aesthetic", "minimalist"))
+
+    def test_variation_in_image_path(self):
+        # Variation in path token works the same as in prompt.
+        raw = [{"type": "image", "path": "{variation:bg.mood}.png"}]
+        img = parse_layers(raw, **_ctx(variations=self.VARIATIONS))[0]
+        assert any(img.path.endswith(p) for p in ("warm light.png", "cool tone.png"))
+
+    def test_undefined_profile_raises(self):
+        raw = [{"type": "ai", "prompt": "{variation:missing}"}]
+        with pytest.raises(KeyError, match="missing"):
+            parse_layers(raw, **_ctx(variations={}))
+
+    def test_no_variations_kwarg_treats_as_empty(self):
+        # Backward compat: without passing variations, a {variation:*} token
+        # raises a KeyError (consistent with how undefined refs behave).
+        raw = [{"type": "ai", "prompt": "{variation:bg}"}]
+        with pytest.raises(KeyError, match="bg"):
+            parse_layers(raw, **_ctx())

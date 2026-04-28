@@ -637,7 +637,8 @@ def _parse_image(
             effects=_parse_effects(cfg.get("effects")),
             layers=parse_layers(
                 value.get("layers") if isinstance(value, dict) else None,
-                values, pools, images_dir, index, rng=rng, maps=maps,
+                values, pools, images_dir, index,
+                rng=rng, maps=maps, variations=variations,
             ),
             wait_ms=inner_wait or wait_ms,
         )
@@ -697,7 +698,8 @@ def _parse_featured_image(
             filename_keyword=str(cfg.get("filename_keyword", "")),
             effects=_parse_effects(cfg.get("effects")),
             layers=parse_layers(
-                value.get("layers"), values, pools, images_dir, index, rng=rng, maps=maps,
+                value.get("layers"), values, pools, images_dir, index,
+                rng=rng, maps=maps, variations=variations,
             ),
             wait_ms=inner_wait or wait_ms,
         )

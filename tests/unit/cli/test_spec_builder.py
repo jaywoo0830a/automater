@@ -617,4 +617,50 @@ class TestVariations:
         assert "- intro: X" in prompt
         assert "- body: Y" in prompt
 
+    def test_variation_in_featured_image_ai_layer_prompt(self):
+        # Layers go through a separate parse path; the variation token must
+        # propagate there too (regression — was missing before the layer
+        # threading fix).
+        config = {
+            **FULL_CONFIG,
+            "variations": {
+                "bg": {
+                    "axes": {"mood": ["warm light", "cool tone"]},
+                },
+            },
+            "post": [
+                {"featured_image": {
+                    "path": "thumb.jpg",
+                    "layers": [
+                        {"type": "ai",
+                         "prompt": "{keyword:region} {variation:bg.mood}"},
+                    ],
+                }},
+            ],
+        }
+        spec = build_spec(_combo(index=1), config)
+        layer = spec.body[0].blocks[0].layers[0]
+        assert "강남" in layer.prompt
+        assert any(m in layer.prompt for m in ("warm light", "cool tone"))
+
+    def test_variation_in_image_block_layer_prompt(self):
+        # Same fix applies to plain `image` blocks with layers.
+        config = {
+            **FULL_CONFIG,
+            "variations": {
+                "bg": {"axes": {"mood": ["warm light", "cool tone"]}},
+            },
+            "post": [
+                {"image": {
+                    "path": "body.jpg",
+                    "layers": [
+                        {"type": "ai", "prompt": "ph: {variation:bg.mood}"},
+                    ],
+                }},
+            ],
+        }
+        spec = build_spec(_combo(index=1), config)
+        layer = spec.body[0].blocks[0].layers[0]
+        assert any(m in layer.prompt for m in ("warm light", "cool tone"))
+
 
