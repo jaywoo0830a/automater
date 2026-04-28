@@ -1,0 +1,130 @@
+# ── variations 캠페인 ────────────────────────────────────
+# 본문 구성을 매 콤보마다 다르게 만드는 예제.
+#
+# 같은 프롬프트를 그대로 반복 호출하면 모델이 비슷한 골격(도입-본론-마무리)
+# 으로만 글을 만들어 본문 유사도가 높아진다. variations는 도입/본론/마무리
+# 같은 "구성 축"을 풀로 정의하고, 매 콤보마다 각 축에서 무작위로 1개씩 골라
+# prompt 끝에 작성 지침으로 끼워 넣어 골격 자체를 흔든다.
+#
+# 동작 요약:
+#   - 같은 콤보 인덱스 → 항상 같은 픽 (재현 가능)
+#   - 다른 콤보 → 다른 픽 (다양성)
+#   - 같은 콤보 안에서 같은 프로파일을 여러 번 참조 → 콤보-시드 RNG가
+#     진행되어 paragraph마다 다른 픽
+
+platform: naver
+
+accounts:
+  - username: naver_id
+    password: pw
+    blog_id: myblog
+
+titles:
+  - "{keyword:region} {keyword:subject}과외 {pool:hook}"
+
+keywords:
+  region: [강남, 서초, 잠실, 송파]
+  subject: [수학]
+
+pools:
+  hook: [솔직 후기, 학부모 추천, 경험담, 실전 가이드]
+
+# ═══════════════════════════════════════════════════════════
+# variations -- 본문 구성 변형 프로파일
+# ═══════════════════════════════════════════════════════════
+
+variations:
+
+  # 후기형 글의 도입/본론/마무리 풀.
+  # 4 × 5 × 4 = 80 가지 조합.
+  review:
+    axes:
+      intro:
+        - "구체적인 장면 묘사로 시작 (예: 시험 직전의 학생, 첫 수업 풍경)"
+        - "독자가 흔히 겪는 상황을 질문으로 던지며 시작"
+        - "관련 통계나 숫자를 인용하며 시작"
+        - "흔한 오해를 짚고 반박하며 시작"
+      body:
+        - "3가지를 비교하는 형식으로 풀기"
+        - "단계별 절차(1단계 → 2단계 → 3단계)로 풀기"
+        - "장점 / 단점 / 주의점으로 나눠서 풀기"
+        - "구체적인 사례 하나를 깊이 분석하고 교훈을 도출"
+        - "초보자가 헷갈리는 포인트 위주 FAQ 형식으로 풀기"
+      closing:
+        - "체크리스트 형태로 마무리"
+        - "한 줄 핵심 요약으로 마무리"
+        - "독자가 바로 시도할 다음 행동을 제안하며 마무리"
+        - "흔한 실수 한 가지를 경고하며 마무리"
+    template: |
+
+      [작성 지침 - 반드시 따를 것]
+      - 도입: {intro}
+      - 본론: {body}
+      - 마무리: {closing}
+
+  # 톤만 흔드는 단순 프로파일. template 생략 시 자동 포맷 사용.
+  # 자동 포맷 결과 예시:
+  #   [작성 지침]
+  #   - tone: 담담하고 차분한
+  #   - perspective: 학부모 시점에서
+  tone:
+    axes:
+      tone:        ["담담하고 차분한", "열정적이고 활기찬", "분석적이고 전문적인", "친근하고 구어체"]
+      perspective: ["학부모 시점에서", "선생님 시점에서", "학생 시점에서"]
+
+post:
+  - h1: "{keyword:region} {keyword:subject}과외 {pool:hook}"
+
+  - image:
+      path: intro.jpg
+      wait: 2s
+
+  # 본문 1: review 프로파일 전체 삽입.
+  # 매 콤보마다 도입/본론/마무리가 80가지 조합 중 하나로 결정된다.
+  - paragraph: |
+      {keyword:region} {keyword:subject}과외에 대한 학부모 후기를 3000자 정도로 작성해줘.
+      네 번째와 다섯 번째 단락에 '{keyword:region} {keyword:subject}과외'를 한 번씩 자연스럽게 넣어줘.
+
+      {variation:review}
+
+  - divider
+
+  # 본문 2: 같은 프로파일을 다시 참조해도 콤보-시드 RNG가 진행되므로
+  # 보통 본문 1과 다른 axes 조합이 뽑힌다.
+  - paragraph: |
+      이어서 학원과 비교했을 때의 차별점을 자연스럽게 풀어줘.
+
+      {variation:review}
+
+  - divider
+
+  # 본문 3: 도입 축만 뽑아 짧게 톤만 잡아주는 패턴.
+  - paragraph: |
+      이번 단락은 {variation:review.intro} 방식으로 시작해서,
+      학부모가 가장 궁금해하는 비용 / 시간 / 효과를 정리해줘.
+
+  - divider
+
+  # 본문 4: 다른 프로파일(tone)로 톤·시점만 흔들기.
+  - paragraph: |
+      마지막 단락은 행동 유도(CTA)를 자연스럽게 포함해서 마무리해줘.
+
+      {variation:tone}
+
+  - featured_image:
+      path: thumb.jpg
+      overlay_text: "{keyword:region} {keyword:subject}과외"
+      overlay_background: 0.5
+      overlay_position: bottom
+
+assets: ./images
+
+publish:
+  schedule: '++ 30m ~ 60m'
+  tags: [교육, 과외]
+  visibility: public
+
+run:
+  interval: 30s
+  on_failure: continue
+  headless: true

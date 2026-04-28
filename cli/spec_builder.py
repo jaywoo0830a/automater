@@ -141,10 +141,18 @@ def _build_body(
     exif_opt = config.get("exif_optimization", True)
     idx = combo.index
     resolved = resolve_maps(loaded_maps or {}, values)
+    variations = _normalize_variations(config.get("variations"))
+    # Per-combo RNG seeds pool/variation picks: same combo always yields
+    # the same body across reruns, while different combos diverge. Multiple
+    # token references within one combo advance the RNG and pick differently.
+    rng = random.Random(combo.index)
     blocks = []
 
     for entry in post:
-        result = _parse_block(entry, values, pools, images_dir, idx, exif_opt, resolved)
+        result = _parse_block(
+            entry, values, pools, images_dir, idx, exif_opt, resolved,
+            rng=rng, variations=variations,
+        )
         if result is None:
             continue
         if isinstance(result, list):
@@ -153,6 +161,33 @@ def _build_body(
             blocks.append(result)
 
     return [Section(blocks=tuple(blocks))] if blocks else _build_default_body(combo)
+
+
+def _normalize_variations(raw: Any) -> dict[str, dict]:
+    """Normalize the YAML 'variations' section to {name: {axes, template}}.
+
+    Returns an empty dict when not configured. Strict validation lives in
+    config_loader; here we just shape the data for runtime use.
+    """
+    if not raw or not isinstance(raw, dict):
+        return {}
+
+    out: dict[str, dict] = {}
+    for name, profile in raw.items():
+        if not isinstance(profile, dict):
+            continue
+        axes_raw = profile.get("axes") or {}
+        axes: dict[str, list[str]] = {}
+        if isinstance(axes_raw, dict):
+            for axis_name, items in axes_raw.items():
+                if isinstance(items, list):
+                    axes[str(axis_name)] = [str(v) for v in items if str(v).strip()]
+        template = profile.get("template")
+        out[str(name)] = {
+            "axes": axes,
+            "template": str(template) if isinstance(template, str) else None,
+        }
+    return out
 
 
 def _build_default_body(combo: Combo) -> list[Section]:
@@ -251,6 +286,8 @@ def _parse_block(
     index: int,
     exif_opt: bool = True,
     maps: dict[str, str | list[str]] | None = None,
+    rng: random.Random | None = None,
+    variations: dict[str, dict] | None = None,
 ) -> Any:
     """Parse one post block entry.
 
@@ -258,6 +295,7 @@ def _parse_block(
     a map value is a list (1:N expansion).
     """
     maps = maps or {}
+    variations = variations or {}
 
     # Bare string: "divider"
     if isinstance(entry, str):
@@ -281,7 +319,10 @@ def _parse_block(
             # 확장된 각 entry에서 해당 리스트 값은 이미 단일 문자열로 치환됨
             # 나머지 맵의 리스트 값은 첫 번째 요소만 사용
             flat_maps = _flatten_maps(maps)
-            block = _parse_block(expanded_entry, values, pools, images_dir, index, exif_opt, flat_maps)
+            block = _parse_block(
+                expanded_entry, values, pools, images_dir, index, exif_opt,
+                flat_maps, rng=rng, variations=variations,
+            )
             if block is not None:
                 if isinstance(block, list):
                     results.extend(block)
@@ -312,26 +353,29 @@ def _parse_block(
     if heading_match:
         from typing import cast, Literal
         level = cast(Literal[1,2,3,4,5,6], int(heading_match.group(1)))
-        text = interpolate(str(value), values, pools, index, maps=str_maps)
+        text = interpolate(
+            str(value), values, pools, index,
+            rng=rng, maps=str_maps, variations=variations,
+        )
         return HeadingBlock(level=level, text=text, wait_ms=wait_ms)
 
     if block_type == "paragraph":
-        return _parse_paragraph(value, values, pools, index, str_maps, wait_ms)
+        return _parse_paragraph(value, values, pools, index, str_maps, wait_ms, rng, variations)
 
     if block_type == "text":
-        return _parse_text(value, values, pools, images_dir, index, str_maps, wait_ms)
+        return _parse_text(value, values, pools, images_dir, index, str_maps, wait_ms, rng, variations)
 
     if block_type == "image":
-        return _parse_image(value, values, pools, images_dir, index, exif_opt, str_maps, wait_ms)
+        return _parse_image(value, values, pools, images_dir, index, exif_opt, str_maps, wait_ms, rng, variations)
 
     if block_type == "featured_image":
-        return _parse_featured_image(value, values, pools, images_dir, index, exif_opt, str_maps, wait_ms)
+        return _parse_featured_image(value, values, pools, images_dir, index, exif_opt, str_maps, wait_ms, rng, variations)
 
     if block_type == "quote":
-        return _parse_quote(value, values, pools, index, str_maps, wait_ms)
+        return _parse_quote(value, values, pools, index, str_maps, wait_ms, rng, variations)
 
     if block_type == "list":
-        return _parse_list(value, values, pools, index, str_maps, wait_ms)
+        return _parse_list(value, values, pools, index, str_maps, wait_ms, rng, variations)
 
     if block_type == "divider":
         return _parse_divider(value, wait_ms)
@@ -341,7 +385,7 @@ def _parse_block(
         return NewLineBlock(count=count, wait_ms=wait_ms)
 
     if block_type == "ai_section":
-        return _parse_ai_section(value, values, pools, index, str_maps, wait_ms)
+        return _parse_ai_section(value, values, pools, index, str_maps, wait_ms, rng, variations)
 
     return None  # Unknown block type — skip silently
 
@@ -357,8 +401,13 @@ def _parse_paragraph(
     index: int,
     maps: dict[str, str] | None = None,
     wait_ms: int = 0,
+    rng: random.Random | None = None,
+    variations: dict[str, dict] | None = None,
 ) -> ParagraphBlock:
-    prompt = interpolate(str(value), values, pools, index, maps=maps)
+    prompt = interpolate(
+        str(value), values, pools, index,
+        rng=rng, maps=maps, variations=variations,
+    )
     return ParagraphBlock(prompt=prompt, wait_ms=wait_ms)
 
 
@@ -369,6 +418,8 @@ def _parse_ai_section(
     index: int,
     maps: dict[str, str] | None = None,
     wait_ms: int = 0,
+    rng: random.Random | None = None,
+    variations: dict[str, dict] | None = None,
 ) -> AiSectionBlock:
     """ai_section 블록 파싱.
 
@@ -384,7 +435,10 @@ def _parse_ai_section(
             f"ai_section 블록 값은 dict여야 합니다: {value!r}"
         )
 
-    cfg = interpolate_deep(dict(value), values, pools, index, maps=maps)
+    cfg = interpolate_deep(
+        dict(value), values, pools, index,
+        rng=rng, maps=maps, variations=variations,
+    )
 
     prompt = str(cfg.get("prompt", "")).strip()
     if not prompt:
@@ -423,6 +477,8 @@ def _parse_text(
     index: int,
     maps: dict[str, str] | None = None,
     wait_ms: int = 0,
+    rng: random.Random | None = None,
+    variations: dict[str, dict] | None = None,
 ) -> TextBlock:
     """Parse text block — inline text or file content, no AI.
 
@@ -433,11 +489,17 @@ def _parse_text(
     """
     if isinstance(value, str):
         # 인라인 모드 — 토큰 치환 후 content에 저장
-        content = interpolate(value, values, pools, index, maps=maps)
+        content = interpolate(
+            value, values, pools, index,
+            rng=rng, maps=maps, variations=variations,
+        )
         return TextBlock(content=content, wait_ms=wait_ms)
 
     if isinstance(value, dict):
-        cfg = interpolate_deep(dict(value), values, pools, index, maps=maps)
+        cfg = interpolate_deep(
+            dict(value), values, pools, index,
+            rng=rng, maps=maps, variations=variations,
+        )
         inner_wait = _parse_wait(cfg.get("wait"))
 
         filename = str(cfg.get("file", ""))
@@ -546,15 +608,23 @@ def _parse_image(
     exif_opt: bool = True,
     maps: dict[str, str] | None = None,
     wait_ms: int = 0,
+    rng: random.Random | None = None,
+    variations: dict[str, dict] | None = None,
 ) -> ImageBlock:
     if isinstance(value, str):
-        filename = interpolate(value, values, pools, index, maps=maps)
+        filename = interpolate(
+            value, values, pools, index,
+            rng=rng, maps=maps, variations=variations,
+        )
         _require_image_path(filename, "image", values)
         path = _resolve_path(images_dir, filename)
         return ImageBlock(path=path, exif_optimization=exif_opt, wait_ms=wait_ms)
 
     if isinstance(value, dict):
-        cfg = interpolate_deep(dict(value), values, pools, index, maps=maps)
+        cfg = interpolate_deep(
+            dict(value), values, pools, index,
+            rng=rng, maps=maps, variations=variations,
+        )
         raw_filename = str(cfg.get("path", ""))
         _require_image_path(raw_filename, "image", values)
         path = _resolve_path(images_dir, raw_filename)
@@ -567,7 +637,7 @@ def _parse_image(
             effects=_parse_effects(cfg.get("effects")),
             layers=parse_layers(
                 value.get("layers") if isinstance(value, dict) else None,
-                values, pools, images_dir, index, maps=maps,
+                values, pools, images_dir, index, rng=rng, maps=maps,
             ),
             wait_ms=inner_wait or wait_ms,
         )
@@ -587,15 +657,23 @@ def _parse_featured_image(
     exif_opt: bool = True,
     maps: dict[str, str] | None = None,
     wait_ms: int = 0,
+    rng: random.Random | None = None,
+    variations: dict[str, dict] | None = None,
 ) -> FeaturedImageBlock:
     if isinstance(value, str):
-        filename = interpolate(value, values, pools, index, maps=maps)
+        filename = interpolate(
+            value, values, pools, index,
+            rng=rng, maps=maps, variations=variations,
+        )
         _require_image_path(filename, "featured_image", values)
         path = _resolve_path(images_dir, filename)
         return FeaturedImageBlock(path=path, exif_optimization=exif_opt, wait_ms=wait_ms)
 
     if isinstance(value, dict):
-        cfg = interpolate_deep(dict(value), values, pools, index, maps=maps)
+        cfg = interpolate_deep(
+            dict(value), values, pools, index,
+            rng=rng, maps=maps, variations=variations,
+        )
         raw_filename = str(cfg.get("path", ""))
         _require_image_path(raw_filename, "featured_image", values)
         path = _resolve_path(images_dir, raw_filename)
@@ -619,7 +697,7 @@ def _parse_featured_image(
             filename_keyword=str(cfg.get("filename_keyword", "")),
             effects=_parse_effects(cfg.get("effects")),
             layers=parse_layers(
-                value.get("layers"), values, pools, images_dir, index, maps=maps,
+                value.get("layers"), values, pools, images_dir, index, rng=rng, maps=maps,
             ),
             wait_ms=inner_wait or wait_ms,
         )
@@ -637,13 +715,21 @@ def _parse_quote(
     index: int,
     maps: dict[str, str] | None = None,
     wait_ms: int = 0,
+    rng: random.Random | None = None,
+    variations: dict[str, dict] | None = None,
 ) -> QuoteBlock:
     if isinstance(value, str):
-        text = interpolate(value, values, pools, index, maps=maps)
+        text = interpolate(
+            value, values, pools, index,
+            rng=rng, maps=maps, variations=variations,
+        )
         return QuoteBlock(text=text, wait_ms=wait_ms)
 
     if isinstance(value, dict):
-        cfg = interpolate_deep(dict(value), values, pools, index, maps=maps)
+        cfg = interpolate_deep(
+            dict(value), values, pools, index,
+            rng=rng, maps=maps, variations=variations,
+        )
         return QuoteBlock(
             text=str(cfg.get("text", "")),
             attribution=str(cfg.get("attribution", "")),
@@ -704,14 +790,23 @@ def _parse_list(
     index: int,
     maps: dict[str, str] | None = None,
     wait_ms: int = 0,
+    rng: random.Random | None = None,
+    variations: dict[str, dict] | None = None,
 ) -> ListBlock:
     if isinstance(value, list):
         items = tuple(
-            interpolate(str(item), values, pools, index, maps=maps) for item in value
+            interpolate(
+                str(item), values, pools, index,
+                rng=rng, maps=maps, variations=variations,
+            )
+            for item in value
         )
         return ListBlock(items=items, wait_ms=wait_ms)
     if isinstance(value, dict):
-        cfg = interpolate_deep(dict(value), values, pools, index, maps=maps)
+        cfg = interpolate_deep(
+            dict(value), values, pools, index,
+            rng=rng, maps=maps, variations=variations,
+        )
         raw_items = cfg.get("items", [])
         items = tuple(str(item) for item in raw_items) if isinstance(raw_items, list) else ()
         ordered = bool(cfg.get("ordered", False))

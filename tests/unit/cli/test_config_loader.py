@@ -727,3 +727,122 @@ class TestTitleCheckValidation:
         }
         with pytest.raises(ConfigError, match="pool"):
             load_config(write_yaml(data))
+
+
+# ---------------------------------------------------------------------------
+# variations
+# ---------------------------------------------------------------------------
+
+VARIATION_BASE = {
+    **MINIMAL,
+    "post": [
+        {"paragraph": "본문 ... {variation:blog_review}"},
+    ],
+    "variations": {
+        "blog_review": {
+            "axes": {
+                "intro":   ["장면 묘사", "독자 질문"],
+                "body":    ["3가지 비교", "단계별 절차"],
+                "closing": ["체크리스트", "한 줄 요약"],
+            },
+        },
+    },
+}
+
+
+class TestVariations:
+
+    def test_loads_with_template(self, write_yaml):
+        data = {
+            **VARIATION_BASE,
+            "variations": {
+                "blog_review": {
+                    **VARIATION_BASE["variations"]["blog_review"],
+                    "template": "도입={intro} 본론={body}",
+                },
+            },
+            "post": [{"paragraph": "{variation:blog_review}"}],
+        }
+        config = load_config(write_yaml(data))
+        assert "blog_review" in config["variations"]
+
+    def test_default_empty(self, write_yaml):
+        config = load_config(write_yaml(MINIMAL))
+        assert config["variations"] == {}
+
+    def test_axis_token_resolves(self, write_yaml):
+        data = {
+            **VARIATION_BASE,
+            "post": [{"paragraph": "프롬프트 {variation:blog_review.intro}"}],
+        }
+        config = load_config(write_yaml(data))
+        assert "blog_review" in config["variations"]
+
+    def test_undefined_profile_token_raises(self, write_yaml):
+        data = {
+            **VARIATION_BASE,
+            "post": [{"paragraph": "{variation:does_not_exist}"}],
+        }
+        with pytest.raises(ConfigError, match="undefined variation profile"):
+            load_config(write_yaml(data))
+
+    def test_undefined_axis_token_raises(self, write_yaml):
+        data = {
+            **VARIATION_BASE,
+            "post": [{"paragraph": "{variation:blog_review.does_not_exist}"}],
+        }
+        with pytest.raises(ConfigError, match="undefined axis"):
+            load_config(write_yaml(data))
+
+    def test_axes_must_be_dict(self, write_yaml):
+        data = {
+            **MINIMAL,
+            "variations": {"blog_review": {"axes": "not a dict"}},
+        }
+        with pytest.raises(ConfigError, match="axes"):
+            load_config(write_yaml(data))
+
+    def test_axes_must_be_non_empty(self, write_yaml):
+        data = {
+            **MINIMAL,
+            "variations": {"blog_review": {"axes": {}}},
+        }
+        with pytest.raises(ConfigError, match="axes"):
+            load_config(write_yaml(data))
+
+    def test_axis_items_must_be_list(self, write_yaml):
+        data = {
+            **MINIMAL,
+            "variations": {"blog_review": {"axes": {"intro": "single string"}}},
+        }
+        with pytest.raises(ConfigError, match="intro"):
+            load_config(write_yaml(data))
+
+    def test_axis_items_must_be_non_empty(self, write_yaml):
+        data = {
+            **MINIMAL,
+            "variations": {"blog_review": {"axes": {"intro": []}}},
+        }
+        with pytest.raises(ConfigError, match="intro"):
+            load_config(write_yaml(data))
+
+    def test_template_unknown_placeholder_raises(self, write_yaml):
+        data = {
+            **MINIMAL,
+            "variations": {
+                "blog_review": {
+                    "axes": {"intro": ["A"]},
+                    "template": "도입={intro} 본론={body}",  # body 미정의
+                },
+            },
+        }
+        with pytest.raises(ConfigError, match="body"):
+            load_config(write_yaml(data))
+
+    def test_profile_must_be_dict(self, write_yaml):
+        data = {
+            **MINIMAL,
+            "variations": {"blog_review": "not a dict"},
+        }
+        with pytest.raises(ConfigError, match="blog_review"):
+            load_config(write_yaml(data))

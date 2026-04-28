@@ -10,7 +10,9 @@
       "Read(//home/rlawjddn=\"/home/rlawjddn/projects/automator/cli/**)",
       "Bash(.venv/bin/python -m pytest tests/unit/cli/test_report.py tests/unit/cli/test_campaign_executor.py -v)",
       "Bash(.venv/bin/python -m pytest tests/unit/api/test_report_download.py -v)",
-      "Bash(.venv/bin/python -m pytest tests/unit/)"
+      "Bash(.venv/bin/python -m pytest tests/unit/)",
+      "Bash(python -m pytest tests/unit/cli/test_dsl.py -x -q)",
+      "Bash(git stash *)"
     ],
     "additionalDirectories": [
       "/home/rlawjddn/projects/automator/run",

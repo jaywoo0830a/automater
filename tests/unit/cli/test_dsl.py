@@ -245,3 +245,131 @@ class TestMapToken:
             maps={"photo": "gangnam.jpg"},
         )
         assert result == {"src": "gangnam.jpg", "alt": "강남"}
+
+
+# ---------------------------------------------------------------------------
+# {variation:name} / {variation:name.axis}
+# ---------------------------------------------------------------------------
+
+def _profile(template: str | None = None, **axes: list[str]) -> dict:
+    return {"axes": dict(axes), "template": template}
+
+
+class TestVariationToken:
+
+    def _profiles(self, template: str | None = None) -> dict:
+        return {
+            "blog": _profile(
+                template,
+                intro=["A_intro", "B_intro"],
+                body=["A_body", "B_body"],
+                closing=["A_closing", "B_closing"],
+            )
+        }
+
+    def test_axis_pick(self):
+        result = interpolate(
+            "{variation:blog.intro}", {}, {},
+            variations=self._profiles(),
+            rng=random.Random(0),
+        )
+        assert result in ("A_intro", "B_intro")
+
+    def test_template_substitution(self):
+        template = "도입={intro} 본론={body} 마무리={closing}"
+        result = interpolate(
+            "{variation:blog}", {}, {},
+            variations=self._profiles(template=template),
+            rng=random.Random(0),
+        )
+        assert result.startswith("도입=")
+        assert "본론=" in result
+        assert "마무리=" in result
+
+    def test_auto_format_when_no_template(self):
+        result = interpolate(
+            "{variation:blog}", {}, {},
+            variations=self._profiles(),
+            rng=random.Random(0),
+        )
+        assert "[작성 지침]" in result
+        assert "- intro:" in result
+        assert "- body:" in result
+        assert "- closing:" in result
+
+    def test_undefined_profile_raises(self):
+        with pytest.raises(KeyError, match="missing"):
+            interpolate("{variation:missing}", {}, {}, variations={})
+
+    def test_undefined_axis_raises(self):
+        with pytest.raises(KeyError, match="zzz"):
+            interpolate(
+                "{variation:blog.zzz}", {}, {},
+                variations=self._profiles(),
+            )
+
+    def test_seeded_default_rng_is_deterministic_per_combo(self):
+        # No rng passed → falls back to Random((index, name))
+        a = interpolate(
+            "{variation:blog.intro}", {}, {},
+            variations=self._profiles(), index=7,
+        )
+        b = interpolate(
+            "{variation:blog.intro}", {}, {},
+            variations=self._profiles(), index=7,
+        )
+        assert a == b
+        # Different index can yield different pick (probabilistic, but axis has 2 values)
+        seen = {a}
+        for idx in range(1, 30):
+            seen.add(interpolate(
+                "{variation:blog.intro}", {}, {},
+                variations=self._profiles(), index=idx,
+            ))
+        assert len(seen) > 1, "different combo indexes should produce different picks"
+
+    def test_shared_rng_advances_between_calls(self):
+        # Two refs in one combo with shared rng → advances state, can produce
+        # different picks. Using a 2-value axis we just verify that across many
+        # combos, paired calls don't degenerate to always-equal.
+        rng = random.Random(123)
+        seen_pairs: set[tuple[str, str]] = set()
+        for _ in range(20):
+            a = interpolate(
+                "{variation:blog.intro}", {}, {},
+                variations=self._profiles(), rng=rng,
+            )
+            b = interpolate(
+                "{variation:blog.intro}", {}, {},
+                variations=self._profiles(), rng=rng,
+            )
+            seen_pairs.add((a, b))
+        assert any(a != b for a, b in seen_pairs)
+
+    def test_empty_axes_returns_empty(self):
+        variations = {"empty": {"axes": {}, "template": None}}
+        assert interpolate("{variation:empty}", {}, {}, variations=variations) == ""
+
+    def test_template_with_keyword_inside_does_not_interpolate(self):
+        # Variation templates intentionally don't recurse — {keyword:*} inside
+        # the template stays literal. Document this behavior.
+        variations = {
+            "p": _profile(template="hi {keyword:r} {intro}", intro=["X"]),
+        }
+        result = interpolate(
+            "{variation:p}", {"r": "강남"}, {},
+            variations=variations, rng=random.Random(0),
+        )
+        assert "{keyword:r}" in result
+        assert "X" in result
+
+
+class TestInterpolateDeepWithVariations:
+
+    def test_dict_pass_through(self):
+        variations = {"p": _profile(intro=["only"])}
+        data = {"prompt": "ping {variation:p.intro}"}
+        result = interpolate_deep(
+            data, {}, {}, variations=variations, rng=random.Random(0),
+        )
+        assert result == {"prompt": "ping only"}

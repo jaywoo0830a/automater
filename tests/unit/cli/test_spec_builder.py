@@ -506,3 +506,115 @@ class TestAiSectionParse:
         assert spec.body[0].blocks[0].structure == ("heading", "list")
 
 
+# ---------------------------------------------------------------------------
+# variations — composition DSL
+# ---------------------------------------------------------------------------
+
+class TestVariations:
+
+    BASE_PROFILES = {
+        "blog": {
+            "axes": {
+                "intro":   ["A_intro", "B_intro"],
+                "body":    ["A_body", "B_body"],
+                "closing": ["A_closing", "B_closing"],
+            },
+            "template": "도입={intro} 본론={body} 마무리={closing}",
+        }
+    }
+
+    def test_paragraph_template_substituted(self):
+        config = {
+            **FULL_CONFIG,
+            "variations": self.BASE_PROFILES,
+            "post": [{"paragraph": "본문 ... {variation:blog}"}],
+        }
+        spec = build_spec(_combo(index=1), config)
+        prompt = spec.body[0].blocks[0].prompt
+        assert prompt.startswith("본문 ... 도입=")
+        assert "본론=" in prompt
+        assert "마무리=" in prompt
+
+    def test_paragraph_axis_only(self):
+        config = {
+            **FULL_CONFIG,
+            "variations": self.BASE_PROFILES,
+            "post": [{"paragraph": "intro={variation:blog.intro}"}],
+        }
+        spec = build_spec(_combo(index=1), config)
+        prompt = spec.body[0].blocks[0].prompt
+        assert prompt.startswith("intro=")
+        # The literal axis value is one of the two
+        suffix = prompt.split("=", 1)[1]
+        assert suffix in ("A_intro", "B_intro")
+
+    def test_same_combo_reproducible(self):
+        config = {
+            **FULL_CONFIG,
+            "variations": self.BASE_PROFILES,
+            "post": [{"paragraph": "{variation:blog}"}],
+        }
+        a = build_spec(_combo(index=42), config).body[0].blocks[0].prompt
+        b = build_spec(_combo(index=42), config).body[0].blocks[0].prompt
+        assert a == b
+
+    def test_different_combos_can_diverge(self):
+        config = {
+            **FULL_CONFIG,
+            "variations": self.BASE_PROFILES,
+            "post": [{"paragraph": "{variation:blog}"}],
+        }
+        prompts = {
+            build_spec(_combo(index=i), config).body[0].blocks[0].prompt
+            for i in range(1, 30)
+        }
+        # 2*2*2 = 8 possible templates; over 29 combos we should see >1
+        assert len(prompts) > 1
+
+    def test_multiple_paragraphs_share_combo_rng(self):
+        # Both paragraphs reference the same profile in one combo. With the
+        # combo-seeded shared RNG, calls advance state and may pick differently.
+        config = {
+            **FULL_CONFIG,
+            "variations": self.BASE_PROFILES,
+            "post": [
+                {"paragraph": "p1: {variation:blog.intro}"},
+                {"paragraph": "p2: {variation:blog.intro}"},
+            ],
+        }
+        # Check across many combo indexes that we don't get only-equal pairs.
+        non_equal = 0
+        for i in range(1, 30):
+            spec = build_spec(_combo(index=i), config)
+            p1 = spec.body[0].blocks[0].prompt
+            p2 = spec.body[0].blocks[1].prompt
+            if p1.split(": ", 1)[1] != p2.split(": ", 1)[1]:
+                non_equal += 1
+        assert non_equal > 0
+
+    def test_no_variations_section_works(self):
+        # A spec with no variations should build cleanly when the prompt
+        # also has no {variation:*} tokens.
+        config = {**FULL_CONFIG}
+        config.pop("variations", None)
+        spec = build_spec(_combo(index=1), config)
+        assert isinstance(spec.body[0].blocks[1], ParagraphBlock)
+
+    def test_auto_format_when_template_omitted(self):
+        config = {
+            **FULL_CONFIG,
+            "variations": {
+                "blog": {
+                    "axes": {"intro": ["X"], "body": ["Y"]},
+                    # template omitted
+                }
+            },
+            "post": [{"paragraph": "{variation:blog}"}],
+        }
+        spec = build_spec(_combo(index=1), config)
+        prompt = spec.body[0].blocks[0].prompt
+        assert "[작성 지침]" in prompt
+        assert "- intro: X" in prompt
+        assert "- body: Y" in prompt
+
+

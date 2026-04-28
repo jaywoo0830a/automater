@@ -108,6 +108,7 @@ def _normalize(raw: dict[str, Any]) -> dict[str, Any]:
     """Normalize optional keys to empty defaults."""
     config = dict(raw)
     config.setdefault("pools", {})
+    config.setdefault("variations", {})
     config.setdefault("post", [])
     config.setdefault("assets", ".")
     config.setdefault("publish", {})
@@ -196,6 +197,7 @@ def _validate_semantic(config: dict[str, Any]) -> None:
     keywords = config.get("keywords", {})
     pools = config.get("pools", {})
     maps = config.get("maps", {}) or {}
+    variations = config.get("variations", {}) or {}
 
     # Collect all DSL token references from titles and post
     all_templates = list(config.get("titles", []))
@@ -229,16 +231,45 @@ def _validate_semantic(config: dict[str, Any]) -> None:
                     f"Token '{{map:{slug}}}' references undefined map. "
                     f"Available: {sorted(maps.keys())}"
                 )
+            if token_type == "variation":
+                _validate_variation_token_ref(slug, variations)
 
     _validate_accounts(config)
     _validate_maps(config, keywords)
     _validate_pools(config)
+    _validate_variations(config)
     _validate_post_blocks(config)
     _validate_post_image_paths(config)
     _validate_publish(config)
     _validate_run(config)
     _validate_style(config)
     _validate_title_check(config, pools)
+
+
+def _validate_variation_token_ref(slug: str, variations: dict[str, Any]) -> None:
+    """Resolve a {variation:name} or {variation:name.axis} token reference.
+
+    Both the profile name and (when present) the axis must be defined.
+    """
+    if "." in slug:
+        name, axis = slug.split(".", 1)
+    else:
+        name, axis = slug, None
+
+    if name not in variations:
+        raise ConfigError(
+            f"Token '{{variation:{slug}}}' references undefined variation profile. "
+            f"Available: {sorted(variations.keys())}"
+        )
+
+    if axis is not None:
+        profile = variations[name]
+        axes = (profile.get("axes") or {}) if isinstance(profile, dict) else {}
+        if axis not in axes:
+            raise ConfigError(
+                f"Token '{{variation:{slug}}}' references undefined axis '{axis}' "
+                f"on profile '{name}'. Available axes: {sorted(axes.keys())}"
+            )
 
 
 _IMAGE_BLOCK_TYPES = ("image", "featured_image")
@@ -483,6 +514,89 @@ def _validate_pools(config: dict[str, Any]) -> None:
                 raise ConfigError(
                     f"pools['{slug}'][{j}]가 빈 문자열입니다."
                 )
+
+
+_VARIATION_TEMPLATE_PLACEHOLDER_RE = re.compile(r"\{(\w+)\}")
+
+
+def _validate_variations(config: dict[str, Any]) -> None:
+    """variations 엄격 검증.
+
+    형식::
+
+        variations:
+          blog_review:
+            axes:
+              intro:   ["...", "..."]
+              body:    ["...", "..."]
+              closing: ["...", "..."]
+            template: |          # 선택. 생략 시 자동 포맷.
+              [작성 지침]
+              - 도입: {intro}
+              - 본론: {body}
+              - 마무리: {closing}
+
+    - profile은 dict
+    - axes는 비어있지 않은 dict, 각 축은 비어있지 않은 문자열 리스트
+    - template이 있으면 문자열, 그 안의 {axis} 자리표시자는 모두 axes에 정의돼야 함
+    """
+    variations = config.get("variations")
+    if variations is None or variations == {}:
+        return
+    if not isinstance(variations, dict):
+        raise ConfigError(
+            f"'variations'는 매핑이어야 합니다: {type(variations).__name__}"
+        )
+
+    for name, profile in variations.items():
+        loc = f"variations['{name}']"
+        if not isinstance(name, str) or not name.strip():
+            raise ConfigError(f"variations 프로파일 이름이 비어있습니다: {name!r}")
+        if not isinstance(profile, dict):
+            raise ConfigError(
+                f"{loc}는 dict여야 합니다 (axes, optional template 포함): {profile!r}"
+            )
+
+        axes = profile.get("axes")
+        if not isinstance(axes, dict) or not axes:
+            raise ConfigError(
+                f"{loc}.axes는 비어있지 않은 매핑이어야 합니다: {axes!r}. "
+                f"예: axes: {{intro: [...], body: [...]}}"
+            )
+
+        for axis_name, items in axes.items():
+            axis_loc = f"{loc}.axes['{axis_name}']"
+            if not isinstance(axis_name, str) or not axis_name.strip():
+                raise ConfigError(f"{loc}.axes의 축 이름이 비어있습니다: {axis_name!r}")
+            if not _VARIATION_TEMPLATE_PLACEHOLDER_RE.fullmatch("{" + axis_name + "}"):
+                # 축 이름은 {axis} 자리표시자로 쓰이므로 영숫자/_ 만 허용
+                raise ConfigError(
+                    f"{loc}.axes의 축 이름은 영숫자와 '_'만 허용됩니다: {axis_name!r}"
+                )
+            if not isinstance(items, list) or not items:
+                raise ConfigError(
+                    f"{axis_loc}는 비어있지 않은 리스트여야 합니다: {items!r}"
+                )
+            for j, item in enumerate(items):
+                if not isinstance(item, (str, int, float)):
+                    raise ConfigError(
+                        f"{axis_loc}[{j}]는 문자열이어야 합니다: {item!r}"
+                    )
+                if not str(item).strip():
+                    raise ConfigError(f"{axis_loc}[{j}]가 빈 문자열입니다.")
+
+        template = profile.get("template")
+        if template is not None:
+            if not isinstance(template, str):
+                raise ConfigError(
+                    f"{loc}.template은 문자열이어야 합니다: {template!r}"
+                )
+            for placeholder in _VARIATION_TEMPLATE_PLACEHOLDER_RE.findall(template):
+                if placeholder not in axes:
+                    raise ConfigError(
+                        f"{loc}.template이 정의되지 않은 축 '{{{placeholder}}}'을 참조합니다. "
+                        f"정의된 축: {sorted(axes.keys())}"
+                    )
 
 
 _HEADING_RE = re.compile(r"^h([1-6])$")

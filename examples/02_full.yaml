@@ -36,11 +36,32 @@ pools:
   prefix: [검증된, 전문, 추천]
   suffix: [강력 추천, 즉시 가능]
 
+# ── variations: 본문 구성 다양화 프로파일 ──
+# 같은 프롬프트를 반복 호출하면 본문이 단조로워진다.
+# 매 콤보마다 각 축에서 1개씩 뽑아 작성 지침으로 끼워 넣는다.
+variations:
+  review:
+    axes:
+      intro:   ["구체적인 장면 묘사로 시작", "독자가 흔히 겪는 상황 질문으로 시작",
+                "관련 통계나 숫자로 시작", "흔한 오해를 짚고 반박하며 시작"]
+      body:    ["3가지를 비교하는 형식", "단계별 절차(1→2→3)로 풀기",
+                "장점/단점/주의점으로 나눠서", "사례 하나를 깊이 분석하고 교훈 도출"]
+      closing: ["체크리스트로 마무리", "한 줄 핵심 요약으로 닫기",
+                "독자가 바로 시도할 다음 행동 제안"]
+    template: |
+
+      [작성 지침 - 반드시 따를 것]
+      - 도입: {intro}
+      - 본론: {body}
+      - 마무리: {closing}
+
 title_check: true
 
 post:
   - h2: "{keyword:region} {keyword:subject} 과외 소개"
-  - paragraph: "{keyword:region} {keyword:subject} 과외를 자연스럽게 소개해줘"
+  - paragraph: |
+      {keyword:region} {keyword:subject} 과외를 자연스럽게 소개해줘.
+      {variation:review}
   - image:
       path: body.jpg
       link: "tel:01012345678"
@@ -61,7 +82,9 @@ post:
       auto_prompt: true                    # structure 가이드를 프롬프트에 자동 추가
 
   - divider: 5                            # 구분선 스타일 1~8 (기본 2)
-  - paragraph: "{keyword:region} {keyword:subject} 과외 홍보 마무리. 행동 유도 포함"
+  - paragraph: |
+      {keyword:region} {keyword:subject} 과외 홍보 마무리. 행동 유도 포함.
+      {variation:review}
   - featured_image:
       path: thumb.jpg
       link: "tel:01012345678"
