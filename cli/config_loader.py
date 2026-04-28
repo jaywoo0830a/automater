@@ -1121,6 +1121,7 @@ _FROM_PAT = r"(\s+from\s+(\+\s*\d+\s*[smhd](\s+\d{1,2}:\d{2})?|\d{4}-\d{2}-\d{2}
 _SCHEDULE_RE = re.compile(
     r"^(now|immediate|"
     r"now\s*\+\s*\d+\s*[smhd](\s*~\s*\d+\s*[smhd])?|"
+    r"at\s+\d{4}-\d{2}-\d{2}\s+\d{1,2}|"
     r"\+\+(\s*\d+\s*[smhd](\s*~\s*\d+\s*[smhd])?)?" + _FROM_PAT + r")\s*$",
     re.IGNORECASE,
 )
@@ -1146,6 +1147,7 @@ def _validate_publish(config: dict[str, Any]) -> None:
                 raise ConfigError(
                     f"publish.schedule 형식이 잘못되었습니다: {sch!r}. "
                     f"허용 형식: 'now', 'now + 15m', 'now + 15m ~ 30m', "
+                    f"'at 2026-05-28 09', "
                     f"'++', '++ 15m', '++ 15m ~ 30m', "
                     f"'++ 15m from +1d', '++ 15m from +1d 09:00' (단위: s/m/h/d)"
                 )

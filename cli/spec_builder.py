@@ -844,6 +844,12 @@ _KST = timezone(timedelta(hours=9))
 
 _UNIT_MAP = {"s": 1, "m": 60, "h": 3600, "d": 86400}
 
+# at YYYY-MM-DD HH  -- absolute fixed datetime, all combos publish at the same moment
+_AT_RE = re.compile(
+    r"^at\s+(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2})\s*$",
+    re.IGNORECASE,
+)
+
 # now + 15m ~ 30m  (range with unit on each side)
 _RANGE_RE = re.compile(
     r"now\s*\+\s*(\d+)\s*([smhd])\s*~\s*(\d+)\s*([smhd])",
@@ -892,6 +898,8 @@ def parse_schedule(raw: Any) -> dict[str, Any]:
         'now + 1h'                     → scheduled, at = now + 1 hour
         'now + 1d'                     → scheduled, at = now + 1 day
         'now + 15m ~ 30m'             → scheduled, at = now + random(15min, 30min)
+        'at 2026-05-28 09'             → scheduled, fixed absolute (year-month-day hour, KST).
+                                          Every combo gets the same exact timestamp.
         '++'                           → sequential, default 15m interval
         '++ 15m'                       → sequential, fixed 15m interval
         '++ 15m ~ 30m'                 → sequential, random 15m~30m interval per post
@@ -907,6 +915,13 @@ def parse_schedule(raw: Any) -> dict[str, Any]:
 
     if s.lower() in ("now", "immediate", ""):
         return {"mode": "immediate", "at": None}
+
+    # at <absolute> -- fixed datetime, all combos publish at exactly the same moment
+    m = _AT_RE.match(s)
+    if m:
+        y, mo, d, h = (int(g) for g in m.groups())
+        at = datetime(y, mo, d, h, 0, 0, tzinfo=_KST)
+        return {"mode": "scheduled", "at": at}
 
     # ++ sequential modes
     if s.startswith("++"):

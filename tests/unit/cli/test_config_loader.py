@@ -591,9 +591,24 @@ class TestPublishStrict:
             load_config(write_yaml(data))
 
     def test_valid_schedules(self, write_yaml):
-        for s in ("now", "now + 15m", "now + 15m ~ 30m", "++", "++ 10m", "++ 10m ~ 30m"):
+        for s in (
+            "now", "now + 15m", "now + 15m ~ 30m",
+            "++", "++ 10m", "++ 10m ~ 30m",
+            "at 2026-05-28 09", "at 2026-05-28 9", "at 2026-12-01 23",
+        ):
             data = {**MINIMAL, "publish": {"schedule": s}}
             load_config(write_yaml(data))  # 전부 통과
+
+    def test_at_with_minutes_rejected(self, write_yaml):
+        # 'at' is intentionally hour-only; HH:MM should fail validation.
+        data = {**MINIMAL, "publish": {"schedule": "at 2026-05-28 09:00"}}
+        with pytest.raises(ConfigError, match="schedule"):
+            load_config(write_yaml(data))
+
+    def test_at_without_hour_rejected(self, write_yaml):
+        data = {**MINIMAL, "publish": {"schedule": "at 2026-05-28"}}
+        with pytest.raises(ConfigError, match="schedule"):
+            load_config(write_yaml(data))
 
     def test_tags_must_be_list(self, write_yaml):
         data = {**MINIMAL, "publish": {"tags": "교육,과외"}}

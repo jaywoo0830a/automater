@@ -137,6 +137,60 @@ class TestRandomRange:
 
 
 # ---------------------------------------------------------------------------
+# at <YYYY-MM-DD HH> -- absolute fixed datetime
+# ---------------------------------------------------------------------------
+
+class TestAtAbsolute:
+
+    def test_basic(self):
+        result = parse_schedule("at 2026-05-28 09")
+        assert result["mode"] == "scheduled"
+        at = result["at"]
+        assert at.year == 2026
+        assert at.month == 5
+        assert at.day == 28
+        assert at.hour == 9
+        assert at.minute == 0
+        assert at.second == 0
+
+    def test_kst_timezone(self):
+        result = parse_schedule("at 2026-05-28 09")
+        assert result["at"].utcoffset() == timedelta(hours=9)
+
+    def test_single_digit_hour(self):
+        result = parse_schedule("at 2026-05-28 9")
+        assert result["at"].hour == 9
+
+    def test_two_digit_hour(self):
+        result = parse_schedule("at 2026-05-28 23")
+        assert result["at"].hour == 23
+
+    def test_case_insensitive(self):
+        a = parse_schedule("AT 2026-05-28 09")
+        b = parse_schedule("at 2026-05-28 09")
+        assert a["at"] == b["at"]
+
+    def test_extra_whitespace_tolerant(self):
+        a = parse_schedule("at  2026-05-28  09")
+        b = parse_schedule("at 2026-05-28 09")
+        assert a["at"] == b["at"]
+
+    def test_all_combos_get_same_at(self):
+        # Calling parse_schedule repeatedly must yield exactly the same
+        # timestamp — this is the property that makes 'at' useful for
+        # batched scheduling of N combos.
+        seen = {parse_schedule("at 2026-05-28 09")["at"] for _ in range(50)}
+        assert len(seen) == 1
+
+    def test_minute_form_not_accepted(self):
+        # '시간만' — at intentionally does not parse YYYY-MM-DD HH:MM.
+        # Falls through and is treated as immediate (parse_schedule's
+        # fallback). config_loader's _SCHEDULE_RE will reject it.
+        result = parse_schedule("at 2026-05-28 09:00")
+        assert result["mode"] == "immediate"
+
+
+# ---------------------------------------------------------------------------
 # Validator compat — at is always future
 # ---------------------------------------------------------------------------
 
