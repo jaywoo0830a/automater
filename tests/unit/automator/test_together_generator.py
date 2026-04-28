@@ -144,7 +144,9 @@ class TestRequestBuilding:
 
         assert captured["body"]["model"] == "ctor-model"
 
-    def test_size_snapped_to_multiple_of_8(self):
+    def test_size_snapped_to_multiple_of_16(self):
+        # Together API requires multiples of 16 (older docs say 8, but the
+        # service rejects 8-aligned values with "width must be a multiple of 16").
         gen = TogetherImageGenerator(api_key="k")
         captured = {}
 
@@ -155,8 +157,8 @@ class TestRequestBuilding:
         with patch("urllib.request.urlopen", side_effect=fake_urlopen):
             gen.generate("x", width=1000, height=777)
 
-        assert captured["body"]["width"] == 1000  # already a multiple of 8
-        assert captured["body"]["height"] == 776  # floor(777/8)*8
+        assert captured["body"]["width"] == 992   # floor(1000/16)*16
+        assert captured["body"]["height"] == 768  # floor(777/16)*16
 
     def test_seed_zero_is_included(self):
         gen = TogetherImageGenerator(api_key="k")

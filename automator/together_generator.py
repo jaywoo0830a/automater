@@ -76,7 +76,10 @@ _ENDPOINT          = "https://api.together.xyz/v1/images/generations"
 _DEFAULT_MODEL     = "black-forest-labs/FLUX.1-schnell"
 _DEFAULT_TIMEOUT_S = 60.0
 _DEFAULT_STEPS     = 4       # schnell supports 1-4, dev/pro up to 50
-_SIZE_STEP         = 8       # Together requires width/height multiples of 8
+# Together API requires width/height to be multiples of 16. Older docs say 8,
+# but the API rejects with "width must be a multiple of 16" (HTTP 400) for
+# FLUX.1-schnell, so we snap to 16 to be safe across all current models.
+_SIZE_STEP         = 16
 # Cloudflare in front of api.together.xyz rejects urllib's default UA.
 _USER_AGENT        = "Mozilla/5.0 (compatible; automator/1.0)"
 
