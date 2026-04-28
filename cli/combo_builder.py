@@ -3,15 +3,39 @@ cli/combo_builder.py
 ---------------------
 Build keyword × title template combinations.
 
-    total = ∏(category sizes) × len(titles)
+Two keyword shapes are supported:
 
-Each Combo holds one set of keyword values and one title template.
+    Flat::
+
+        keywords:
+          region: [강남, 서초]
+          subject: [수학, 영어]
+
+        → cartesian product
+
+    Tree (parent → children)::
+
+        keywords:
+          region: [강남, 서초]
+          district:
+            parent: region
+            by:
+              강남: [대치동, 목동]
+              서초: [반포동, 잠원동]
+              _default: [전지역]
+
+        → cartesian over flat dimensions, then for each base combo
+          tree dimensions are expanded via parent-value lookup.
+
+Combos are 1-indexed for the ``{i}`` DSL token. Trees may nest
+(e.g. region → district → dong); validation prevents cycles.
 """
 
 from __future__ import annotations
 
 import itertools
 from dataclasses import dataclass, field
+from typing import Any
 
 
 # ---------------------------------------------------------------------------
@@ -31,24 +55,69 @@ class Combo:
 # ---------------------------------------------------------------------------
 
 def build_combos(
-    keywords: dict[str, list[str]],
+    keywords: dict[str, Any],
     titles: list[str],
 ) -> list[Combo]:
     """
     Build all combinations from keywords × titles.
 
-    Each Combo gets a 1-based index for {i} token.
+    Each Combo gets a 1-based index for {i} token. Tree keywords are
+    expanded after the flat cartesian product, in topological order.
     """
-    slugs = list(keywords.keys())
-    groups = [_deduplicate(keywords[slug]) for slug in slugs]
+    flat: dict[str, list[str]] = {}
+    trees: dict[str, dict] = {}
+    declared_order = list(keywords.keys())
 
+    for slug in declared_order:
+        value = keywords[slug]
+        if isinstance(value, dict):
+            trees[slug] = value
+        else:
+            flat[slug] = value
+
+    # Tree expansion order: a tree must come after its parent.
+    tree_order = _topo_order_trees(trees)
+
+    flat_slugs = [s for s in declared_order if s in flat]
+    flat_groups = [_deduplicate(flat[s]) for s in flat_slugs]
+
+    if flat_slugs:
+        base_combos: list[dict[str, str]] = [
+            dict(zip(flat_slugs, vals))
+            for vals in itertools.product(*flat_groups)
+        ]
+    else:
+        base_combos = [{}]
+
+    expanded = base_combos
+    for slug in tree_order:
+        profile = trees[slug]
+        parent = profile["parent"]
+        by = profile.get("by") or {}
+        new_expanded: list[dict[str, str]] = []
+        for combo in expanded:
+            parent_value = combo.get(parent, "")
+            children = by.get(parent_value)
+            if children is None:
+                children = by.get("_default")
+            if not children:
+                # Validation should have caught this; skip defensively.
+                continue
+            for child in _deduplicate(children):
+                forked = dict(combo)
+                forked[slug] = child
+                new_expanded.append(forked)
+        expanded = new_expanded
+
+    # Reorder each combo's values to match keywords declaration order so
+    # downstream consumers (TitleOption, logs) see a stable layout.
     combos: list[Combo] = []
     counter = 1
     for title_template in titles:
-        for combo_values in itertools.product(*groups):
-            values = dict(zip(slugs, combo_values))
+        for values in expanded:
+            ordered = {s: values[s] for s in declared_order if s in values}
             combos.append(Combo(
-                values=values,
+                values=ordered,
                 title_template=title_template,
                 index=counter,
             ))
@@ -71,3 +140,30 @@ def _deduplicate(values: list[str]) -> list[str]:
             seen.add(stripped)
             result.append(stripped)
     return result
+
+
+def _topo_order_trees(trees: dict[str, dict]) -> list[str]:
+    """Return tree slugs ordered so each parent precedes its dependents.
+
+    Cycles must already be ruled out by config validation; this helper just
+    walks the dependency edges and emits a stable topological order.
+    """
+    if not trees:
+        return []
+
+    visited: set[str] = set()
+    out: list[str] = []
+
+    def visit(node: str) -> None:
+        if node in visited or node not in trees:
+            return
+        parent = trees[node].get("parent")
+        if isinstance(parent, str):
+            visit(parent)
+        visited.add(node)
+        out.append(node)
+
+    for slug in trees:
+        visit(slug)
+
+    return out

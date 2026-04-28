@@ -41,6 +41,7 @@ def load_config(path: str) -> dict[str, Any]:
     config = _normalize(raw)
     config["_base_dir"] = str(Path(path).resolve().parent)
     config["_config_path"] = str(Path(path).resolve())
+    _resolve_tree_keyword_files(config)
     _validate(config)
     return config
 
@@ -183,13 +184,120 @@ def _validate_schema(config: dict[str, Any]) -> None:
     if not titles or not isinstance(titles, list):
         raise ConfigError("'titles' must be a non-empty list of strings")
 
-    # keywords
+    # keywords — must be non-empty mapping; values are list (flat) or dict (tree)
     keywords = config.get("keywords")
     if not keywords or not isinstance(keywords, dict):
         raise ConfigError("'keywords' must be a non-empty mapping")
     for slug, values in keywords.items():
-        if not values:
-            raise ConfigError(f"keywords['{slug}'] must not be empty")
+        if isinstance(values, list):
+            if not values:
+                raise ConfigError(f"keywords['{slug}'] must not be empty")
+        elif isinstance(values, dict):
+            if not values:
+                raise ConfigError(f"keywords['{slug}'] must not be empty")
+        else:
+            raise ConfigError(
+                f"keywords['{slug}']는 리스트(평면) 또는 dict(트리)여야 합니다: "
+                f"{type(values).__name__}"
+            )
+
+
+def _resolve_tree_keyword_files(config: dict[str, Any]) -> None:
+    """For tree-shaped keywords with a `file:` field, load file content into `by:`.
+
+    After this step every tree keyword has an inline `by:` mapping, so the
+    rest of the validation and combo-building pipeline sees a uniform shape.
+    """
+    keywords = config.get("keywords")
+    if not isinstance(keywords, dict):
+        return
+    base_dir = config.get("_base_dir", ".")
+
+    for slug, value in keywords.items():
+        if not isinstance(value, dict):
+            continue  # flat keyword
+        has_by = "by" in value and value["by"] is not None
+        has_file = "file" in value and value["file"] is not None
+        if has_by and has_file:
+            raise ConfigError(
+                f"keywords['{slug}']: 'by'와 'file'은 동시에 지정할 수 없습니다. "
+                f"하나만 사용하세요."
+            )
+        if not has_by and not has_file:
+            raise ConfigError(
+                f"keywords['{slug}']: 'by' 또는 'file' 중 하나는 필수입니다 "
+                f"(트리 키워드)."
+            )
+        if not has_file:
+            continue
+
+        file_path = value["file"]
+        if not isinstance(file_path, str) or not file_path.strip():
+            raise ConfigError(
+                f"keywords['{slug}'].file은 비어있지 않은 문자열이어야 합니다: {file_path!r}"
+            )
+
+        p = (
+            Path(file_path) if Path(file_path).is_absolute()
+            else Path(base_dir) / file_path
+        )
+        if not p.exists():
+            raise ConfigError(
+                f"keywords['{slug}'].file이 존재하지 않습니다: {p} "
+                f"(file={file_path!r}, base_dir={base_dir!r})"
+            )
+        if not p.is_file():
+            raise ConfigError(
+                f"keywords['{slug}'].file이 파일이 아닙니다: {p}"
+            )
+
+        try:
+            data = _parse_yaml(p.read_text(encoding="utf-8"), str(p))
+        except ConfigError:
+            raise
+        if data is None:
+            raise ConfigError(f"keywords['{slug}'].file이 비어있습니다: {p}")
+        if not isinstance(data, dict):
+            raise ConfigError(
+                f"keywords['{slug}'].file 내용은 key:value 매핑이어야 합니다: {p} "
+                f"(got {type(data).__name__})"
+            )
+
+        value["by"] = data
+
+
+def _enumerate_keyword_values(slug: str, keywords: dict[str, Any]) -> list[str]:
+    """Return the concrete values a keyword can take.
+
+    Flat keyword → its list, deduped/stripped.
+    Tree keyword → union of all children across `by` entries (incl. _default).
+    """
+    value = keywords.get(slug)
+    if isinstance(value, list):
+        seen: set[str] = set()
+        out: list[str] = []
+        for v in value:
+            s = str(v).strip()
+            if s and s not in seen:
+                seen.add(s)
+                out.append(s)
+        return out
+    if isinstance(value, dict):
+        by = value.get("by")
+        if not isinstance(by, dict):
+            return []
+        seen2: set[str] = set()
+        out2: list[str] = []
+        for k, children in by.items():
+            if not isinstance(children, list):
+                continue
+            for c in children:
+                s = str(c).strip()
+                if s and s not in seen2:
+                    seen2.add(s)
+                    out2.append(s)
+        return out2
+    return []
 
 
 def _validate_semantic(config: dict[str, Any]) -> None:
@@ -235,6 +343,7 @@ def _validate_semantic(config: dict[str, Any]) -> None:
                 _validate_variation_token_ref(slug, variations)
 
     _validate_accounts(config)
+    _validate_tree_keywords(config)
     _validate_maps(config, keywords)
     _validate_pools(config)
     _validate_variations(config)
@@ -477,13 +586,128 @@ def _validate_maps(config: dict[str, Any], keywords: dict) -> None:
             )
 
         # 현재 keyword 값들이 맵에 있는지(또는 _default 있는지) 체크
-        keyword_values = keywords.get(by_slug, [])
+        # 트리 키워드도 지원: 모든 가능한 자식 값을 enumerate
+        keyword_values = _enumerate_keyword_values(by_slug, keywords)
         has_default = "_default" in data
         missing = [v for v in keyword_values if v not in data]
         if missing and not has_default:
             raise ConfigError(
                 f"{loc}: keyword '{by_slug}'의 값 {missing}가 맵에 없고 '_default'도 없습니다. "
                 f"맵 파일({p})에 해당 키를 추가하거나 '_default' 항목을 정의하세요."
+            )
+
+
+def _validate_tree_keywords(config: dict[str, Any]) -> None:
+    """트리 키워드(부모-자식 의존 관계) 엄격 검증.
+
+    형식::
+
+        keywords:
+          region: [강남, 서초]
+          district:                       # 트리 키워드
+            parent: region                # 부모 슬러그 (필수)
+            by:                           # 인라인 (또는 file)
+              강남: [대치동, 목동]
+              서초: [반포동]
+              _default: [전지역]          # 선택
+
+    검증 항목:
+      - 트리 키워드는 dict이고 parent + (by 또는 file) 필수
+        (load 시점에 file → by로 정규화됨)
+      - parent 슬러그가 keywords에 존재
+      - parent의 모든 가능한 값이 by에 있거나 _default 정의
+      - 각 자식 리스트는 비어있지 않고 항목은 비어있지 않은 문자열
+      - 의존성 사이클 금지 (자기 자신 포함)
+      - 중첩 허용 (region → district → dong)
+    """
+    keywords = config.get("keywords", {})
+    if not isinstance(keywords, dict):
+        return
+
+    trees: dict[str, dict] = {}
+    for slug, value in keywords.items():
+        if isinstance(value, dict):
+            trees[slug] = value
+
+    if not trees:
+        return
+
+    # 1) 각 트리 프로파일의 형태 검증
+    for slug, profile in trees.items():
+        loc = f"keywords['{slug}']"
+        parent = profile.get("parent")
+        if not isinstance(parent, str) or not parent.strip():
+            raise ConfigError(
+                f"{loc}.parent가 없거나 문자열이 아닙니다: {parent!r}. "
+                f"부모 키워드의 슬러그를 지정하세요."
+            )
+        if parent == slug:
+            raise ConfigError(
+                f"{loc}: 자기 자신을 parent로 지정할 수 없습니다."
+            )
+        if parent not in keywords:
+            raise ConfigError(
+                f"{loc}.parent='{parent}'가 정의되지 않은 keyword를 참조합니다. "
+                f"정의된 keywords: {sorted(keywords.keys())}"
+            )
+
+        by = profile.get("by")
+        if not isinstance(by, dict) or not by:
+            raise ConfigError(
+                f"{loc}.by는 비어있지 않은 매핑이어야 합니다. "
+                f"(file이 지정됐다면 파일이 비어있는지 확인)"
+            )
+
+        for parent_value, children in by.items():
+            child_loc = f"{loc}.by['{parent_value}']"
+            if not isinstance(children, list):
+                raise ConfigError(
+                    f"{child_loc}는 리스트여야 합니다: {type(children).__name__}"
+                )
+            if not children:
+                raise ConfigError(f"{child_loc}가 빈 리스트입니다.")
+            for j, c in enumerate(children):
+                if not isinstance(c, (str, int, float)):
+                    raise ConfigError(
+                        f"{child_loc}[{j}]는 문자열이어야 합니다: {c!r}"
+                    )
+                if not str(c).strip():
+                    raise ConfigError(f"{child_loc}[{j}]가 빈 문자열입니다.")
+
+    # 2) 사이클 검출 (DFS)
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color: dict[str, int] = {s: WHITE for s in trees}
+
+    def visit(node: str, path: list[str]) -> None:
+        if node not in trees:
+            return  # flat keyword — 끝
+        if color[node] == GRAY:
+            cycle = " → ".join(path + [node])
+            raise ConfigError(
+                f"keywords 트리 의존성에 사이클이 있습니다: {cycle}"
+            )
+        if color[node] == BLACK:
+            return
+        color[node] = GRAY
+        parent = trees[node]["parent"]
+        visit(parent, path + [node])
+        color[node] = BLACK
+
+    for s in trees:
+        visit(s, [])
+
+    # 3) 부모 값 커버리지 체크
+    for slug, profile in trees.items():
+        loc = f"keywords['{slug}']"
+        parent = profile["parent"]
+        by = profile["by"]
+        parent_values = _enumerate_keyword_values(parent, keywords)
+        has_default = "_default" in by
+        missing = [v for v in parent_values if v not in by]
+        if missing and not has_default:
+            raise ConfigError(
+                f"{loc}: parent '{parent}'의 값 {missing}가 by에 없고 '_default'도 없습니다. "
+                f"by에 해당 키를 추가하거나 '_default' 항목을 정의하세요."
             )
 
 

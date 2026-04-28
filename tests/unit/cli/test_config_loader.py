@@ -846,3 +846,255 @@ class TestVariations:
         }
         with pytest.raises(ConfigError, match="blog_review"):
             load_config(write_yaml(data))
+
+
+# ---------------------------------------------------------------------------
+# Tree keywords (parent → children)
+# ---------------------------------------------------------------------------
+
+TREE_BASE = {
+    "accounts": [{"username": "u1", "password": "pw1", "blog_id": "b1"}],
+    "titles": ["{keyword:region} {keyword:district}"],
+    "keywords": {
+        "region": ["강남", "서초"],
+        "district": {
+            "parent": "region",
+            "by": {
+                "강남": ["대치동", "목동"],
+                "서초": ["반포동", "잠원동"],
+            },
+        },
+    },
+}
+
+
+class TestTreeKeywords:
+
+    def test_loads_inline_tree(self, write_yaml):
+        config = load_config(write_yaml(TREE_BASE))
+        assert config["keywords"]["district"]["parent"] == "region"
+        assert config["keywords"]["district"]["by"]["강남"] == ["대치동", "목동"]
+
+    def test_loads_with_default(self, write_yaml):
+        data = {
+            **TREE_BASE,
+            "keywords": {
+                "region": ["강남", "서초", "송파"],
+                "district": {
+                    "parent": "region",
+                    "by": {"강남": ["대치동"], "_default": ["전지역"]},
+                },
+            },
+        }
+        config = load_config(write_yaml(data))
+        assert "_default" in config["keywords"]["district"]["by"]
+
+    def test_missing_parent_raises(self, write_yaml):
+        data = {
+            **TREE_BASE,
+            "keywords": {
+                "district": {
+                    "parent": "region",
+                    "by": {"강남": ["대치동"]},
+                },
+            },
+        }
+        with pytest.raises(ConfigError, match="region"):
+            load_config(write_yaml(data))
+
+    def test_missing_by_or_file_raises(self, write_yaml):
+        data = {
+            **TREE_BASE,
+            "keywords": {
+                "region": ["강남"],
+                "district": {"parent": "region"},
+            },
+        }
+        with pytest.raises(ConfigError, match="by.*file|file.*by"):
+            load_config(write_yaml(data))
+
+    def test_both_by_and_file_raises(self, tmp_path, write_yaml):
+        ext = tmp_path / "tree.yaml"
+        ext.write_text("강남: [대치동]\n", encoding="utf-8")
+        data = {
+            **TREE_BASE,
+            "keywords": {
+                "region": ["강남"],
+                "district": {
+                    "parent": "region",
+                    "by": {"강남": ["대치동"]},
+                    "file": str(ext),
+                },
+            },
+        }
+        with pytest.raises(ConfigError, match="동시에"):
+            load_config(write_yaml(data))
+
+    def test_self_parent_raises(self, write_yaml):
+        data = {
+            **TREE_BASE,
+            "keywords": {
+                "region": ["강남"],
+                "district": {
+                    "parent": "district",
+                    "by": {"강남": ["대치동"]},
+                },
+            },
+        }
+        with pytest.raises(ConfigError, match="자기 자신"):
+            load_config(write_yaml(data))
+
+    def test_cycle_raises(self, write_yaml):
+        data = {
+            **TREE_BASE,
+            "titles": ["{keyword:a} {keyword:b}"],
+            "keywords": {
+                "a": {"parent": "b", "by": {"X": ["1"]}},
+                "b": {"parent": "a", "by": {"1": ["X"]}},
+            },
+        }
+        with pytest.raises(ConfigError, match="사이클"):
+            load_config(write_yaml(data))
+
+    def test_uncovered_parent_value_raises(self, write_yaml):
+        data = {
+            **TREE_BASE,
+            "keywords": {
+                "region": ["강남", "서초"],
+                "district": {
+                    "parent": "region",
+                    "by": {"강남": ["대치동"]},  # 서초 missing, no _default
+                },
+            },
+        }
+        with pytest.raises(ConfigError, match="서초"):
+            load_config(write_yaml(data))
+
+    def test_empty_child_list_raises(self, write_yaml):
+        data = {
+            **TREE_BASE,
+            "keywords": {
+                "region": ["강남"],
+                "district": {
+                    "parent": "region",
+                    "by": {"강남": []},
+                },
+            },
+        }
+        with pytest.raises(ConfigError, match="강남"):
+            load_config(write_yaml(data))
+
+    def test_invalid_child_type_raises(self, write_yaml):
+        data = {
+            **TREE_BASE,
+            "keywords": {
+                "region": ["강남"],
+                "district": {
+                    "parent": "region",
+                    "by": {"강남": "not a list"},
+                },
+            },
+        }
+        with pytest.raises(ConfigError, match="리스트"):
+            load_config(write_yaml(data))
+
+    def test_keyword_value_neither_list_nor_dict_raises(self, write_yaml):
+        data = {
+            **MINIMAL,
+            "keywords": {"region": 42},
+        }
+        with pytest.raises(ConfigError, match="region"):
+            load_config(write_yaml(data))
+
+    def test_multi_level_tree_validates(self, write_yaml):
+        data = {
+            **TREE_BASE,
+            "titles": ["{keyword:region} {keyword:district} {keyword:dong}"],
+            "keywords": {
+                "region": ["강남"],
+                "district": {
+                    "parent": "region",
+                    "by": {"강남": ["대치동", "목동"]},
+                },
+                "dong": {
+                    "parent": "district",
+                    "by": {"대치동": ["은마"], "목동": ["1단지"]},
+                },
+            },
+        }
+        config = load_config(write_yaml(data))
+        assert config["keywords"]["dong"]["parent"] == "district"
+
+
+class TestTreeKeywordsFile:
+
+    def test_loads_external_file(self, tmp_path, write_yaml):
+        ext = tmp_path / "district.yaml"
+        ext.write_text(
+            "강남: [대치동, 목동]\n서초: [반포동]\n", encoding="utf-8",
+        )
+        data = {
+            **MINIMAL,
+            "titles": ["{keyword:region} {keyword:district}"],
+            "keywords": {
+                "region": ["강남", "서초"],
+                "district": {
+                    "parent": "region",
+                    "file": str(ext),
+                },
+            },
+        }
+        config = load_config(write_yaml(data))
+        assert config["keywords"]["district"]["by"]["강남"] == ["대치동", "목동"]
+        assert config["keywords"]["district"]["by"]["서초"] == ["반포동"]
+
+    def test_relative_file_resolves_against_yaml_dir(self, tmp_path, write_yaml):
+        ext = tmp_path / "district.yaml"
+        ext.write_text("강남: [대치동]\n", encoding="utf-8")
+        data = {
+            **MINIMAL,
+            "titles": ["{keyword:region} {keyword:district}"],
+            "keywords": {
+                "region": ["강남"],
+                "district": {
+                    "parent": "region",
+                    "file": "district.yaml",  # relative
+                },
+            },
+        }
+        # write_yaml writes to tmp_path/campaign.yaml; the relative file is
+        # resolved against that dir, where district.yaml also lives.
+        config = load_config(write_yaml(data))
+        assert config["keywords"]["district"]["by"]["강남"] == ["대치동"]
+
+    def test_missing_file_raises(self, tmp_path, write_yaml):
+        data = {
+            **MINIMAL,
+            "titles": ["{keyword:region} {keyword:district}"],
+            "keywords": {
+                "region": ["강남"],
+                "district": {
+                    "parent": "region",
+                    "file": "nope.yaml",
+                },
+            },
+        }
+        with pytest.raises(ConfigError, match="존재하지"):
+            load_config(write_yaml(data))
+
+    def test_empty_file_raises(self, tmp_path, write_yaml):
+        ext = tmp_path / "empty.yaml"
+        ext.write_text("", encoding="utf-8")
+        data = {
+            **MINIMAL,
+            "titles": ["{keyword:region} {keyword:district}"],
+            "keywords": {
+                "region": ["강남"],
+                "district": {
+                    "parent": "region",
+                    "file": str(ext),
+                },
+            },
+        }
+        with pytest.raises(ConfigError, match="비어있"):
+            load_config(write_yaml(data))
